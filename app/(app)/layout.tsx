@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
 
           <nav className="flex items-center gap-4 text-sm">
             <Link href="/" className="text-muted transition hover:text-ink">
-              Rankings
+              Golfer Rating
             </Link>
             <Link href="/draft" className="text-muted transition hover:text-ink">
               Drafts

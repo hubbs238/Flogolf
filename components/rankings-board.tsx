@@ -40,7 +40,9 @@ export function RankingsBoard({
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Rankings</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Golfer Rating
+          </h1>
           <p className="mt-1 text-sm text-muted">
             {unrated > 0
               ? `${unrated} ${unrated === 1 ? "golfer" : "golfers"} still waiting on your rating.`
@@ -69,10 +71,9 @@ export function RankingsBoard({
         <EmptyState />
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {sorted.map((golfer, index) => (
+          {sorted.map((golfer) => (
             <GolferCard
               key={golfer.id}
-              rank={index + 1}
               golfer={golfer}
               characteristics={characteristics}
               sortBy={sortBy}
@@ -88,7 +89,6 @@ export function RankingsBoard({
 }
 
 function GolferCard({
-  rank,
   golfer,
   characteristics,
   sortBy,
@@ -96,7 +96,6 @@ function GolferCard({
   hasRated,
   isSelf,
 }: {
-  rank: number;
   golfer: BoardGolfer;
   characteristics: Characteristic[];
   sortBy: string;
@@ -110,16 +109,11 @@ function GolferCard({
   return (
     <li className="flex flex-col rounded-2xl border border-line bg-raised p-5 shadow-sm transition hover:shadow-md">
       <div className="flex items-start gap-4">
-        <div className="relative">
-          <GolferAvatar
-            name={displayName(golfer)}
-            url={golfer.photo}
-            size="md"
-          />
-          <span className="absolute -left-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-fairway-600 text-xs font-semibold text-white ring-2 ring-raised">
-            {rank}
-          </span>
-        </div>
+        <GolferAvatar
+          name={displayName(golfer)}
+          url={golfer.photo}
+          size="md"
+        />
 
         <div className="min-w-0 flex-1">
           <Link
