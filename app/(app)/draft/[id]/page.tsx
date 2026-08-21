@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DraftSetup } from "@/components/draft-setup";
 import { DraftBoard } from "@/components/draft-board";
 import { DeleteDraftButton } from "@/components/delete-draft-button";
+import { PlayRoundButton } from "@/components/play-round-button";
 import type { Draft, DraftPick, DraftTeam } from "@/lib/types";
 
 export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
@@ -63,11 +64,16 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
         </div>
 
         {isAdmin && (
-          <DeleteDraftButton
-            draftId={typedDraft.id}
-            draftName={typedDraft.name}
-            pickCount={(picksResult.data ?? []).length}
-          />
+          <div className="flex flex-wrap items-center gap-4">
+            {typedDraft.status === "complete" && (
+              <PlayRoundButton draftId={typedDraft.id} />
+            )}
+            <DeleteDraftButton
+              draftId={typedDraft.id}
+              draftName={typedDraft.name}
+              pickCount={(picksResult.data ?? []).length}
+            />
+          </div>
         )}
       </div>
 

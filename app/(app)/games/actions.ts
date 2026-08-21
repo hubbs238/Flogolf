@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { defaultPayouts } from "@/lib/game";
+import { defaultPayouts, MAX_HOLE_SCORE, MIN_HOLE_SCORE } from "@/lib/game";
 import type { TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -387,8 +387,11 @@ export async function setHoleScore(
       .eq("match_id", matchId).eq("team_id", teamId).eq("hole", hole);
     if (error) return { ok: false, error: error.message };
   } else {
-    if (!Number.isInteger(strokes) || strokes < 1 || strokes > 30) {
-      return { ok: false, error: "That score looks wrong. Use 1 to 30." };
+    if (!Number.isInteger(strokes) || strokes < MIN_HOLE_SCORE || strokes > MAX_HOLE_SCORE) {
+      return {
+        ok: false,
+        error: `Scores are relative to par, from ${MIN_HOLE_SCORE} to +${MAX_HOLE_SCORE}.`,
+      };
     }
     const { error } = await supabase.from("hole_scores").upsert(
       { match_id: matchId, team_id: teamId, hole, strokes },
@@ -432,4 +435,84 @@ export async function deleteMatch(matchId: string): Promise<ActionResult> {
   if (error) return { ok: false, error: error.message };
   revalidatePath("/games");
   redirect("/games");
+}
+
+/**
+ * One click from a finished draft to a round that is ready to configure.
+ *
+ * Creates the round, mirrors the draft's teams and captains, copies every
+ * roster across, and leaves it in setup so the admin can still set the
+ * course, the stake, who is in FB18, and the payout table.
+ */
+export async function createRoundFromDraft(draftId: string): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const supabase = await createClient();
+
+  const [{ data: draft }, { data: draftTeams }, { data: picks }] = await Promise.all([
+    supabase.from("drafts").select("*").eq("id", draftId).single(),
+    supabase.from("draft_teams").select("*").eq("draft_id", draftId).order("slot"),
+    supabase.from("draft_picks").select("*").eq("draft_id", draftId).order("pick_number"),
+  ]);
+
+  if (!draft) return { ok: false, error: "Draft not found." };
+  if (!draftTeams?.length) return { ok: false, error: "That draft has no teams." };
+
+  const { data: match, error } = await supabase
+    .from("matches")
+    .insert({
+      name: draft.name,
+      team_count: draftTeams.length,
+      roster_size: draft.roster_size,
+      created_by: session.userId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !match) {
+    return { ok: false, error: error?.message ?? "Could not create the round." };
+  }
+
+  const table = defaultPayouts(draftTeams.length);
+  await Promise.all([
+    supabase.from("match_payouts").insert(
+      Object.entries(table).map(([position, units]) => ({
+        match_id: match.id, position: Number(position), units,
+      })),
+    ),
+    supabase.from("fb18_payouts").insert(
+      (["front", "back", "total"] as const).flatMap((segment) =>
+        Object.entries(table).map(([position, units]) => ({
+          match_id: match.id, segment, position: Number(position), units,
+        })),
+      ),
+    ),
+  ]);
+
+  for (const dt of draftTeams) {
+    const { data: mt } = await supabase
+      .from("match_teams")
+      .insert({
+        match_id: match.id,
+        slot: dt.slot,
+        name: dt.name,
+        captain_golfer_id: dt.captain_golfer_id,
+        captain_user_id: dt.captain_user_id,
+      })
+      .select("id")
+      .single();
+    if (!mt) continue;
+
+    const roster = [
+      dt.captain_golfer_id,
+      ...(picks ?? []).filter((p) => p.team_id === dt.id).map((p) => p.golfer_id),
+    ].filter(Boolean) as string[];
+
+    const rows = roster.slice(0, draft.roster_size).map((golfer_id, idx) => ({
+      match_id: match.id, team_id: mt.id, golfer_id, slot: idx + 1,
+    }));
+    if (rows.length) await supabase.from("match_players").insert(rows);
+  }
+
+  revalidatePath("/games");
+  redirect(`/games/${match.id}`);
 }

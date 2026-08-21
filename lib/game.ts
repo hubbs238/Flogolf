@@ -543,3 +543,13 @@ export function defaultPayouts(teamCount: number): PayoutTable {
   if (teamCount >= 2 && 2 < firstLoser) table[2] = pot - first;
   return table;
 }
+
+/** Golf convention for a relative score: E at par, explicit sign otherwise. */
+export function formatRelative(n: number | null | undefined): string {
+  if (n === null || n === undefined) return "—";
+  if (n === 0) return "E";
+  return n > 0 ? `+${n}` : `${n}`;
+}
+
+export const MIN_HOLE_SCORE = -3;
+export const MAX_HOLE_SCORE = 5;
