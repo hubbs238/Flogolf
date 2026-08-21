@@ -89,3 +89,64 @@ export type DraftPick = {
   made_by: string | null;
   created_at: string;
 };
+
+// ---------------------------------------------------------------- matches
+
+export type MatchStatus = "setup" | "filling" | "in_progress" | "complete";
+
+export type Match = {
+  id: string;
+  name: string;
+  course: string;
+  match_date: string;
+  team_count: number;
+  roster_size: number;
+  dollars_per_unit: number;
+  tie_default: "hole" | "set";
+  status: MatchStatus;
+  created_by: string | null;
+  created_at: string;
+};
+
+export type MatchTeam = {
+  id: string;
+  match_id: string;
+  slot: number;
+  name: string;
+  captain_golfer_id: string | null;
+  captain_user_id: string | null;
+  in_fb18: boolean;
+};
+
+export type MatchPlayer = {
+  match_id: string;
+  team_id: string;
+  golfer_id: string;
+  slot: number;
+};
+
+export type MatchPayout = { match_id: string; position: number; units: number };
+
+export type Fb18Payout = {
+  match_id: string;
+  segment: "front" | "back" | "total";
+  position: number;
+  units: number;
+};
+
+export type HoleScore = {
+  match_id: string;
+  team_id: string;
+  hole: number;
+  strokes: number;
+  updated_by: string | null;
+  updated_at: string;
+};
+
+export type TieDecision = {
+  id: string;
+  match_id: string;
+  segment: number;
+  block_key: string;
+  choice: "hole" | "set";
+};

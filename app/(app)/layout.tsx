@@ -23,6 +23,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <Link href="/draft" className="text-muted transition hover:text-ink">
               Drafts
             </Link>
+            <Link href="/games" className="text-muted transition hover:text-ink">
+              Rounds
+            </Link>
             {isAdmin && (
               <Link href="/admin" className="text-muted transition hover:text-ink">
                 Admin

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "verify-draft": "tsx scripts/verify-draft.ts"
+    "verify-draft": "tsx scripts/verify-draft.ts",
+    "verify-game": "tsx scripts/verify-game.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
