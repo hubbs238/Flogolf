@@ -3,11 +3,8 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { GolferAvatar } from "./golfer-avatar";
 import { createMatch } from "@/app/(app)/games/actions";
-import { displayName } from "@/lib/scoring";
-import type { Golfer, Match } from "@/lib/types";
-import type { SeasonRow } from "@/lib/match-data";
+import type { Match } from "@/lib/types";
 
 const STATUS: Record<Match["status"], { label: string; className: string }> = {
   setup: { label: "Setup", className: "bg-line text-muted" },
@@ -21,13 +18,9 @@ const STATUS: Record<Match["status"], { label: string; className: string }> = {
 
 export function GamesList({
   matches,
-  season,
-  golfers,
   isAdmin,
 }: {
   matches: Match[];
-  season: SeasonRow[];
-  golfers: Golfer[];
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -40,8 +33,6 @@ export function GamesList({
   const [teamCount, setTeamCount] = useState(7);
   const [dollars, setDollars] = useState(5);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
-
-  const byId = new Map(golfers.map((g) => [g.id, g]));
 
   function create() {
     setError(null);
@@ -151,42 +142,17 @@ export function GamesList({
         )}
       </div>
 
-      <div>
-        <h2 className="text-lg font-semibold">Season money</h2>
-        <p className="mt-1 mb-4 text-sm text-muted">
-          Per player, across every finished round. Team winnings split evenly
-          among whoever was on that roster.
+      <div className="rounded-2xl border border-line bg-raised p-5">
+        <h2 className="font-semibold">Season standings</h2>
+        <p className="mt-1 text-sm text-muted">
+          FLO Cup points and money leaders, per player across every finished round.
         </p>
-
-        {season.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-line p-10 text-center text-sm text-muted">
-            Nothing settled yet. Finish a round and it shows up here.
-          </p>
-        ) : (
-          <ul className="space-y-1.5">
-            {season.map((row, i) => {
-              const g = byId.get(row.golferId);
-              return (
-                <li key={row.golferId}
-                  className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3">
-                  <span className="w-5 shrink-0 text-center text-xs font-semibold text-muted">{i + 1}</span>
-                  <GolferAvatar name={g ? displayName(g) : "?"} url={null} size="sm" />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {g ? displayName(g) : "Unknown"}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted">
-                    {row.rounds} {row.rounds === 1 ? "round" : "rounds"}
-                  </span>
-                  <span className={`w-24 shrink-0 text-right font-semibold tabular-nums ${
-                    row.dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
-                    : row.dollars < 0 ? "text-flag-500" : "text-muted"}`}>
-                    {row.dollars > 0 ? "+" : ""}${row.dollars.toFixed(2)}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
+        <Link
+          href="/standings"
+          className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-fairway-600 dark:text-fairway-300"
+        >
+          Open the FLO Cup <span aria-hidden="true">→</span>
+        </Link>
       </div>
     </div>
   );

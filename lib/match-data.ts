@@ -132,17 +132,29 @@ export function computeMatch(b: MatchBundle) {
 export type SeasonRow = {
   golferId: string;
   rounds: number;
-  units: number;
   dollars: number;
+  points: number;
 };
 
 /**
- * Season money, per player, across every finished round.
+ * FLO Cup points: a dollar won is a point, a dollar lost is half a point off.
+ *
+ * Applied per round, then summed. That asymmetry is the whole design: win
+ * $100 one week and lose $100 the next and you finish +50 points, not zero.
+ * Netting the season first would collapse the 1-to-0.5 ratio into a sign
+ * test and throw away the reason for having it.
+ */
+export function pointsForRound(dollars: number): number {
+  return dollars >= 0 ? dollars : dollars * 0.5;
+}
+
+/**
+ * Season standings, per player, across every finished round.
  *
  * Recomputed from hole scores rather than stored, so correcting an old
- * scorecard corrects the season table too.
+ * scorecard corrects the standings too.
  */
-export async function getSeasonMoney(): Promise<SeasonRow[]> {
+export async function getSeasonStandings(): Promise<SeasonRow[]> {
   const supabase = await createClient();
   const { data: matches } = await supabase
     .from("matches").select("id").eq("status", "complete");
@@ -156,22 +168,27 @@ export async function getSeasonMoney(): Promise<SeasonRow[]> {
 
     for (const row of money) {
       const cur = totals.get(row.golferId) ?? {
-        golferId: row.golferId, rounds: 0, units: 0, dollars: 0,
+        golferId: row.golferId, rounds: 0, dollars: 0, points: 0,
       };
       cur.rounds += 1;
-      cur.units += row.units;
       cur.dollars += row.dollars;
+      cur.points += pointsForRound(row.dollars);
       totals.set(row.golferId, cur);
     }
   }
 
-  return [...totals.values()]
-    .map((r) => ({
-      ...r,
-      units: Math.round(r.units * 100) / 100,
-      dollars: Math.round(r.dollars * 100) / 100,
-    }))
-    .sort((a, b) => b.dollars - a.dollars);
+  return [...totals.values()].map((r) => ({
+    ...r,
+    dollars: Math.round(r.dollars * 100) / 100,
+    points: Math.round(r.points * 100) / 100,
+  }));
+}
+
+/** Every golfer ever, not just the current pool, so past players still show. */
+export async function getAllGolfers(): Promise<Golfer[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("golfers").select("*").order("name");
+  return (data ?? []) as Golfer[];
 }
 
 export async function getPoolGolfers(): Promise<Golfer[]> {
