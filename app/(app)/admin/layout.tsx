@@ -6,6 +6,7 @@ const TABS = [
   { href: "/admin/golfers", label: "Golfers" },
   { href: "/admin/invites", label: "Invites" },
   { href: "/admin/users", label: "People" },
+  { href: "/admin/diagnostics", label: "Diagnostics" },
 ] as const;
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {

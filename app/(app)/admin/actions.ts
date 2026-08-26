@@ -430,3 +430,78 @@ export async function linkProfileToGolfer(
   revalidatePath("/");
   return { ok: true };
 }
+
+// ---------------------------------------------------------------- diagnostics
+
+export type EnvReport = {
+  anthropicKeyPresent: boolean;
+  anthropicKeyLength: number;
+  anthropicKeyPrefix: string;
+  /** Names only, never values. Catches typos and stray whitespace. */
+  anthropicLikeNames: string[];
+  supabaseUrlPresent: boolean;
+  nodeEnv: string;
+  vercelEnv: string;
+};
+
+/**
+ * Reports what the running server can actually see.
+ *
+ * Names and lengths only, never a value. This exists because a missing
+ * environment variable is indistinguishable from a misnamed one from the
+ * outside, and we have now lost time to both.
+ */
+export async function readEnvReport(): Promise<EnvReport> {
+  await requireAdmin();
+
+  const key = process.env.ANTHROPIC_API_KEY ?? "";
+
+  return {
+    anthropicKeyPresent: key.length > 0,
+    anthropicKeyLength: key.length,
+    anthropicKeyPrefix: key.slice(0, 7),
+    anthropicLikeNames: Object.keys(process.env)
+      .filter((n) => /anthropic|claude/i.test(n))
+      .sort(),
+    supabaseUrlPresent: (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").length > 0,
+    nodeEnv: process.env.NODE_ENV ?? "unknown",
+    vercelEnv: process.env.VERCEL_ENV ?? "not on Vercel",
+  };
+}
+
+export type KeyTest = { ok: true; model: string } | { ok: false; error: string };
+
+/** Makes the smallest possible real call, to prove the key works end to end. */
+export async function testAnthropicKey(): Promise<KeyTest> {
+  await requireAdmin();
+
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return { ok: false, error: "ANTHROPIC_API_KEY is not visible to the server." };
+  }
+
+  try {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    const client = new Anthropic();
+    const response = await client.messages.create({
+      model: "claude-opus-5",
+      max_tokens: 16,
+      messages: [{ role: "user", content: "Reply with the single word: ok" }],
+    });
+    return { ok: true, model: response.model };
+  } catch (error) {
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    if (error instanceof Anthropic.AuthenticationError) {
+      return { ok: false, error: "The key is present but was rejected. Check it was copied whole." };
+    }
+    if (error instanceof Anthropic.PermissionDeniedError) {
+      return { ok: false, error: "Key accepted but lacks permission. Check the workspace it belongs to." };
+    }
+    if (error instanceof Anthropic.RateLimitError) {
+      return { ok: false, error: "Rate limited, which means the key works. Try again shortly." };
+    }
+    if (error instanceof Anthropic.APIError) {
+      return { ok: false, error: `API error ${error.status}: ${error.message}` };
+    }
+    return { ok: false, error: error instanceof Error ? error.message : "Unknown failure." };
+  }
+}

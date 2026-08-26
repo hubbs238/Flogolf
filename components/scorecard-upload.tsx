@@ -9,22 +9,82 @@ import type { MatchTeam } from "@/lib/types";
 type Read = Awaited<ReturnType<typeof readScorecardPhoto>>;
 
 /**
+ * Decodes a picked file into something drawable.
+ *
+ * createImageBitmap is the fast path but throws on HEIC, which is what an
+ * iPhone shoots by default. Safari can often still decode those through an
+ * <img> element, so that is the fallback rather than an immediate failure.
+ */
+async function decode(file: File): Promise<{
+  draw: CanvasImageSource;
+  width: number;
+  height: number;
+  release: () => void;
+}> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return {
+      draw: bitmap,
+      width: bitmap.width,
+      height: bitmap.height,
+      release: () => bitmap.close(),
+    };
+  } catch {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error("the browser could not decode it"));
+        img.src = url;
+      });
+    } catch (e) {
+      URL.revokeObjectURL(url);
+      throw e;
+    }
+    return {
+      draw: img,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      release: () => URL.revokeObjectURL(url),
+    };
+  }
+}
+
+/**
  * Shrinks the photo before it leaves the phone. A modern camera shot is
  * 4MB+, which is slow on a course with one bar of signal and costs more to
  * read than it needs to. 1600px wide keeps handwritten digits legible.
  */
 async function downscale(file: File): Promise<string> {
-  const bitmap = await createImageBitmap(file);
-  const maxWidth = 1600;
-  const scale = Math.min(1, maxWidth / bitmap.width);
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Could not process that image.");
-  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return canvas.toDataURL("image/jpeg", 0.85);
+  const { draw, width, height, release } = await decode(file);
+  try {
+    if (!width || !height) throw new Error("the image had no dimensions");
+    const scale = Math.min(1, 1600 / width);
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(width * scale);
+    canvas.height = Math.round(height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("this browser blocked canvas rendering");
+    ctx.drawImage(draw, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL("image/jpeg", 0.85);
+  } finally {
+    release();
+  }
+}
+
+/** Says what actually went wrong instead of a catch-all. */
+function describeDecodeFailure(file: File, error: unknown): string {
+  const name = file.name.toLowerCase();
+  if (/\.(heic|heif)$/.test(name) || /heic|heif/i.test(file.type)) {
+    return (
+      "That is a HEIC photo, which browsers cannot read. On iPhone either set " +
+      "Settings > Camera > Formats > Most Compatible, or take a screenshot of " +
+      "the photo and upload the screenshot."
+    );
+  }
+  const detail = error instanceof Error ? error.message : "";
+  return `Could not read that image file${detail ? `: ${detail}` : "."}`;
 }
 
 export function ScorecardUpload({
@@ -50,14 +110,29 @@ export function ScorecardUpload({
     setRead(null);
     setSummary(null);
     setBusy(true);
+
+    // Decoding and reading are separate steps with separate failures. Sharing
+    // one catch was hiding which of the two actually broke.
+    let dataUrl: string;
     try {
-      const dataUrl = await downscale(file);
-      setPreview(dataUrl);
+      dataUrl = await downscale(file);
+    } catch (e) {
+      setBusy(false);
+      setError(describeDecodeFailure(file, e));
+      return;
+    }
+
+    setPreview(dataUrl);
+    try {
       const result = await readScorecardPhoto(matchId, teamId, dataUrl);
       setRead(result);
       if (!result.ok) setError(result.error);
-    } catch {
-      setError("Could not process that image.");
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? `The server could not read it: ${e.message}`
+          : "The server could not be reached. Check your signal and try again.",
+      );
     } finally {
       setBusy(false);
     }
@@ -109,7 +184,7 @@ export function ScorecardUpload({
         <input
           ref={fileInput}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/*"
           capture="environment"
           className="hidden"
           onChange={(e) => {
