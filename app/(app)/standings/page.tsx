@@ -15,7 +15,7 @@ export default async function FloCupPage() {
         rows={rows}
         golfers={golfers}
         metric="points"
-        emptyMessage="No finished rounds yet. Points show up once a round is marked final."
+        emptyMessage="No finished rounds yet. Standings show up once a round is marked final."
       />
     </div>
   );
