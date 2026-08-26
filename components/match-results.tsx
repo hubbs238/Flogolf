@@ -4,7 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
 import { setTieDecision } from "@/app/(app)/games/actions";
-import type { Fb18Result, PlayerMoney, SegmentResult, TieChoice } from "@/lib/game";
+import { TrophyIcon } from "./trophy-icon";
+import type { EighteenTier, Fb18Result, PlayerMoney, SegmentResult, TieChoice } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
 
 function Units({ n }: { n: number }) {
@@ -14,7 +15,7 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, golfers, isAdmin,
+  match, teams, segments, fb18, unitsByTeam, money, bonuses, golfers, isAdmin,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -22,6 +23,7 @@ export function MatchResults({
   fb18: Fb18Result[];
   unitsByTeam: Record<string, number>;
   money: PlayerMoney[];
+  bonuses: EighteenTier[];
   golfers: Golfer[];
   isAdmin: boolean;
 }) {
@@ -199,6 +201,33 @@ export function MatchResults({
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {bonuses.length > 0 && (
+        <section>
+          <h3 className="mb-1 font-semibold">Best eighteen</h3>
+          <p className="mb-3 text-sm text-muted">
+            FLO Cup points, not money. Every player on these rosters collects
+            them toward the season standings.
+          </p>
+          <ul className="space-y-2">
+            {bonuses.map((tier) => (
+              <li
+                key={tier.teamIds.join("+")}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised p-3 text-sm"
+              >
+                <TrophyIcon className="h-4 w-4 shrink-0 text-fairway-600 dark:text-fairway-300" />
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">{tier.teamIds.map(teamName).join(" and ")}</span>
+                  <span className="text-muted"> at {tier.total > 0 ? "+" : ""}{tier.total === 0 ? "E" : tier.total}</span>
+                </span>
+                <span className="shrink-0 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
+                  +{tier.bonus} pts each
+                </span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

@@ -477,35 +477,36 @@ export function scoreFb18(opts: {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
-  units: number;
   dollars: number;
 };
 
 /**
- * Splits each team's units evenly across the people actually on its roster.
+ * Splits each team's winnings evenly across the people actually on its
+ * roster.
+ *
+ * Takes dollars rather than units because the main game and FB18 can carry
+ * different rates, which makes a single combined unit figure meaningless.
+ * The conversion happens upstream where both rates are known.
  *
  * Divides by the real roster length rather than a hardcoded four, so a team
  * that plays a man short splits three ways instead of quietly losing a share.
  */
 export function splitMoney(opts: {
-  unitsByTeam: Record<string, number>;
+  dollarsByTeam: Record<string, number>;
   rosters: Record<string, string[]>;
-  dollarsPerUnit: number;
 }): PlayerMoney[] {
-  const { unitsByTeam, rosters, dollarsPerUnit } = opts;
+  const { dollarsByTeam, rosters } = opts;
   const out: PlayerMoney[] = [];
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
     if (golferIds.length === 0) continue;
-    const teamUnits = unitsByTeam[teamId] ?? 0;
-    const share = teamUnits / golferIds.length;
+    const share = (dollarsByTeam[teamId] ?? 0) / golferIds.length;
 
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
-        units: Math.round(share * 1000) / 1000,
-        dollars: Math.round(share * dollarsPerUnit * 100) / 100,
+        dollars: Math.round(share * 100) / 100,
       });
     }
   }
@@ -562,4 +563,57 @@ export const TYPICAL_MAX_SCORE = 9;
 /** True for a value unusual enough to be worth eyeballing on an OCR result. */
 export function isUnusualScore(relative: number): boolean {
   return relative < TYPICAL_MIN_SCORE || relative > TYPICAL_MAX_SCORE;
+}
+
+// ------------------------------------------------------------
+//  Best eighteen bonus (FLO Cup points, not money)
+// ------------------------------------------------------------
+
+export const BEST_EIGHTEEN_BONUS = 50;
+export const RUNNER_UP_EIGHTEEN_BONUS = 25;
+
+export type EighteenTier = {
+  /** Teams sharing this total. */
+  teamIds: string[];
+  total: number;
+  /** Points each player on these teams receives. */
+  bonus: number;
+};
+
+/**
+ * Ranks teams by their eighteen hole total and hands out FLO Cup bonus
+ * points: the best score is worth BEST_EIGHTEEN_BONUS to every player on
+ * that roster, the next distinct score RUNNER_UP_EIGHTEEN_BONUS.
+ *
+ * Teams tied for a place all receive the full bonus rather than splitting
+ * it. These are points rather than money, so nothing has to balance, and
+ * halving a bonus because two teams shot the same number would punish both
+ * for playing well.
+ *
+ * Returns an empty list until every team has all eighteen holes in, so a
+ * round in progress does not award a bonus off partial cards.
+ */
+export function eighteenHoleBonuses(
+  teamIds: string[],
+  scores: HoleScores,
+): EighteenTier[] {
+  if (teamIds.length === 0) return [];
+
+  const totals: Record<string, number> = {};
+  const all = [...FRONT_NINE, ...BACK_NINE];
+
+  for (const id of teamIds) {
+    const t = sumHoles(scores[id], all);
+    if (t === null) return []; // someone is unfinished
+    totals[id] = t;
+  }
+
+  const blocks = blocksByScore(totals, teamIds);
+  const bonuses = [BEST_EIGHTEEN_BONUS, RUNNER_UP_EIGHTEEN_BONUS];
+
+  return blocks.slice(0, bonuses.length).map((ids, i) => ({
+    teamIds: ids,
+    total: totals[ids[0]],
+    bonus: bonuses[i],
+  }));
 }

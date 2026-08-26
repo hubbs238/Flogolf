@@ -5,6 +5,7 @@
  *   npx tsx scripts/verify-game.ts
  */
 import {
+  eighteenHoleBonuses,
   scoreMainGame,
   scoreFb18,
   splitMoney,
@@ -160,9 +161,8 @@ console.log("\n=== FB18 ===");
 console.log("\n=== money, split at player level ===");
 {
   const money = splitMoney({
-    unitsByTeam: { t1: 10, t2: -4 },
+    dollarsByTeam: { t1: 1000, t2: -400 },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7", "p8"] },
-    dollarsPerUnit: 100,
   });
   check("a $1000 team win is $250 each",
     money.filter((m) => m.teamId === "t1").map((m) => m.dollars), [250, 250, 250, 250]);
@@ -171,10 +171,42 @@ console.log("\n=== money, split at player level ===");
 }
 {
   const money = splitMoney({
-    unitsByTeam: { t1: 9 }, rosters: { t1: ["p1", "p2", "p3"] }, dollarsPerUnit: 10,
+    dollarsByTeam: { t1: 90 }, rosters: { t1: ["p1", "p2", "p3"] },
   });
   check("a short roster splits three ways, not four",
     money.map((m) => m.dollars), [30, 30, 30]);
+}
+
+console.log("\n=== best eighteen bonus ===");
+{
+  // A -3, B -1, C +2 over eighteen.
+  const par = Array.from({ length: 18 }, () => 0);
+  const with3Under = [...par]; with3Under[0] = -1; with3Under[1] = -1; with3Under[2] = -1;
+  const with1Under = [...par]; with1Under[0] = -1;
+  const with2Over  = [...par]; with2Over[0] = 1; with2Over[1] = 1;
+
+  const s: HoleScores = {
+    A: card(...with3Under), B: card(...with1Under), C: card(...with2Over),
+  };
+  const tiers = eighteenHoleBonuses(["A", "B", "C"], s);
+  check("best eighteen takes 50", tiers[0], { teamIds: ["A"], total: -3, bonus: 50 });
+  check("runner up takes 25", tiers[1], { teamIds: ["B"], total: -1, bonus: 25 });
+  check("third place gets nothing", tiers.length, 2);
+}
+{
+  // A and B tie for best, C behind.
+  const par = Array.from({ length: 18 }, () => 0);
+  const under = [...par]; under[0] = -2;
+  const over = [...par]; over[0] = 1;
+  const s: HoleScores = { A: card(...under), B: card(...under), C: card(...over) };
+  const tiers = eighteenHoleBonuses(["A", "B", "C"], s);
+  check("tied leaders each take the full 50", tiers[0], { teamIds: ["A", "B"], total: -2, bonus: 50 });
+  check("next distinct score takes 25", tiers[1], { teamIds: ["C"], total: 1, bonus: 25 });
+}
+{
+  const partial = Array.from({ length: 17 }, () => 0);
+  const s: HoleScores = { A: card(...partial), B: card(...partial) };
+  check("no bonus while a card is unfinished", eighteenHoleBonuses(["A", "B"], s), []);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);

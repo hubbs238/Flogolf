@@ -102,6 +102,8 @@ export type Match = {
   team_count: number;
   roster_size: number;
   dollars_per_unit: number;
+  /** Null means the side game follows the main rate. */
+  fb18_dollars_per_unit: number | null;
   tie_default: "hole" | "set";
   status: MatchStatus;
   created_by: string | null;

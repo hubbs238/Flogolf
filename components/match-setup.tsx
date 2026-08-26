@@ -37,6 +37,8 @@ export function MatchSetup({
   });
 
   const positions = Array.from({ length: match.team_count }, (_, i) => i + 1);
+  const mainRate = Number(match.dollars_per_unit);
+  const fb18Rate = Number(match.fb18_dollars_per_unit ?? match.dollars_per_unit);
   const captainIds = new Set(teams.map((t) => t.captain_golfer_id).filter(Boolean) as string[]);
   const mainSum = positions.reduce((n, p) => n + (tables.main[p] ?? 0), 0);
 
@@ -77,6 +79,17 @@ export function MatchSetup({
               onBlur={(e) => run(() => updateMatchSettings(match.id, { dollarsPerUnit: Number(e.target.value) }))}
               className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
           </label>
+          <label>
+            <span className="mb-1.5 block text-sm font-medium">$ per unit, FB18</span>
+            <input type="number" min={0} step="0.5"
+              defaultValue={match.fb18_dollars_per_unit ?? match.dollars_per_unit}
+              onBlur={(e) => run(() => updateMatchSettings(match.id, { fb18DollarsPerUnit: Number(e.target.value) }))}
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
+            <span className="mt-1 block text-xs text-muted">
+              Set this to 1 and the FB18 numbers below are dollars
+            </span>
+          </label>
+
           <label>
             <span className="mb-1.5 block text-sm font-medium">Tie default</span>
             <select defaultValue={match.tie_default}
@@ -168,13 +181,26 @@ export function MatchSetup({
                  ["back", "FB18 back 9"], ["total", "FB18 all 18"]] as const).map(([key, label]) => (
                 <tr key={key} className="border-b border-line last:border-0">
                   <td className="p-3 font-medium">{label}</td>
-                  {positions.map((p) => (
-                    <td key={p} className="p-1.5 text-center">
-                      <input type="number" step="0.5" value={tables[key][p] ?? 0}
-                        onChange={(e) => edit(key, p, Number(e.target.value))}
-                        className="w-14 rounded-lg border border-line bg-surface px-1 py-1.5 text-center tabular-nums outline-none focus:border-fairway-400" />
-                    </td>
-                  ))}
+                  {positions.map((p) => {
+                    const units = tables[key][p] ?? 0;
+                    const rate = key === "main" ? mainRate : fb18Rate;
+                    const dollars = units * rate;
+                    return (
+                      <td key={p} className="p-1.5 text-center align-top">
+                        <input type="number" step="0.5" value={units}
+                          onChange={(e) => edit(key, p, Number(e.target.value))}
+                          className="w-14 rounded-lg border border-line bg-surface px-1 py-1.5 text-center tabular-nums outline-none focus:border-fairway-400" />
+                        {/* What that unit figure is actually worth, so nobody
+                            has to do the multiplication in their head. */}
+                        <span className={`mt-1 block text-[11px] tabular-nums ${
+                          dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
+                            : dollars < 0 ? "text-flag-500" : "text-muted"}`}>
+                          {dollars > 0 ? "+" : dollars < 0 ? "-" : ""}
+                          ${Math.abs(dollars).toFixed(2)}
+                        </span>
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
             </tbody>

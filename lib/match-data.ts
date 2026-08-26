@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import {
+  eighteenHoleBonuses,
   scoreFb18,
   scoreMainGame,
   splitMoney,
@@ -108,6 +109,19 @@ export function computeMatch(b: MatchBundle) {
     unitsByTeam[id] = (main.unitsByTeam[id] ?? 0) + (fb18.unitsByTeam[id] ?? 0);
   }
 
+  // The side game can carry its own stake. Null means it follows the main one.
+  const mainRate = Number(b.match.dollars_per_unit);
+  const fb18Rate =
+    b.match.fb18_dollars_per_unit === null || b.match.fb18_dollars_per_unit === undefined
+      ? mainRate
+      : Number(b.match.fb18_dollars_per_unit);
+
+  const dollarsByTeam: Record<string, number> = {};
+  for (const id of teamIds) {
+    dollarsByTeam[id] =
+      (main.unitsByTeam[id] ?? 0) * mainRate + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
+  }
+
   const rosters: Record<string, string[]> = {};
   for (const t of b.teams) {
     rosters[t.id] = b.players
@@ -120,12 +134,11 @@ export function computeMatch(b: MatchBundle) {
     main,
     fb18,
     unitsByTeam,
+    dollarsByTeam,
+    rates: { main: mainRate, fb18: fb18Rate },
+    bonuses: eighteenHoleBonuses(teamIds, b.scores),
     rosters,
-    money: splitMoney({
-      unitsByTeam,
-      rosters,
-      dollarsPerUnit: Number(b.match.dollars_per_unit),
-    }),
+    money: splitMoney({ dollarsByTeam, rosters }),
   };
 }
 
@@ -164,7 +177,17 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   for (const m of (matches ?? []) as { id: string }[]) {
     const bundle = await getMatchBundle(m.id);
     if (!bundle) continue;
-    const { money } = computeMatch(bundle);
+    const { money, bonuses, rosters } = computeMatch(bundle);
+
+    // Best eighteen bonus: points only, never money.
+    const bonusByGolfer = new Map<string, number>();
+    for (const tier of bonuses) {
+      for (const teamId of tier.teamIds) {
+        for (const golferId of rosters[teamId] ?? []) {
+          bonusByGolfer.set(golferId, (bonusByGolfer.get(golferId) ?? 0) + tier.bonus);
+        }
+      }
+    }
 
     for (const row of money) {
       const cur = totals.get(row.golferId) ?? {
@@ -172,7 +195,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
       };
       cur.rounds += 1;
       cur.dollars += row.dollars;
-      cur.points += pointsForRound(row.dollars);
+      cur.points += pointsForRound(row.dollars) + (bonusByGolfer.get(row.golferId) ?? 0);
       totals.set(row.golferId, cur);
     }
   }

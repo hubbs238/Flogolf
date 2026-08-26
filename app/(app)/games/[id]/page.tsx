@@ -97,6 +97,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             match={match} teams={teams}
             segments={computed.main.segments} fb18={computed.fb18.results}
             unitsByTeam={computed.unitsByTeam} money={computed.money}
+            bonuses={computed.bonuses}
             golfers={golfers} isAdmin={isAdmin}
           />
         </div>

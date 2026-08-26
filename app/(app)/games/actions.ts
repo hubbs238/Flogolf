@@ -86,6 +86,8 @@ export async function updateMatchSettings(
     name?: string;
     course?: string;
     dollarsPerUnit?: number;
+    /** Null puts the side game back on the main rate. */
+    fb18DollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
     teamCount?: number;
   },
@@ -99,6 +101,12 @@ export async function updateMatchSettings(
   if (fields.dollarsPerUnit !== undefined) {
     if (fields.dollarsPerUnit < 0) return { ok: false, error: "Dollars per unit cannot be negative." };
     update.dollars_per_unit = fields.dollarsPerUnit;
+  }
+  if (fields.fb18DollarsPerUnit !== undefined) {
+    if (fields.fb18DollarsPerUnit !== null && fields.fb18DollarsPerUnit < 0) {
+      return { ok: false, error: "The FB18 rate cannot be negative." };
+    }
+    update.fb18_dollars_per_unit = fields.fb18DollarsPerUnit;
   }
   if (fields.tieDefault !== undefined) update.tie_default = fields.tieDefault;
 
