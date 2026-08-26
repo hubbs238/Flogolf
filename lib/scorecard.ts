@@ -106,6 +106,19 @@ export async function extractScorecard(
       // Log the whole thing for Vercel's runtime logs, and surface the API's
       // own words. A bare status code is not something anyone can act on.
       console.error("[scorecard] Anthropic API error", error.status, error.message);
+
+      // The one 400 an admin can actually fix, and it arrives as a wall of
+      // JSON. Nobody standing on a tee box should have to read that.
+      if (/credit balance|billing|quota/i.test(error.message)) {
+        return {
+          ok: false,
+          error:
+            "The Anthropic account is out of credit, so photos cannot be read. " +
+            "An admin can top it up at console.anthropic.com under Plans & Billing. " +
+            "Enter scores by hand until then.",
+        };
+      }
+
       return {
         ok: false,
         error: `The API rejected that request (${error.status}): ${error.message}`,
