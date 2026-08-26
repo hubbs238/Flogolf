@@ -373,6 +373,28 @@ export async function startRound(matchId: string): Promise<ActionResult> {
 }
 
 /** Passing null clears the hole. */
+
+/**
+ * Turns a Postgres constraint violation into something actionable.
+ *
+ * The stale `1 to 30` stroke check rejects every birdie with a message that
+ * names a constraint and nothing else. Anyone but the person who wrote the
+ * migration will read that as gibberish.
+ */
+function describeScoreWriteError(message: string): string {
+  if (/hole_scores_strokes_check|strokes_check/i.test(message)) {
+    return (
+      "The database still has the old 1-to-30 stroke rule, so scores under par " +
+      "are rejected. An admin needs to run migration 0008 " +
+      "(supabase/migrations/0008_relative_scores.sql) in the Supabase SQL editor."
+    );
+  }
+  if (/violates check constraint/i.test(message)) {
+    return `That score was rejected by the database: ${message}`;
+  }
+  return message;
+}
+
 export async function setHoleScore(
   matchId: string, teamId: string, hole: number, strokes: number | null,
 ): Promise<ActionResult> {
@@ -397,7 +419,7 @@ export async function setHoleScore(
       { match_id: matchId, team_id: teamId, hole, strokes },
       { onConflict: "match_id,team_id,hole" },
     );
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeScoreWriteError(error.message) };
   }
 
   revalidateMatch(matchId);
@@ -630,7 +652,7 @@ export async function applyScorecardPhoto(
         match_id: matchId, team_id: teamId, hole: h.hole, strokes: h.relative,
       })),
     );
-    if (error) return { ok: false, error: error.message };
+    if (error) return { ok: false, error: describeScoreWriteError(error.message) };
   }
 
   revalidateMatch(matchId);
