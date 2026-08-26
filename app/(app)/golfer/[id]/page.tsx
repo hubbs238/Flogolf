@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getMyRating, getScoredGolfers, photoUrl } from "@/lib/data";
 import { GolferAvatar } from "@/components/golfer-avatar";
+import { TrophyIcon } from "@/components/trophy-icon";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
@@ -50,10 +51,11 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
               </p>
               {season && season.rounds > 0 && (
                 <p className="mt-1 text-sm">
-                  <span className={`font-semibold tabular-nums ${
+                  <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
                     season.points > 0 ? "text-fairway-600 dark:text-fairway-300"
                       : season.points < 0 ? "text-flag-500" : "text-muted"}`}>
-                    {season.points > 0 ? "+" : ""}{season.points.toFixed(1)} pts
+                    <TrophyIcon className="h-4 w-4 shrink-0" />
+                    {season.points.toFixed(1)} pts
                   </span>
                   <span className="text-muted"> · </span>
                   <span className={`font-semibold tabular-nums ${

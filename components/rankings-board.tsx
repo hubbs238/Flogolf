@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
+import { TrophyIcon } from "./trophy-icon";
 import { displayName, sortGolfers } from "@/lib/scoring";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
@@ -25,8 +26,11 @@ function SeasonLine({ season }: { season?: { rounds: number; points: number; dol
 
   return (
     <p className="mt-0.5 text-xs">
-      <span className={`font-semibold tabular-nums ${tone(season.points)}`}>
-        {season.points > 0 ? "+" : ""}{season.points.toFixed(1)} pts
+      {/* Trophy stands in for the plus sign. A minus is kept where it exists,
+          since dropping it would turn a loss into a gain. */}
+      <span className={`inline-flex items-center gap-1 font-semibold tabular-nums ${tone(season.points)}`}>
+        <TrophyIcon className="h-3 w-3 shrink-0" />
+        {season.points.toFixed(1)} pts
       </span>
       <span className="text-muted"> · </span>
       <span className={`font-semibold tabular-nums ${tone(season.dollars)}`}>

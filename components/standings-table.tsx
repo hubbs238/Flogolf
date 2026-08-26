@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
+import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { photoUrl } from "@/lib/data";
 import type { Golfer } from "@/lib/types";
@@ -12,11 +13,19 @@ function Value({ n, metric }: { n: number; metric: StandingsMetric }) {
     n > 0 ? "text-fairway-600 dark:text-fairway-300"
       : n < 0 ? "text-flag-500"
         : "text-muted";
-  const text =
-    metric === "dollars"
-      ? `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`
-      : `${n > 0 ? "+" : ""}${n.toFixed(1)}`;
-  return <span className={`font-semibold tabular-nums ${tone}`}>{text}</span>;
+  if (metric === "points") {
+    return (
+      <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone}`}>
+        <TrophyIcon className="h-4 w-4 shrink-0" />
+        {n.toFixed(1)}
+      </span>
+    );
+  }
+  return (
+    <span className={`font-semibold tabular-nums ${tone}`}>
+      {n > 0 ? "+" : n < 0 ? "-" : ""}${Math.abs(n).toFixed(2)}
+    </span>
+  );
 }
 
 export function StandingsTable({
