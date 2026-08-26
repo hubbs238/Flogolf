@@ -162,6 +162,7 @@ console.log("\n=== money, split at player level ===");
 {
   const money = splitMoney({
     dollarsByTeam: { t1: 1000, t2: -400 },
+    cupDollarsByTeam: { t1: 1000, t2: -400 },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7", "p8"] },
   });
   check("a $1000 team win is $250 each",
@@ -171,10 +172,24 @@ console.log("\n=== money, split at player level ===");
 }
 {
   const money = splitMoney({
-    dollarsByTeam: { t1: 90 }, rosters: { t1: ["p1", "p2", "p3"] },
+    dollarsByTeam: { t1: 90 }, cupDollarsByTeam: { t1: 90 },
+    rosters: { t1: ["p1", "p2", "p3"] },
   });
   check("a short roster splits three ways, not four",
     money.map((m) => m.dollars), [30, 30, 30]);
+}
+
+console.log("\n=== front and back nine money does not move the Cup ===");
+{
+  // Team won $300 all in: $100 main, $120 from the front and back nines,
+  // $80 from the eighteen. Only $180 of it counts toward points.
+  const money = splitMoney({
+    dollarsByTeam: { t1: 300 },
+    cupDollarsByTeam: { t1: 180 },
+    rosters: { t1: ["p1", "p2", "p3", "p4"] },
+  });
+  check("money column reports the full share", money[0].dollars, 75);
+  check("Cup share excludes the nines", money[0].cupDollars, 45);
 }
 
 console.log("\n=== best eighteen bonus ===");

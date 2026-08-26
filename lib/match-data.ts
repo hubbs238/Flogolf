@@ -116,10 +116,20 @@ export function computeMatch(b: MatchBundle) {
       ? mainRate
       : Number(b.match.fb18_dollars_per_unit);
 
+  // The FB18 eighteen hole result counts toward the Cup. Its front nine and
+  // back nine payouts are money only.
+  const eighteenUnits: Record<string, number> = {};
+  const totalSegment = fb18.results.find((r) => r.segment === "total");
+  for (const award of totalSegment?.awards ?? []) {
+    eighteenUnits[award.teamId] = (eighteenUnits[award.teamId] ?? 0) + award.units;
+  }
+
   const dollarsByTeam: Record<string, number> = {};
+  const cupDollarsByTeam: Record<string, number> = {};
   for (const id of teamIds) {
-    dollarsByTeam[id] =
-      (main.unitsByTeam[id] ?? 0) * mainRate + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
+    const mainDollars = (main.unitsByTeam[id] ?? 0) * mainRate;
+    dollarsByTeam[id] = mainDollars + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
+    cupDollarsByTeam[id] = mainDollars + (eighteenUnits[id] ?? 0) * fb18Rate;
   }
 
   const rosters: Record<string, string[]> = {};
@@ -135,10 +145,11 @@ export function computeMatch(b: MatchBundle) {
     fb18,
     unitsByTeam,
     dollarsByTeam,
+    cupDollarsByTeam,
     rates: { main: mainRate, fb18: fb18Rate },
     bonuses: eighteenHoleBonuses(teamIds, b.scores),
     rosters,
-    money: splitMoney({ dollarsByTeam, rosters }),
+    money: splitMoney({ dollarsByTeam, cupDollarsByTeam, rosters }),
   };
 }
 
@@ -195,7 +206,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
       };
       cur.rounds += 1;
       cur.dollars += row.dollars;
-      cur.points += pointsForRound(row.dollars) + (bonusByGolfer.get(row.golferId) ?? 0);
+      cur.points += pointsForRound(row.cupDollars) + (bonusByGolfer.get(row.golferId) ?? 0);
       totals.set(row.golferId, cur);
     }
   }

@@ -9,9 +9,10 @@ export default async function FloCupPage() {
       <p className="mb-4 text-sm text-muted">
         A dollar won is a point. A dollar lost is half a point off. Counted
         each round and added up, so a good week is not wiped out by a bad one.
-        Best eighteen hole score in a round adds 50 points to every player on
-        that team, second best adds 25. Rounds counts every finished round a
-        golfer was rostered in.
+        FB18 front nine and back nine winnings are money only and do not move
+        the Cup; the eighteen hole result does. Best eighteen hole score in a
+        round adds 50 points to every player on that team, second best adds 25.
+        Rounds counts every finished round a golfer was rostered in.
       </p>
       <StandingsTable
         rows={rows}

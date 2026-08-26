@@ -477,7 +477,16 @@ export function scoreFb18(opts: {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
+  /** Everything won this round. What the money column reports. */
   dollars: number;
+  /**
+   * The portion that counts toward FLO Cup points.
+   *
+   * Excludes the FB18 front nine and back nine payouts. Those are real money
+   * and appear in `dollars`, they simply do not move the Cup. Only the main
+   * game and the FB18 eighteen hole result do.
+   */
+  cupDollars: number;
 };
 
 /**
@@ -493,20 +502,23 @@ export type PlayerMoney = {
  */
 export function splitMoney(opts: {
   dollarsByTeam: Record<string, number>;
+  cupDollarsByTeam: Record<string, number>;
   rosters: Record<string, string[]>;
 }): PlayerMoney[] {
-  const { dollarsByTeam, rosters } = opts;
+  const { dollarsByTeam, cupDollarsByTeam, rosters } = opts;
   const out: PlayerMoney[] = [];
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
     if (golferIds.length === 0) continue;
     const share = (dollarsByTeam[teamId] ?? 0) / golferIds.length;
+    const cupShare = (cupDollarsByTeam[teamId] ?? 0) / golferIds.length;
 
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
         dollars: Math.round(share * 100) / 100,
+        cupDollars: Math.round(cupShare * 100) / 100,
       });
     }
   }

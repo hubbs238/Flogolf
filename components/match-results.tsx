@@ -169,7 +169,9 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FB18</h3>
           <p className="mb-3 text-sm text-muted">
-            Same scores, scored separately. Lowest front nine, lowest back nine, lowest eighteen.
+            Same scores, scored separately. Lowest front nine, lowest back nine,
+            lowest eighteen. All three pay money; only the eighteen counts
+            toward FLO Cup points.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -177,6 +179,11 @@ export function MatchResults({
                 <div className="mb-2 flex items-baseline justify-between">
                   <h4 className="font-semibold capitalize">
                     {r.segment === "total" ? "All 18" : `${r.segment} nine`}
+                    {r.segment === "total" && (
+                      <span className="ml-2 rounded bg-fairway-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
+                        Cup
+                      </span>
+                    )}
                   </h4>
                   {r.status === "pending" && <span className="text-xs text-muted">in progress</span>}
                 </div>
