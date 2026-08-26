@@ -516,3 +516,123 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
   revalidatePath("/games");
   redirect(`/games/${match.id}`);
 }
+
+// ---------------------------------------------------------------- scorecard photos
+
+export type ReadResult =
+  | {
+      ok: true;
+      holes: { hole: number; strokes: number; par: number; relative: number }[];
+      confidence: "high" | "medium" | "low";
+      notes: string;
+      skipped: string[];
+      alreadyFilled: number[];
+    }
+  | { ok: false; error: string };
+
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+async function assertCanScore(matchId: string, teamId: string) {
+  const supabase = await createClient();
+  const session = await requireUser();
+  if (session.profile?.is_admin) return null;
+
+  const { data: team } = await supabase
+    .from("match_teams").select("captain_user_id").eq("id", teamId).single();
+
+  if (!team || team.captain_user_id !== session.userId) {
+    return "You can only post scores for your own team.";
+  }
+  return null;
+}
+
+/**
+ * Reads a photographed card. Writes nothing.
+ *
+ * The result is shown for confirmation before anything is saved, because a
+ * misread digit moves real money and is invisible once it is sitting in the
+ * grid looking like every other number.
+ */
+export async function readScorecardPhoto(
+  matchId: string,
+  teamId: string,
+  dataUrl: string,
+): Promise<ReadResult> {
+  const denied = await assertCanScore(matchId, teamId);
+  if (denied) return { ok: false, error: denied };
+
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/.exec(dataUrl);
+  if (!match) {
+    return { ok: false, error: "That needs to be a JPEG, PNG, or WebP image." };
+  }
+  const [, mediaType, base64] = match;
+
+  if (Math.ceil((base64.length * 3) / 4) > MAX_IMAGE_BYTES) {
+    return { ok: false, error: "That image is too large. Try again from the camera." };
+  }
+
+  const { extractScorecard } = await import("@/lib/scorecard");
+  const result = await extractScorecard(
+    base64,
+    mediaType as "image/jpeg" | "image/png" | "image/webp",
+  );
+  if (!result.ok) return result;
+
+  // Flag which of the read holes are already on the board, so the review
+  // screen can show plainly that they will be left alone.
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("hole_scores").select("hole").eq("match_id", matchId).eq("team_id", teamId);
+  const filled = new Set((existing ?? []).map((r: { hole: number }) => r.hole));
+
+  return {
+    ok: true,
+    holes: result.holes,
+    confidence: result.confidence,
+    notes: result.notes,
+    skipped: result.skipped,
+    alreadyFilled: result.holes.map((h) => h.hole).filter((h) => filled.has(h)),
+  };
+}
+
+/**
+ * Writes only the holes that are currently blank.
+ *
+ * The blank check is re-read here rather than trusted from the review screen,
+ * so a hole someone typed in while the photo was being read does not get
+ * overwritten by a stale confirmation.
+ */
+export async function applyScorecardPhoto(
+  matchId: string,
+  teamId: string,
+  holes: { hole: number; relative: number }[],
+): Promise<{ ok: true; written: number[]; skipped: number[] } | { ok: false; error: string }> {
+  const denied = await assertCanScore(matchId, teamId);
+  if (denied) return { ok: false, error: denied };
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("hole_scores").select("hole").eq("match_id", matchId).eq("team_id", teamId);
+  const filled = new Set((existing ?? []).map((r: { hole: number }) => r.hole));
+
+  const toWrite = holes.filter(
+    (h) =>
+      !filled.has(h.hole) &&
+      h.hole >= 1 && h.hole <= 18 &&
+      Number.isInteger(h.relative) &&
+      h.relative >= MIN_HOLE_SCORE && h.relative <= MAX_HOLE_SCORE,
+  );
+  const skipped = holes.map((h) => h.hole).filter((h) => filled.has(h));
+
+  if (toWrite.length > 0) {
+    const { error } = await supabase.from("hole_scores").insert(
+      toWrite.map((h) => ({
+        match_id: matchId, team_id: teamId, hole: h.hole, strokes: h.relative,
+      })),
+    );
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidateMatch(matchId);
+  return { ok: true, written: toWrite.map((h) => h.hole), skipped };
+}

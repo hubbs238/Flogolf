@@ -8,6 +8,7 @@ import { RosterFill } from "@/components/roster-fill";
 import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
+import { ScorecardUpload } from "@/components/scorecard-upload";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
 
@@ -22,6 +23,11 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
   const golfers = await getPoolGolfers();
   const computed = computeMatch(bundle);
   const { match, teams, players, scores } = bundle;
+
+  // Teams this person may post for: their own, or all of them for an admin.
+  const scorableTeams = isAdmin
+    ? teams
+    : teams.filter((t) => t.captain_user_id === session.userId);
 
   // Captain shown beside the team name so nobody posts on the wrong row.
   const golferById = new Map(golfers.map((g) => [g.id, g]));
@@ -80,6 +86,9 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
       {(match.status === "in_progress" || match.status === "complete") && (
         <div className="space-y-10">
+          {match.status === "in_progress" && scorableTeams.length > 0 && (
+            <ScorecardUpload matchId={match.id} teams={scorableTeams} />
+          )}
           <LiveScorecard
             match={match} teams={teams} captainNames={captainNames} scores={scores}
             isAdmin={isAdmin} myUserId={session.userId}
