@@ -145,13 +145,13 @@ export function GamesList({
       <div className="rounded-2xl border border-line bg-raised p-5">
         <h2 className="font-semibold">Season standings</h2>
         <p className="mt-1 text-sm text-muted">
-          FLO Cup points and money leaders, per player across every finished round.
+          Points, money, and rounds played, per player across every finished round.
         </p>
         <Link
           href="/standings"
           className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-fairway-600 dark:text-fairway-300"
         >
-          Open the FLO Cup <span aria-hidden="true">→</span>
+          Open FLO Cup Standings <span aria-hidden="true">→</span>
         </Link>
       </div>
     </div>

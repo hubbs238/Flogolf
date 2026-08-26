@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
               Rounds
             </Link>
             <Link href="/standings" className="text-muted transition hover:text-ink">
-              FLO Cup
+              FLO Cup Standings
             </Link>
             {isAdmin && (
               <Link href="/admin" className="text-muted transition hover:text-ink">
