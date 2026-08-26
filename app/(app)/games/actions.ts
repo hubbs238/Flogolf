@@ -384,9 +384,10 @@ export async function startRound(matchId: string): Promise<ActionResult> {
 function describeScoreWriteError(message: string): string {
   if (/hole_scores_strokes_check|strokes_check/i.test(message)) {
     return (
-      "The database still has the old 1-to-30 stroke rule, so scores under par " +
-      "are rejected. An admin needs to run migration 0008 " +
-      "(supabase/migrations/0008_relative_scores.sql) in the Supabase SQL editor."
+      "The database still carries an old stroke-range rule, so this score was " +
+      "rejected. An admin needs to run the latest migration in " +
+      "supabase/migrations (0009_unbounded_scores.sql) in the Supabase SQL " +
+      "editor. It removes the limit entirely."
     );
   }
   if (/violates check constraint/i.test(message)) {
