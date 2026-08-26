@@ -9,6 +9,7 @@ export default async function FloCupPage() {
       <p className="mb-4 text-sm text-muted">
         A dollar won is a point. A dollar lost is half a point off. Counted
         each round and added up, so a good week is not wiped out by a bad one.
+        Rounds counts every finished round a golfer was rostered in.
       </p>
       <StandingsTable
         rows={rows}

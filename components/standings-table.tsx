@@ -8,21 +8,30 @@ import type { SeasonRow } from "@/lib/match-data";
 
 export type StandingsMetric = "points" | "dollars";
 
-function Value({ n, metric }: { n: number; metric: StandingsMetric }) {
-  const tone =
-    n > 0 ? "text-fairway-600 dark:text-fairway-300"
-      : n < 0 ? "text-flag-500"
-        : "text-muted";
-  if (metric === "points") {
-    return (
-      <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone}`}>
-        <TrophyIcon className="h-4 w-4 shrink-0" />
-        {n.toFixed(1)}
-      </span>
-    );
-  }
+function tone(n: number) {
+  return n > 0
+    ? "text-fairway-600 dark:text-fairway-300"
+    : n < 0
+      ? "text-flag-500"
+      : "text-muted";
+}
+
+function Points({ n, strong }: { n: number; strong: boolean }) {
   return (
-    <span className={`font-semibold tabular-nums ${tone}`}>
+    <span
+      className={`inline-flex items-center justify-end gap-1.5 tabular-nums ${
+        strong ? "font-semibold" : ""
+      } ${tone(n)}`}
+    >
+      <TrophyIcon className="h-4 w-4 shrink-0" />
+      {n.toFixed(1)}
+    </span>
+  );
+}
+
+function Money({ n, strong }: { n: number; strong: boolean }) {
+  return (
+    <span className={`tabular-nums ${strong ? "font-semibold" : ""} ${tone(n)}`}>
       {n > 0 ? "+" : n < 0 ? "-" : ""}${Math.abs(n).toFixed(2)}
     </span>
   );
@@ -41,6 +50,8 @@ export function StandingsTable({
   const sorted = [...rows].sort((a, b) => {
     const diff = b[metric] - a[metric];
     if (diff !== 0) return diff;
+    // Then whoever did it in fewer rounds, then alphabetically.
+    if (a.rounds !== b.rounds) return a.rounds - b.rounds;
     const an = byId.get(a.golferId);
     const bn = byId.get(b.golferId);
     return (an ? displayName(an) : "").localeCompare(bn ? displayName(bn) : "");
@@ -54,48 +65,74 @@ export function StandingsTable({
     );
   }
 
+  const pointsFirst = metric === "points";
+
   return (
-    <ul className="space-y-1.5">
-      {sorted.map((row, i) => {
-        const golfer = byId.get(row.golferId);
-        const name = golfer ? displayName(golfer) : "Unknown golfer";
-        return (
-          <li
-            key={row.golferId}
-            className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3"
-          >
-            <span className="w-6 shrink-0 text-center text-sm font-semibold text-muted tabular-nums">
-              {i + 1}
-            </span>
+    <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
+      <table className="w-full min-w-max text-sm">
+        <thead>
+          <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+            <th className="w-12 p-3 text-center font-medium">#</th>
+            <th className="p-3 text-left font-medium">Golfer</th>
+            <th className="w-24 p-3 text-right font-medium">Rounds</th>
+            <th className="w-28 p-3 text-right font-medium">
+              {pointsFirst ? "Money" : "Points"}
+            </th>
+            <th className="w-28 p-3 text-right font-medium text-ink">
+              {pointsFirst ? "Points" : "Money"}
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row, i) => {
+            const golfer = byId.get(row.golferId);
+            const name = golfer ? displayName(golfer) : "Unknown golfer";
+            return (
+              <tr key={row.golferId} className="border-b border-line last:border-0">
+                <td className="p-3 text-center font-semibold tabular-nums text-muted">
+                  {i + 1}
+                </td>
 
-            <GolferAvatar
-              name={name}
-              url={golfer ? photoUrl(golfer.image_path) : null}
-              size="sm"
-            />
+                <td className="p-3">
+                  <div className="flex items-center gap-3">
+                    <GolferAvatar
+                      name={name}
+                      url={golfer ? photoUrl(golfer.image_path) : null}
+                      size="sm"
+                    />
+                    {golfer ? (
+                      <Link
+                        href={`/golfer/${golfer.id}`}
+                        className="truncate font-medium hover:underline"
+                      >
+                        {name}
+                      </Link>
+                    ) : (
+                      <span className="truncate font-medium">{name}</span>
+                    )}
+                  </div>
+                </td>
 
-            <div className="min-w-0 flex-1">
-              {golfer ? (
-                <Link href={`/golfer/${golfer.id}`} className="block truncate font-medium hover:underline">
-                  {name}
-                </Link>
-              ) : (
-                <span className="block truncate font-medium">{name}</span>
-              )}
-              <span className="text-xs text-muted">
-                {row.rounds} {row.rounds === 1 ? "round" : "rounds"}
-                {metric === "points" && (
-                  <> · {row.dollars >= 0 ? "+" : "-"}${Math.abs(row.dollars).toFixed(2)}</>
-                )}
-              </span>
-            </div>
+                <td className="p-3 text-right tabular-nums text-muted">
+                  {row.rounds}
+                </td>
 
-            <span className="w-24 shrink-0 text-right">
-              <Value n={row[metric]} metric={metric} />
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+                <td className="p-3 text-right">
+                  {pointsFirst
+                    ? <Money n={row.dollars} strong={false} />
+                    : <Points n={row.points} strong={false} />}
+                </td>
+
+                <td className="p-3 text-right">
+                  {pointsFirst
+                    ? <Points n={row.points} strong />
+                    : <Money n={row.dollars} strong />}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
