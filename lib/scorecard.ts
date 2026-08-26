@@ -20,9 +20,9 @@ import { MAX_HOLE_SCORE, MIN_HOLE_SCORE } from "./game";
 const CardSchema = z.object({
   holes: z.array(
     z.object({
-      hole: z.number().int().describe("Hole number, 1 to 18"),
-      strokes: z.number().int().describe("Gross strokes written in the box"),
-      par: z.number().int().describe("Par printed on the card for this hole"),
+      hole: z.number().describe("Hole number, a whole number from 1 to 18"),
+      strokes: z.number().describe("Gross strokes written in the box, a whole number"),
+      par: z.number().describe("Par printed on the card for this hole, a whole number"),
     }),
   ),
   par_row_found: z.boolean().describe("Whether a printed par row was legible"),
@@ -103,9 +103,19 @@ export async function extractScorecard(
       return { ok: false, error: "Rate limited. Wait a moment and try again." };
     }
     if (error instanceof Anthropic.APIError) {
-      return { ok: false, error: `Could not read that photo (${error.status}).` };
+      // Log the whole thing for Vercel's runtime logs, and surface the API's
+      // own words. A bare status code is not something anyone can act on.
+      console.error("[scorecard] Anthropic API error", error.status, error.message);
+      return {
+        ok: false,
+        error: `The API rejected that request (${error.status}): ${error.message}`,
+      };
     }
-    return { ok: false, error: "Could not read that photo." };
+    console.error("[scorecard] unexpected failure", error);
+    return {
+      ok: false,
+      error: error instanceof Error ? `Failed: ${error.message}` : "Could not read that photo.",
+    };
   }
 
   const parsed = response.parsed_output;
@@ -125,6 +135,9 @@ export async function extractScorecard(
   const seen = new Set<number>();
 
   for (const h of parsed.holes) {
+    if (!Number.isInteger(h.hole) || !Number.isInteger(h.strokes) || !Number.isInteger(h.par)) {
+      continue;
+    }
     if (h.hole < 1 || h.hole > 18 || seen.has(h.hole)) continue;
     seen.add(h.hole);
 

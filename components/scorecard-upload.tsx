@@ -54,13 +54,18 @@ async function decode(file: File): Promise<{
 /**
  * Shrinks the photo before it leaves the phone. A modern camera shot is
  * 4MB+, which is slow on a course with one bar of signal and costs more to
- * read than it needs to. 1600px wide keeps handwritten digits legible.
+ * read than it needs to. A 2000px long edge keeps handwritten digits legible.
+ *
+ * Capping the LONG edge, not the width: scaling on width alone left a tall
+ * image tall, and the API rejects anything over 8000px on either side.
  */
+const MAX_EDGE = 2000;
+
 async function downscale(file: File): Promise<string> {
   const { draw, width, height, release } = await decode(file);
   try {
     if (!width || !height) throw new Error("the image had no dimensions");
-    const scale = Math.min(1, 1600 / width);
+    const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(width * scale);
     canvas.height = Math.round(height * scale);
