@@ -551,5 +551,15 @@ export function formatRelative(n: number | null | undefined): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
 
-export const MIN_HOLE_SCORE = -3;
-export const MAX_HOLE_SCORE = 5;
+/**
+ * Scores are unbounded. These describe the range worth showing as quick
+ * options and outside which a photo reading deserves a second look. They are
+ * NOT limits: anything outside them still saves.
+ */
+export const TYPICAL_MIN_SCORE = -5;
+export const TYPICAL_MAX_SCORE = 9;
+
+/** True for a value unusual enough to be worth eyeballing on an OCR result. */
+export function isUnusualScore(relative: number): boolean {
+  return relative < TYPICAL_MIN_SCORE || relative > TYPICAL_MAX_SCORE;
+}

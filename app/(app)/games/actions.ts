@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { defaultPayouts, MAX_HOLE_SCORE, MIN_HOLE_SCORE } from "@/lib/game";
+import { defaultPayouts } from "@/lib/game";
 import type { TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -409,11 +409,8 @@ export async function setHoleScore(
       .eq("match_id", matchId).eq("team_id", teamId).eq("hole", hole);
     if (error) return { ok: false, error: error.message };
   } else {
-    if (!Number.isInteger(strokes) || strokes < MIN_HOLE_SCORE || strokes > MAX_HOLE_SCORE) {
-      return {
-        ok: false,
-        error: `Scores are relative to par, from ${MIN_HOLE_SCORE} to +${MAX_HOLE_SCORE}.`,
-      };
+    if (!Number.isInteger(strokes)) {
+      return { ok: false, error: "A score has to be a whole number." };
     }
     const { error } = await supabase.from("hole_scores").upsert(
       { match_id: matchId, team_id: teamId, hole, strokes },
@@ -638,11 +635,7 @@ export async function applyScorecardPhoto(
   const filled = new Set((existing ?? []).map((r: { hole: number }) => r.hole));
 
   const toWrite = holes.filter(
-    (h) =>
-      !filled.has(h.hole) &&
-      h.hole >= 1 && h.hole <= 18 &&
-      Number.isInteger(h.relative) &&
-      h.relative >= MIN_HOLE_SCORE && h.relative <= MAX_HOLE_SCORE,
+    (h) => !filled.has(h.hole) && h.hole >= 1 && h.hole <= 18 && Number.isInteger(h.relative),
   );
   const skipped = holes.map((h) => h.hole).filter((h) => filled.has(h));
 

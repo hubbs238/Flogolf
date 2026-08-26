@@ -4,16 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { setHoleScore } from "@/app/(app)/games/actions";
-import {
-  BACK_NINE, FRONT_NINE, formatRelative,
-  MAX_HOLE_SCORE, MIN_HOLE_SCORE, type HoleScores,
-} from "@/lib/game";
+import { BACK_NINE, FRONT_NINE, formatRelative, type HoleScores } from "@/lib/game";
 import type { Match, MatchTeam } from "@/lib/types";
-
-const CHOICES = Array.from(
-  { length: MAX_HOLE_SCORE - MIN_HOLE_SCORE + 1 },
-  (_, i) => MIN_HOLE_SCORE + i,
-);
 
 function sumOver(
   scores: HoleScores, teamId: string, holes: readonly number[],
@@ -87,22 +79,35 @@ function Nine({
                   }
                   return (
                     <td key={h} className="p-1 text-center">
-                      <select
-                        value={v === undefined || v === null ? "" : String(v)}
+                      {/*
+                        A plain number input rather than a picker, because
+                        scores are unbounded and a list cannot be. type="number"
+                        without inputMode is deliberate: iOS shows a keypad that
+                        includes the minus sign, which inputMode="numeric" hides.
+
+                        Keyed on the saved value so a score arriving over
+                        realtime replaces what is displayed; defaultValue alone
+                        would be ignored after the first render.
+                      */}
+                      <input
+                        key={`${h}:${v ?? ""}`}
+                        type="number"
+                        step={1}
+                        defaultValue={v ?? ""}
                         disabled={pending}
-                        onChange={(e) =>
-                          onSave(team.id, h, e.target.value === "" ? null : Number(e.target.value))
-                        }
+                        aria-label={`Hole ${h}, ${team.name}`}
+                        onBlur={(e) => {
+                          const raw = e.target.value.trim();
+                          const next = raw === "" ? null : Number(raw);
+                          if (next !== null && !Number.isInteger(next)) return;
+                          if ((v ?? null) === next) return;
+                          onSave(team.id, h, next);
+                        }}
                         className={`w-13 rounded-lg border border-line bg-surface px-1 py-1.5 text-center tabular-nums outline-none transition focus:border-fairway-400 ${
                           v !== undefined && v !== null && v < 0
-                            ? "text-fairway-600 dark:text-fairway-300 font-semibold"
+                            ? "font-semibold text-fairway-600 dark:text-fairway-300"
                             : ""}`}
-                      >
-                        <option value="">–</option>
-                        {CHOICES.map((c) => (
-                          <option key={c} value={c}>{formatRelative(c)}</option>
-                        ))}
-                      </select>
+                      />
                     </td>
                   );
                 })}
@@ -172,9 +177,10 @@ export function LiveScorecard({
       )}
 
       <p className="text-sm text-muted">
-        Scores are against par: <span className="font-medium text-ink">E</span> is par,
+        Scores are against par: <span className="font-medium text-ink">0</span> is par,
         {" "}<span className="font-medium text-ink">-1</span> a birdie,
-        {" "}<span className="font-medium text-ink">+1</span> a bogey. Lowest wins.
+        {" "}<span className="font-medium text-ink">2</span> a double bogey. Any whole
+        number works, high or low. Lowest wins.
         {mine.length > 0
           ? ` You post for ${mine.map((t) => t.name).join(" and ")}.`
           : isAdmin

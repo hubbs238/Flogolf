@@ -2,7 +2,7 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { MAX_HOLE_SCORE, MIN_HOLE_SCORE } from "./game";
+import { isUnusualScore } from "./game";
 
 /**
  * Reads a photographed scorecard row.
@@ -155,11 +155,11 @@ export async function extractScorecard(
     seen.add(h.hole);
 
     const relative = h.strokes - h.par;
-    // A converted score gets the same range check as a typed one, so a
-    // misread 14 on a par 4 is refused instead of quietly saved.
-    if (relative < MIN_HOLE_SCORE || relative > MAX_HOLE_SCORE) {
+    // Scores are unbounded, so an odd reading is surfaced for a second look
+    // rather than dropped. A misread 14 on a par 4 is still a real possible
+    // score; it just deserves to be noticed before it is saved.
+    if (isUnusualScore(relative)) {
       skipped.push(`hole ${h.hole} read as ${h.strokes} on a par ${h.par}`);
-      continue;
     }
     holes.push({ hole: h.hole, strokes: h.strokes, par: h.par, relative });
   }

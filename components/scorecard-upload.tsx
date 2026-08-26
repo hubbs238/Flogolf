@@ -285,7 +285,9 @@ export function ScorecardUpload({
           )}
           {read.skipped.length > 0 && (
             <p className="mt-2 text-xs text-flag-500">
-              Ignored as out of range: {read.skipped.join("; ")}. Enter those by hand.
+              Worth a second look before saving: {read.skipped.join("; ")}. These
+              will save as read, they are just unusual enough to be worth
+              checking against the card.
             </p>
           )}
 
