@@ -6,6 +6,7 @@ import { GolferAvatar } from "@/components/golfer-avatar";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
+import { getSeasonStandings } from "@/lib/match-data";
 
 export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) {
   const { id } = await params;
@@ -14,6 +15,9 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
 
   const golfer = golfers.find((g) => g.id === id);
   if (!golfer) notFound();
+
+  const standings = await getSeasonStandings();
+  const season = standings.find((r) => r.golferId === golfer.id);
 
   const isSelf = session.profile?.golfer_id === golfer.id;
   const existing = isSelf ? null : await getMyRating(session.userId, golfer.id);
@@ -44,6 +48,25 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                   ? "No ratings yet"
                   : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"} submitted`}
               </p>
+              {season && season.rounds > 0 && (
+                <p className="mt-1 text-sm">
+                  <span className={`font-semibold tabular-nums ${
+                    season.points > 0 ? "text-fairway-600 dark:text-fairway-300"
+                      : season.points < 0 ? "text-flag-500" : "text-muted"}`}>
+                    {season.points > 0 ? "+" : ""}{season.points.toFixed(1)} pts
+                  </span>
+                  <span className="text-muted"> · </span>
+                  <span className={`font-semibold tabular-nums ${
+                    season.dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
+                      : season.dollars < 0 ? "text-flag-500" : "text-muted"}`}>
+                    {season.dollars > 0 ? "+" : season.dollars < 0 ? "-" : ""}
+                    ${Math.abs(season.dollars).toFixed(2)}
+                  </span>
+                  <span className="text-muted">
+                    {" "}over {season.rounds} {season.rounds === 1 ? "round" : "rounds"}
+                  </span>
+                </p>
+              )}
             </div>
             <div className="ml-auto text-right">
               <div className="text-4xl font-semibold tabular-nums">

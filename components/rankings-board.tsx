@@ -8,16 +8,47 @@ import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
 
+/** golferId -> season figures. Absent means they have not played a round. */
+export type SeasonByGolfer = Record<
+  string,
+  { rounds: number; points: number; dollars: number }
+>;
+
+/** Points and winnings, sized to sit inside a card without shouting. */
+function SeasonLine({ season }: { season?: { rounds: number; points: number; dollars: number } }) {
+  if (!season || season.rounds === 0) return null;
+
+  const tone = (n: number) =>
+    n > 0 ? "text-fairway-600 dark:text-fairway-300"
+      : n < 0 ? "text-flag-500"
+        : "text-muted";
+
+  return (
+    <p className="mt-0.5 text-xs">
+      <span className={`font-semibold tabular-nums ${tone(season.points)}`}>
+        {season.points > 0 ? "+" : ""}{season.points.toFixed(1)} pts
+      </span>
+      <span className="text-muted"> · </span>
+      <span className={`font-semibold tabular-nums ${tone(season.dollars)}`}>
+        {season.dollars > 0 ? "+" : season.dollars < 0 ? "-" : ""}
+        ${Math.abs(season.dollars).toFixed(2)}
+      </span>
+    </p>
+  );
+}
+
 export function RankingsBoard({
   golfers,
   characteristics,
   ratedGolferIds,
   myGolferId,
+  season,
 }: {
   golfers: BoardGolfer[];
   characteristics: Characteristic[];
   ratedGolferIds: string[];
   myGolferId: string | null;
+  season: SeasonByGolfer;
 }) {
   const [sortBy, setSortBy] = useState("overall");
   const rated = useMemo(() => new Set(ratedGolferIds), [ratedGolferIds]);
@@ -80,6 +111,7 @@ export function RankingsBoard({
               sortLabel={sortLabel}
               hasRated={rated.has(golfer.id)}
               isSelf={golfer.id === myGolferId}
+              season={season[golfer.id]}
             />
           ))}
         </ul>
@@ -95,8 +127,10 @@ function GolferCard({
   sortLabel,
   hasRated,
   isSelf,
+  season,
 }: {
   golfer: BoardGolfer;
+  season?: { rounds: number; points: number; dollars: number };
   characteristics: Characteristic[];
   sortBy: string;
   sortLabel: string;
@@ -127,6 +161,7 @@ function GolferCard({
               ? "No ratings yet"
               : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"}`}
           </p>
+          <SeasonLine season={season} />
         </div>
 
         <div className="text-right">
