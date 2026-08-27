@@ -515,7 +515,7 @@ export function scoreFb18(opts: {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
-  /** Everything won this round. What the money column reports. */
+  /** What this player earns this round. Not a share of a team pot. */
   dollars: number;
   /**
    * The portion that counts toward FLO Cup points.
@@ -528,35 +528,35 @@ export type PlayerMoney = {
 };
 
 /**
- * Splits each team's winnings evenly across the people actually on its
- * roster.
+ * Gives every player on a roster the team's full figure.
+ *
+ * A unit is worth its dollar value to each person, not divided among them.
+ * Three units at $100 is $300 each, so a four man team collects $1,200
+ * between them.
+ *
+ * One consequence worth knowing: units balance across a round, dollars only
+ * balance when rosters are the same size. Four players beating three means
+ * the winners collect more than the losers hand over.
  *
  * Takes dollars rather than units because the main game and FB18 can carry
  * different rates, which makes a single combined unit figure meaningless.
  * The conversion happens upstream where both rates are known.
- *
- * Divides by the real roster length rather than a hardcoded four, so a team
- * that plays a man short splits three ways instead of quietly losing a share.
  */
-export function splitMoney(opts: {
-  dollarsByTeam: Record<string, number>;
-  cupDollarsByTeam: Record<string, number>;
+export function awardMoney(opts: {
+  dollarsPerPlayerByTeam: Record<string, number>;
+  cupDollarsPerPlayerByTeam: Record<string, number>;
   rosters: Record<string, string[]>;
 }): PlayerMoney[] {
-  const { dollarsByTeam, cupDollarsByTeam, rosters } = opts;
+  const { dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters } = opts;
   const out: PlayerMoney[] = [];
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
-    if (golferIds.length === 0) continue;
-    const share = (dollarsByTeam[teamId] ?? 0) / golferIds.length;
-    const cupShare = (cupDollarsByTeam[teamId] ?? 0) / golferIds.length;
-
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
-        dollars: Math.round(share * 100) / 100,
-        cupDollars: Math.round(cupShare * 100) / 100,
+        dollars: Math.round((dollarsPerPlayerByTeam[teamId] ?? 0) * 100) / 100,
+        cupDollars: Math.round((cupDollarsPerPlayerByTeam[teamId] ?? 0) * 100) / 100,
       });
     }
   }

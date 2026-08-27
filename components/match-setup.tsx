@@ -162,6 +162,9 @@ export function MatchSetup({
       <section>
         <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
           <h2 className="font-semibold">Units by finishing position</h2>
+          <span className="w-full text-xs text-muted">
+            Dollar figures below are what each player on that team earns.
+          </span>
           <span className={`text-sm ${mainSum === 0 ? "text-muted" : "text-flag-500"}`}>
             Main game total: {mainSum > 0 ? "+" : ""}{mainSum}
             {mainSum !== 0 && " (money is leaking in or out)"}

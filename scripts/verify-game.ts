@@ -8,7 +8,7 @@ import {
   eighteenHoleBonuses,
   scoreMainGame,
   scoreFb18,
-  splitMoney,
+  awardMoney,
   resolveSuddenDeath,
   type HoleScores,
   type PayoutTable,
@@ -186,38 +186,43 @@ console.log("\n=== FB18 ===");
   check("and pays nobody", total.awards.map((a) => a.units), [0, 0]);
 }
 
-console.log("\n=== money, split at player level ===");
+console.log("\n=== a unit pays every player, it is not divided ===");
 {
-  const money = splitMoney({
-    dollarsByTeam: { t1: 1000, t2: -400 },
-    cupDollarsByTeam: { t1: 1000, t2: -400 },
+  // 3 units at $100 is $300 each, so a four man team collects $1,200.
+  const money = awardMoney({
+    dollarsPerPlayerByTeam: { t1: 300, t2: -300 },
+    cupDollarsPerPlayerByTeam: { t1: 300, t2: -300 },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7", "p8"] },
   });
-  check("a $1000 team win is $250 each",
-    money.filter((m) => m.teamId === "t1").map((m) => m.dollars), [250, 250, 250, 250]);
-  check("losses split too",
-    money.filter((m) => m.teamId === "t2").map((m) => m.dollars), [-100, -100, -100, -100]);
+  check("every winner earns the full 300",
+    money.filter((m) => m.teamId === "t1").map((m) => m.dollars), [300, 300, 300, 300]);
+  check("team of four collects 1200",
+    money.filter((m) => m.teamId === "t1").reduce((n, m) => n + m.dollars, 0), 1200);
+  check("losers each pay the full 300",
+    money.filter((m) => m.teamId === "t2").map((m) => m.dollars), [-300, -300, -300, -300]);
 }
 {
-  const money = splitMoney({
-    dollarsByTeam: { t1: 90 }, cupDollarsByTeam: { t1: 90 },
+  // Roster size no longer divides anything, it multiplies the team total.
+  const money = awardMoney({
+    dollarsPerPlayerByTeam: { t1: 90 },
+    cupDollarsPerPlayerByTeam: { t1: 90 },
     rosters: { t1: ["p1", "p2", "p3"] },
   });
-  check("a short roster splits three ways, not four",
-    money.map((m) => m.dollars), [30, 30, 30]);
+  check("a man short still earns the same each",
+    money.map((m) => m.dollars), [90, 90, 90]);
+  check("so the team total is 270, not 90",
+    money.reduce((n, m) => n + m.dollars, 0), 270);
 }
 
 console.log("\n=== front and back nine money does not move the Cup ===");
 {
-  // Team won $300 all in: $100 main, $120 from the front and back nines,
-  // $80 from the eighteen. Only $180 of it counts toward points.
-  const money = splitMoney({
-    dollarsByTeam: { t1: 300 },
-    cupDollarsByTeam: { t1: 180 },
+  const money = awardMoney({
+    dollarsPerPlayerByTeam: { t1: 300 },
+    cupDollarsPerPlayerByTeam: { t1: 180 },
     rosters: { t1: ["p1", "p2", "p3", "p4"] },
   });
-  check("money column reports the full share", money[0].dollars, 75);
-  check("Cup share excludes the nines", money[0].cupDollars, 45);
+  check("money column reports the full figure", money[0].dollars, 300);
+  check("Cup figure excludes the nines", money[0].cupDollars, 180);
 }
 
 console.log("\n=== best eighteen bonus ===");

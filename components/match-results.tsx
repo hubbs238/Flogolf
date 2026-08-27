@@ -51,9 +51,14 @@ export function MatchResults({
   );
 
   const fb18Teams = teams.filter((t) => t.in_fb18);
-  const perTeamMoney = new Map<string, number>();
+
+  // A unit pays each player, so the team figure is the sum of the roster
+  // rather than a pot being divided into it.
+  const perPlayerMoney = new Map<string, number>();
+  const teamTotalMoney = new Map<string, number>();
   for (const m of money) {
-    perTeamMoney.set(m.teamId, (perTeamMoney.get(m.teamId) ?? 0) + m.dollars);
+    perPlayerMoney.set(m.teamId, m.dollars);
+    teamTotalMoney.set(m.teamId, (teamTotalMoney.get(m.teamId) ?? 0) + m.dollars);
   }
 
   return (
@@ -245,15 +250,19 @@ export function MatchResults({
       )}
 
       <section>
-        <h3 className="mb-3 font-semibold">Where it stands</h3>
+        <h3 className="mb-1 font-semibold">Where it stands</h3>
+        <p className="mb-3 text-sm text-muted">
+          A unit pays its dollar value to every player on the roster, so the
+          team total is the per player figure multiplied by the roster.
+        </p>
         <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                 <th className="p-3 text-left font-medium">Team</th>
                 <th className="p-3 text-right font-medium">Units</th>
-                <th className="p-3 text-right font-medium">Team money</th>
-                <th className="p-3 text-right font-medium">Each player</th>
+                <th className="p-3 text-right font-medium text-ink">Each player</th>
+                <th className="p-3 text-right font-medium">Team total</th>
               </tr>
             </thead>
             <tbody>
@@ -261,17 +270,17 @@ export function MatchResults({
                 .sort((a, b) => (unitsByTeam[b.id] ?? 0) - (unitsByTeam[a.id] ?? 0))
                 .map((t) => {
                   const u = unitsByTeam[t.id] ?? 0;
-                  const teamMoney = perTeamMoney.get(t.id) ?? 0;
-                  const per = money.find((m) => m.teamId === t.id);
+                  const per = perPlayerMoney.get(t.id) ?? 0;
+                  const teamTotal = teamTotalMoney.get(t.id) ?? 0;
                   return (
                     <tr key={t.id} className="border-b border-line last:border-0">
                       <td className="p-3 font-medium">{t.name}</td>
                       <td className="p-3 text-right"><Units n={u} /></td>
-                      <td className="p-3 text-right tabular-nums">
-                        {teamMoney >= 0 ? "+" : ""}${teamMoney.toFixed(2)}
+                      <td className="p-3 text-right font-semibold tabular-nums">
+                        {per >= 0 ? "+" : "-"}${Math.abs(per).toFixed(2)}
                       </td>
                       <td className="p-3 text-right tabular-nums text-muted">
-                        {per ? `${per.dollars >= 0 ? "+" : ""}$${per.dollars.toFixed(2)}` : "—"}
+                        {teamTotal >= 0 ? "+" : "-"}${Math.abs(teamTotal).toFixed(2)}
                       </td>
                     </tr>
                   );

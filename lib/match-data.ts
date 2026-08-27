@@ -3,7 +3,7 @@ import {
   eighteenHoleBonuses,
   scoreFb18,
   scoreMainGame,
-  splitMoney,
+  awardMoney,
   type Fb18Segment,
   type HoleScores,
   type PayoutTable,
@@ -124,12 +124,13 @@ export function computeMatch(b: MatchBundle) {
     eighteenUnits[award.teamId] = (eighteenUnits[award.teamId] ?? 0) + award.units;
   }
 
-  const dollarsByTeam: Record<string, number> = {};
-  const cupDollarsByTeam: Record<string, number> = {};
+  // These are per player figures: a unit pays its rate to each team member.
+  const dollarsPerPlayerByTeam: Record<string, number> = {};
+  const cupDollarsPerPlayerByTeam: Record<string, number> = {};
   for (const id of teamIds) {
     const mainDollars = (main.unitsByTeam[id] ?? 0) * mainRate;
-    dollarsByTeam[id] = mainDollars + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
-    cupDollarsByTeam[id] = mainDollars + (eighteenUnits[id] ?? 0) * fb18Rate;
+    dollarsPerPlayerByTeam[id] = mainDollars + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
+    cupDollarsPerPlayerByTeam[id] = mainDollars + (eighteenUnits[id] ?? 0) * fb18Rate;
   }
 
   const rosters: Record<string, string[]> = {};
@@ -144,12 +145,12 @@ export function computeMatch(b: MatchBundle) {
     main,
     fb18,
     unitsByTeam,
-    dollarsByTeam,
-    cupDollarsByTeam,
+    dollarsPerPlayerByTeam,
+    cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate },
     bonuses: eighteenHoleBonuses(teamIds, b.scores),
     rosters,
-    money: splitMoney({ dollarsByTeam, cupDollarsByTeam, rosters }),
+    money: awardMoney({ dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters }),
   };
 }
 
