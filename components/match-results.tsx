@@ -159,6 +159,12 @@ export function MatchResults({
                     Rolling forward to the next match
                   </p>
                 )}
+
+                {s.awards.some((a) => a.splitShare) && (
+                  <p className="mt-2 rounded-lg bg-line/60 px-2.5 py-1.5 text-xs text-muted">
+                    Still level after 18. Those units shared evenly.
+                  </p>
+                )}
               </div>
             );
           })}

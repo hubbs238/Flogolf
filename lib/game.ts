@@ -39,6 +39,8 @@ export type TeamAward = {
   units: number;
   /** Set when this team's units were pushed forward instead of paid. */
   carriedForward?: boolean;
+  /** Set when a tie never separated and the units were shared out. */
+  splitShare?: boolean;
 };
 
 export type TieInfo = {
@@ -133,6 +135,19 @@ export function resolveSuddenDeath(
     tiers.push(...sub);
   }
   return tiers;
+}
+
+/** Even share of the units attached to a run of positions. */
+function shareOf(
+  positions: number[],
+  table: PayoutTable,
+  amongTeams: number,
+): number {
+  if (amongTeams === 0) return 0;
+  const pot = positions.reduce((sum, p) => sum + (table[p] ?? 0), 0);
+  // Three decimals keeps a three way split of an odd pot from drifting the
+  // round off zero sum by more than a rounding hair.
+  return Math.round((pot / amongTeams) * 1000) / 1000;
 }
 
 function addInto(target: PayoutTable, positions: number[], from: PayoutTable) {
@@ -260,6 +275,25 @@ export function scoreMainGame(opts: {
 
       const choice: TieChoice = decisions[`${s}:${blockKey}`] ?? tieDefault;
 
+      const lastSegment = s === SEGMENTS.length;
+
+      if (choice === "set" && lastSegment) {
+        // Nothing left to roll into. Share the block out rather than
+        // vanishing units that were staked.
+        const share = shareOf(positions, effective, block.length);
+        for (let i = 0; i < block.length; i++) {
+          awards.push({
+            teamId: block[i], position: positions[i], units: share, splitShare: true,
+          });
+        }
+        ties.push({
+          segment: s, blockKey, teamIds: block, positions,
+          needsDecision: true, choice, resolved: true,
+        });
+        position += block.length;
+        continue;
+      }
+
       if (choice === "set") {
         // Roll the contested positions forward, position for position.
         addInto(carriedOut, positions, effective);
@@ -306,9 +340,13 @@ export function scoreMainGame(opts: {
           awards.push({ teamId: tier[0], position: p, units: effective[p] ?? 0 });
           p += 1;
         } else {
-          // Never separated by hole 18. Those positions are a push.
+          // Ran out of holes without separating. The positions these teams
+          // were contesting are pooled and shared evenly, which keeps the
+          // round zero sum: the units stay inside the block either way.
+          const tierPositions = tier.map((_, i) => p + i);
+          const share = shareOf(tierPositions, effective, tier.length);
           for (const id of tier) {
-            awards.push({ teamId: id, position: p, units: 0 });
+            awards.push({ teamId: id, position: p, units: share, splitShare: true });
           }
           p += tier.length;
         }

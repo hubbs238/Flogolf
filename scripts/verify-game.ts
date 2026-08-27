@@ -111,15 +111,43 @@ console.log("\n=== sudden death ===");
   check("null while the deciding hole is unplayed", resolveSuddenDeath(["A", "B"], 5, s), null);
 }
 
-console.log("\n=== a tie that never breaks is a push ===");
+console.log("\n=== a tie that never breaks splits evenly ===");
 {
+  // Two teams, dead level all eighteen. 1st +3 and 2nd +1 is 4 units
+  // between them, so 2 each per segment, six segments.
   const same = Array.from({ length: 18 }, () => 4);
   const s: HoleScores = { A: card(...same), B: card(...same) };
-  const { unitsByTeam } = scoreMainGame({
+  const { segments, unitsByTeam } = scoreMainGame({
     teamIds: ["A", "B"], scores: s,
-    payouts: { 1: 2, 2: -2 }, decisions: {}, tieDefault: "hole",
+    payouts: { 1: 3, 2: 1 }, decisions: {}, tieDefault: "hole",
   });
-  check("identical all 18: nobody collects", [unitsByTeam.A, unitsByTeam.B], [0, 0]);
+  check("each takes half the block, every segment",
+    segments[0].awards.map((a) => a.units), [2, 2]);
+  check("flagged as a shared split",
+    segments[0].awards.every((a) => a.splitShare === true), true);
+  check("six segments at 2 apiece", [unitsByTeam.A, unitsByTeam.B], [12, 12]);
+}
+{
+  // Three teams level: 1st +3, 2nd +1, 3rd 0 is 4 units three ways.
+  const same = Array.from({ length: 18 }, () => 4);
+  const s: HoleScores = { A: card(...same), B: card(...same), C: card(...same) };
+  const { segments } = scoreMainGame({
+    teamIds: ["A", "B", "C"], scores: s,
+    payouts: { 1: 3, 2: 1, 3: 0 }, decisions: {}, tieDefault: "hole",
+  });
+  check("three way split of 4 units",
+    segments[0].awards.map((a) => a.units), [1.333, 1.333, 1.333]);
+}
+{
+  // A carryover in the last segment has nowhere to roll, so it shares out.
+  const same = Array.from({ length: 18 }, () => 4);
+  const s: HoleScores = { A: card(...same), B: card(...same) };
+  const { segments } = scoreMainGame({
+    teamIds: ["A", "B"], scores: s,
+    payouts: { 1: 3, 2: 1 }, decisions: { "6:A+B": "set" }, tieDefault: "hole",
+  });
+  check("final segment carryover splits instead of vanishing",
+    segments[5].awards.map((a) => a.units), [2, 2]);
 }
 
 console.log("\n=== FB18 ===");
