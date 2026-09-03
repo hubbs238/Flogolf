@@ -508,6 +508,26 @@ export function scoreFb18(opts: {
   return { results, unitsByTeam };
 }
 
+/**
+ * Converts FB18 results to dollars, each segment at its own rate.
+ *
+ * Front nine, back nine, and the eighteen can be worth different money, so
+ * the units cannot be summed before conversion.
+ */
+export function fb18DollarsByTeam(
+  results: Fb18Result[],
+  rates: Record<Fb18Segment, number>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const result of results) {
+    const rate = rates[result.segment] ?? 0;
+    for (const award of result.awards) {
+      out[award.teamId] = (out[award.teamId] ?? 0) + award.units * rate;
+    }
+  }
+  return out;
+}
+
 // ------------------------------------------------------------
 //  Money
 // ------------------------------------------------------------

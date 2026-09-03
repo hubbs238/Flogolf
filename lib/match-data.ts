@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   eighteenHoleBonuses,
+  fb18DollarsByTeam,
   scoreFb18,
   scoreMainGame,
   awardMoney,
@@ -109,12 +110,18 @@ export function computeMatch(b: MatchBundle) {
     unitsByTeam[id] = (main.unitsByTeam[id] ?? 0) + (fb18.unitsByTeam[id] ?? 0);
   }
 
-  // The side game can carry its own stake. Null means it follows the main one.
+  // Rates fall back down a chain: a segment override, then the side game
+  // rate, then the round's main rate. Null anywhere means "inherit".
   const mainRate = Number(b.match.dollars_per_unit);
-  const fb18Rate =
-    b.match.fb18_dollars_per_unit === null || b.match.fb18_dollars_per_unit === undefined
-      ? mainRate
-      : Number(b.match.fb18_dollars_per_unit);
+  const pick = (v: number | null | undefined, fallback: number) =>
+    v === null || v === undefined ? fallback : Number(v);
+
+  const fb18Rate = pick(b.match.fb18_dollars_per_unit, mainRate);
+  const segmentRate: Record<Fb18Segment, number> = {
+    front: pick(b.match.fb18_front_dollars_per_unit, fb18Rate),
+    back: pick(b.match.fb18_back_dollars_per_unit, fb18Rate),
+    total: pick(b.match.fb18_total_dollars_per_unit, fb18Rate),
+  };
 
   // These are per player figures: a unit pays its rate to each team member.
   //
@@ -122,11 +129,13 @@ export function computeMatch(b: MatchBundle) {
   // rewarded through the best-eighteen bonus, so counting its money as well
   // would pay for the same achievement twice. Front and back nine were never
   // meant to count.
+  const fb18Dollars = fb18DollarsByTeam(fb18.results, segmentRate);
+
   const dollarsPerPlayerByTeam: Record<string, number> = {};
   const cupDollarsPerPlayerByTeam: Record<string, number> = {};
   for (const id of teamIds) {
     const mainDollars = (main.unitsByTeam[id] ?? 0) * mainRate;
-    dollarsPerPlayerByTeam[id] = mainDollars + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
+    dollarsPerPlayerByTeam[id] = mainDollars + (fb18Dollars[id] ?? 0);
     cupDollarsPerPlayerByTeam[id] = mainDollars;
   }
 
@@ -144,7 +153,7 @@ export function computeMatch(b: MatchBundle) {
     unitsByTeam,
     dollarsPerPlayerByTeam,
     cupDollarsPerPlayerByTeam,
-    rates: { main: mainRate, fb18: fb18Rate },
+    rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
     bonuses: eighteenHoleBonuses(teamIds, b.scores),
     rosters,
     money: awardMoney({ dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters }),

@@ -28,11 +28,15 @@ export function MatchStakesEditor({
         <div>
           <h3 className="font-semibold">Stakes and payouts</h3>
           <p className="text-sm text-muted">
-            ${match.dollars_per_unit} a unit to each player
-            {match.fb18_dollars_per_unit !== null &&
-             Number(match.fb18_dollars_per_unit) !== Number(match.dollars_per_unit)
-              ? `, $${match.fb18_dollars_per_unit} on FB18`
-              : ""}
+            ${match.dollars_per_unit} a unit to each player. FB18 at{" "}
+            {[
+              ["F9", match.fb18_front_dollars_per_unit],
+              ["B9", match.fb18_back_dollars_per_unit],
+              ["18", match.fb18_total_dollars_per_unit],
+            ]
+              .map(([label, v]) =>
+                `${label} $${v ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit}`)
+              .join(", ")}
             . Changing anything here recalculates this round and the season table.
           </p>
         </div>

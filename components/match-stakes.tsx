@@ -44,6 +44,13 @@ export function MatchStakes({
   const positions = Array.from({ length: match.team_count }, (_, i) => i + 1);
   const mainRate = Number(match.dollars_per_unit);
   const fb18Rate = Number(match.fb18_dollars_per_unit ?? match.dollars_per_unit);
+  // Each FB18 segment can be worth its own money; null inherits the row above.
+  const rateFor: Record<keyof Tables, number> = {
+    main: mainRate,
+    front: Number(match.fb18_front_dollars_per_unit ?? fb18Rate),
+    back: Number(match.fb18_back_dollars_per_unit ?? fb18Rate),
+    total: Number(match.fb18_total_dollars_per_unit ?? fb18Rate),
+  };
   const mainSum = positions.reduce((n, p) => n + (tables.main[p] ?? 0), 0);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
@@ -72,14 +79,6 @@ export function MatchStakes({
         </label>
 
         <label>
-          <span className="mb-1.5 block text-sm font-medium">$ per unit, FB18</span>
-          <input type="number" min={0} step="0.5" defaultValue={fb18Rate}
-            onBlur={(e) => run(() => updateMatchSettings(match.id, { fb18DollarsPerUnit: Number(e.target.value) }))}
-            className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
-          <span className="mt-1 block text-xs text-muted">Set to 1 to enter dollars</span>
-        </label>
-
-        <label>
           <span className="mb-1.5 block text-sm font-medium">Tie default</span>
           <select defaultValue={match.tie_default}
             onChange={(e) => run(() => updateMatchSettings(match.id, { tieDefault: e.target.value as "hole" | "set" }))}
@@ -88,6 +87,32 @@ export function MatchStakes({
             <option value="set">Next set</option>
           </select>
         </label>
+      </div>
+
+      <div>
+        <span className="mb-1.5 block text-sm font-medium">FB18 rates</span>
+        <p className="mb-2 text-xs text-muted">
+          Front nine, back nine, and the eighteen can each be worth different
+          money. Set one to 1 and its payout numbers below become dollars.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["front", "F9", "fb18FrontDollarsPerUnit"],
+            ["back", "B9", "fb18BackDollarsPerUnit"],
+            ["total", "All 18", "fb18TotalDollarsPerUnit"],
+          ] as const).map(([seg, label, field]) => (
+            <label key={seg}>
+              <span className="mb-1.5 block text-xs font-medium text-muted">
+                $ per unit, {label}
+              </span>
+              <input type="number" min={0} step="0.5" defaultValue={rateFor[seg]}
+                onBlur={(e) =>
+                  run(() => updateMatchSettings(match.id, { [field]: Number(e.target.value) }))
+                }
+                className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
+            </label>
+          ))}
+        </div>
       </div>
 
       <div>
@@ -133,7 +158,7 @@ export function MatchStakes({
                   <td className="p-3 font-medium">{label}</td>
                   {positions.map((p) => {
                     const units = tables[key][p] ?? 0;
-                    const dollars = units * (key === "main" ? mainRate : fb18Rate);
+                    const dollars = units * rateFor[key];
                     return (
                       <td key={p} className="p-1.5 text-center align-top">
                         <input type="number" step="0.5" value={units}

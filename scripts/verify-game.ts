@@ -6,6 +6,7 @@
  */
 import {
   eighteenHoleBonuses,
+  fb18DollarsByTeam,
   scoreMainGame,
   scoreFb18,
   awardMoney,
@@ -212,6 +213,29 @@ console.log("\n=== a unit pays every player, it is not divided ===");
     money.map((m) => m.dollars), [90, 90, 90]);
   check("so the team total is 270, not 90",
     money.reduce((n, m) => n + m.dollars, 0), 270);
+}
+
+console.log("\n=== each FB18 segment converts at its own rate ===");
+{
+  // Front nine and back nine at $20 a unit, the eighteen at $50.
+  //   A: front -9, back -1, total -10  -> wins the front and the eighteen
+  //   B: front  0, back -2, total  -2  -> wins the back
+  // So A collects 20 + 50 = 70, B collects 20.
+  const A = Array.from({ length: 18 }, (_, i) => (i < 9 ? -1 : 0));
+  A[9] = -1;
+  const B = Array.from({ length: 18 }, () => 0);
+  B[9] = -1; B[10] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+  const { results } = scoreFb18({
+    teamIds: ["A", "B"], scores: s,
+    payouts: { front: { 1: 1, 2: 0 }, back: { 1: 1, 2: 0 }, total: { 1: 1, 2: 0 } },
+  });
+  const dollars = fb18DollarsByTeam(results, { front: 20, back: 20, total: 50 });
+  check("A: front $20 plus the eighteen $50", dollars.A, 70);
+  check("B: back nine only, $20", dollars.B, 20);
+
+  const flat = fb18DollarsByTeam(results, { front: 20, back: 20, total: 20 });
+  check("same units, one flat rate, totals differ", [flat.A, flat.B], [40, 20]);
 }
 
 console.log("\n=== FB18 money does not move the Cup ===");

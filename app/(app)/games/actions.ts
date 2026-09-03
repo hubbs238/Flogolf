@@ -88,6 +88,10 @@ export async function updateMatchSettings(
     dollarsPerUnit?: number;
     /** Null puts the side game back on the main rate. */
     fb18DollarsPerUnit?: number | null;
+    /** Per segment. Null falls back to the side game rate. */
+    fb18FrontDollarsPerUnit?: number | null;
+    fb18BackDollarsPerUnit?: number | null;
+    fb18TotalDollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
     teamCount?: number;
   },
@@ -102,11 +106,20 @@ export async function updateMatchSettings(
     if (fields.dollarsPerUnit < 0) return { ok: false, error: "Dollars per unit cannot be negative." };
     update.dollars_per_unit = fields.dollarsPerUnit;
   }
-  if (fields.fb18DollarsPerUnit !== undefined) {
-    if (fields.fb18DollarsPerUnit !== null && fields.fb18DollarsPerUnit < 0) {
-      return { ok: false, error: "The FB18 rate cannot be negative." };
+  const rateFields = [
+    ["fb18DollarsPerUnit", "fb18_dollars_per_unit"],
+    ["fb18FrontDollarsPerUnit", "fb18_front_dollars_per_unit"],
+    ["fb18BackDollarsPerUnit", "fb18_back_dollars_per_unit"],
+    ["fb18TotalDollarsPerUnit", "fb18_total_dollars_per_unit"],
+  ] as const;
+
+  for (const [key, column] of rateFields) {
+    const value = fields[key];
+    if (value === undefined) continue;
+    if (value !== null && value < 0) {
+      return { ok: false, error: "A dollar rate cannot be negative." };
     }
-    update.fb18_dollars_per_unit = fields.fb18DollarsPerUnit;
+    update[column] = value;
   }
   if (fields.tieDefault !== undefined) update.tie_default = fields.tieDefault;
 
