@@ -1,17 +1,11 @@
-/**
- * Checks the match scoring engine against the worked example that was
- * agreed before any of it was written, plus the edge cases around it.
- *
- *   npx tsx scripts/verify-game.ts
- */
 import {
-  eighteenHoleBonuses,
-  roundPoints,
-  fb18DollarsByTeam,
-  scoreMainGame,
-  scoreFb18,
   awardMoney,
+  eighteenHoleBonuses,
+  fb18DollarsByTeam,
   resolveSuddenDeath,
+  roundPoints,
+  scoreFb18,
+  scoreMainGame,
   type HoleScores,
   type PayoutTable,
 } from "../lib/game";
@@ -280,6 +274,36 @@ console.log("\n=== best eighteen bonus ===");
   const partial = Array.from({ length: 17 }, () => 0);
   const s: HoleScores = { A: card(...partial), B: card(...partial) };
   check("no bonus while a card is unfinished", eighteenHoleBonuses(["A", "B"], s), []);
+}
+
+console.log("\n=== settlement includes every FB18 segment ===");
+{
+  //   A: front -9, back -1, total -10  -> wins front and the eighteen
+  //   B: front  0, back -2, total  -2  -> wins the back
+  const A = Array.from({ length: 18 }, (_, i) => (i < 9 ? -1 : 0)); A[9] = -1;
+  const B = Array.from({ length: 18 }, () => 0); B[9] = -1; B[10] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+
+  const { results } = scoreFb18({
+    teamIds: ["A", "B"], scores: s,
+    payouts: { front: { 1: 1, 2: -1 }, back: { 1: 1, 2: -1 }, total: { 1: 1, 2: -1 } },
+  });
+  const fb = fb18DollarsByTeam(results, { front: 20, back: 20, total: 50 });
+
+  // A: +20 front, -20 back, +50 eighteen = +50. B is the mirror.
+  check("FB18 nets out per team", [fb.A, fb.B], [50, -50]);
+
+  // Main game gave A +100 a head. Settlement must carry both.
+  const money = awardMoney({
+    dollarsPerPlayerByTeam: { A: 100 + fb.A, B: -100 + fb.B },
+    cupDollarsPerPlayerByTeam: { A: 100, B: -100 },
+    rosters: { A: ["a1", "a2"], B: ["b1", "b2"] },
+  });
+  check("settlement is main game plus all three segments",
+    [money.find((m) => m.golferId === "a1")!.dollars,
+     money.find((m) => m.golferId === "b1")!.dollars], [150, -150]);
+  check("Cup figure still ignores FB18",
+    money.find((m) => m.golferId === "a1")!.cupDollars, 100);
 }
 
 console.log("\n=== points earned in a round ===");

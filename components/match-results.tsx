@@ -18,7 +18,8 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, bonuses, points, golfers, isAdmin,
+  match, teams, segments, fb18, unitsByTeam, money, bonuses, points,
+  segmentRates, golfers, isAdmin,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -28,6 +29,8 @@ export function MatchResults({
   money: PlayerMoney[];
   bonuses: EighteenTier[];
   points: PlayerRoundPoints[];
+  /** Dollars per unit for each FB18 segment. They can differ. */
+  segmentRates: Record<"front" | "back" | "total", number>;
   golfers: Golfer[];
   isAdmin: boolean;
 }) {
@@ -194,6 +197,9 @@ export function MatchResults({
                 <div className="mb-2 flex items-baseline justify-between">
                   <h4 className="font-semibold capitalize">
                     {r.segment === "total" ? "All 18" : `${r.segment} nine`}
+                    <span className="ml-2 text-xs font-normal text-muted">
+                      ${segmentRates[r.segment]}/unit
+                    </span>
                   </h4>
                   {r.status === "pending" && <span className="text-xs text-muted">in progress</span>}
                 </div>
@@ -201,16 +207,26 @@ export function MatchResults({
                   {fb18Teams
                     .map((t) => ({ team: t, total: r.totals[t.id], award: r.awards.find((a) => a.teamId === t.id) }))
                     .sort((a, b) => (a.total ?? 999) - (b.total ?? 999))
-                    .map(({ team, total, award }) => (
-                      <li key={team.id} className="flex items-center gap-2">
-                        <span className="w-5 shrink-0 text-xs text-muted">{award?.position ?? "—"}</span>
-                        <span className="min-w-0 flex-1 truncate">{team.name}</span>
-                        <span className="shrink-0 tabular-nums text-muted">{total ?? "—"}</span>
-                        <span className="w-9 shrink-0 text-right">
-                          {award ? <Units n={award.units} /> : "—"}
-                        </span>
-                      </li>
-                    ))}
+                    .map(({ team, total, award }) => {
+                      const cash = (award?.units ?? 0) * segmentRates[r.segment];
+                      return (
+                        <li key={team.id} className="flex items-center gap-2">
+                          <span className="w-5 shrink-0 text-xs text-muted">{award?.position ?? "—"}</span>
+                          <span className="min-w-0 flex-1 truncate">{team.name}</span>
+                          <span className="shrink-0 tabular-nums text-muted">{total ?? "—"}</span>
+                          <span className="w-9 shrink-0 text-right">
+                            {award ? <Units n={award.units} /> : "—"}
+                          </span>
+                          {/* The cash figure, so this panel reconciles against
+                              the settlement table below it. */}
+                          <span className={`w-16 shrink-0 text-right text-xs tabular-nums ${
+                            cash > 0 ? "text-fairway-600 dark:text-fairway-300"
+                              : cash < 0 ? "text-flag-500" : "text-muted"}`}>
+                            {award ? `${cash > 0 ? "+" : cash < 0 ? "-" : ""}$${Math.abs(cash).toFixed(2)}` : "—"}
+                          </span>
+                        </li>
+                      );
+                    })}
                 </ul>
                 {r.pushed.length > 0 && (
                   <p className="mt-2 text-xs text-muted">Tie unbroken, push</p>
@@ -339,7 +355,11 @@ export function MatchResults({
 
       {money.length > 0 && (
         <section>
-          <h3 className="mb-3 font-semibold">Player settlement</h3>
+          <h3 className="mb-1 font-semibold">Player settlement</h3>
+          <p className="mb-3 text-sm text-muted">
+            Everything each player takes home: the main game plus all three
+            FB18 segments, at whatever rate each was set to.
+          </p>
           <ul className="grid gap-1.5 sm:grid-cols-2">
             {[...money].sort((a, b) => b.dollars - a.dollars).map((m) => (
               <li key={m.golferId}
