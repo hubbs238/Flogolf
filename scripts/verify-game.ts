@@ -6,6 +6,7 @@
  */
 import {
   eighteenHoleBonuses,
+  roundPoints,
   fb18DollarsByTeam,
   scoreMainGame,
   scoreFb18,
@@ -279,6 +280,37 @@ console.log("\n=== best eighteen bonus ===");
   const partial = Array.from({ length: 17 }, () => 0);
   const s: HoleScores = { A: card(...partial), B: card(...partial) };
   check("no bonus while a card is unfinished", eighteenHoleBonuses(["A", "B"], s), []);
+}
+
+console.log("\n=== points earned in a round ===");
+{
+  // p1..p4 won $200 of Cup money and took the best eighteen.
+  // p5..p8 lost $200 and finished second.
+  const pts = roundPoints({
+    money: [
+      ...["p1","p2","p3","p4"].map((golferId) => ({
+        golferId, teamId: "t1", dollars: 300, cupDollars: 200,
+      })),
+      ...["p5","p6","p7","p8"].map((golferId) => ({
+        golferId, teamId: "t2", dollars: -200, cupDollars: -200,
+      })),
+    ],
+    bonuses: [
+      { teamIds: ["t1"], total: -6, bonus: 50 },
+      { teamIds: ["t2"], total: -4, bonus: 25 },
+    ],
+    rosters: { t1: ["p1","p2","p3","p4"], t2: ["p5","p6","p7","p8"] },
+  });
+
+  const winner = pts.find((p) => p.golferId === "p1")!;
+  check("winner: 200 from money", winner.fromMoney, 200);
+  check("winner: 50 bonus", winner.bonus, 50);
+  check("winner: 250 total", winner.total, 250);
+
+  const loser = pts.find((p) => p.golferId === "p5")!;
+  check("loser: a $200 loss is only -100 points", loser.fromMoney, -100);
+  check("loser: still takes the 25 runner up bonus", loser.bonus, 25);
+  check("loser: -75 on the round", loser.total, -75);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);

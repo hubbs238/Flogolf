@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   eighteenHoleBonuses,
   fb18DollarsByTeam,
+  roundPoints,
   scoreFb18,
   scoreMainGame,
   awardMoney,
@@ -147,6 +148,9 @@ export function computeMatch(b: MatchBundle) {
       .map((p) => p.golfer_id);
   }
 
+  const money = awardMoney({ dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters });
+  const bonuses = eighteenHoleBonuses(teamIds, b.scores);
+
   return {
     main,
     fb18,
@@ -154,9 +158,10 @@ export function computeMatch(b: MatchBundle) {
     dollarsPerPlayerByTeam,
     cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
-    bonuses: eighteenHoleBonuses(teamIds, b.scores),
+    bonuses,
     rosters,
-    money: awardMoney({ dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters }),
+    money,
+    points: roundPoints({ money, bonuses, rosters }),
   };
 }
 
@@ -166,18 +171,6 @@ export type SeasonRow = {
   dollars: number;
   points: number;
 };
-
-/**
- * FLO Cup points: a dollar won is a point, a dollar lost is half a point off.
- *
- * Applied per round, then summed. That asymmetry is the whole design: win
- * $100 one week and lose $100 the next and you finish +50 points, not zero.
- * Netting the season first would collapse the 1-to-0.5 ratio into a sign
- * test and throw away the reason for having it.
- */
-export function pointsForRound(dollars: number): number {
-  return dollars >= 0 ? dollars : dollars * 0.5;
-}
 
 /**
  * Season standings, per player, across every finished round.
@@ -195,17 +188,8 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   for (const m of (matches ?? []) as { id: string }[]) {
     const bundle = await getMatchBundle(m.id);
     if (!bundle) continue;
-    const { money, bonuses, rosters } = computeMatch(bundle);
-
-    // Best eighteen bonus: points only, never money.
-    const bonusByGolfer = new Map<string, number>();
-    for (const tier of bonuses) {
-      for (const teamId of tier.teamIds) {
-        for (const golferId of rosters[teamId] ?? []) {
-          bonusByGolfer.set(golferId, (bonusByGolfer.get(golferId) ?? 0) + tier.bonus);
-        }
-      }
-    }
+    const { money, points } = computeMatch(bundle);
+    const pointsByGolfer = new Map(points.map((p) => [p.golferId, p.total]));
 
     for (const row of money) {
       const cur = totals.get(row.golferId) ?? {
@@ -213,7 +197,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
       };
       cur.rounds += 1;
       cur.dollars += row.dollars;
-      cur.points += pointsForRound(row.cupDollars) + (bonusByGolfer.get(row.golferId) ?? 0);
+      cur.points += pointsByGolfer.get(row.golferId) ?? 0;
       totals.set(row.golferId, cur);
     }
   }

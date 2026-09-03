@@ -687,3 +687,58 @@ export function eighteenHoleBonuses(
     bonus: bonuses[i],
   }));
 }
+
+/**
+ * FLO Cup points from a round's Cup-eligible winnings: a dollar won is a
+ * point, a dollar lost is half a point off.
+ *
+ * Applied per round, then summed across the season. That asymmetry is the
+ * whole design: win $100 one week and lose $100 the next and you finish +50
+ * points, not zero. Netting the season first would collapse the 1-to-0.5
+ * ratio into a sign test and throw away the reason for having it.
+ */
+export function pointsForRound(dollars: number): number {
+  return dollars >= 0 ? dollars : dollars * 0.5;
+}
+
+export type PlayerRoundPoints = {
+  golferId: string;
+  teamId: string;
+  /** Points from Cup-eligible money. FB18 winnings are excluded. */
+  fromMoney: number;
+  /** Best eighteen bonus, 50 or 25, otherwise 0. */
+  bonus: number;
+  total: number;
+};
+
+/** Per player points for one round, broken into where they came from. */
+export function roundPoints(opts: {
+  money: PlayerMoney[];
+  bonuses: EighteenTier[];
+  rosters: Record<string, string[]>;
+}): PlayerRoundPoints[] {
+  const { money, bonuses, rosters } = opts;
+
+  const bonusByGolfer = new Map<string, number>();
+  for (const tier of bonuses) {
+    for (const teamId of tier.teamIds) {
+      for (const golferId of rosters[teamId] ?? []) {
+        bonusByGolfer.set(golferId, (bonusByGolfer.get(golferId) ?? 0) + tier.bonus);
+      }
+    }
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  return money.map((m) => {
+    const fromMoney = round2(pointsForRound(m.cupDollars));
+    const bonus = bonusByGolfer.get(m.golferId) ?? 0;
+    return {
+      golferId: m.golferId,
+      teamId: m.teamId,
+      fromMoney,
+      bonus,
+      total: round2(fromMoney + bonus),
+    };
+  });
+}

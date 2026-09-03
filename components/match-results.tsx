@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
-import type { EighteenTier, Fb18Result, PlayerMoney, SegmentResult, TieChoice } from "@/lib/game";
+import type {
+  EighteenTier, Fb18Result, PlayerMoney, PlayerRoundPoints,
+  SegmentResult, TieChoice,
+} from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
 
 function Units({ n }: { n: number }) {
@@ -15,7 +18,7 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, bonuses, golfers, isAdmin,
+  match, teams, segments, fb18, unitsByTeam, money, bonuses, points, golfers, isAdmin,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -24,6 +27,7 @@ export function MatchResults({
   unitsByTeam: Record<string, number>;
   money: PlayerMoney[];
   bonuses: EighteenTier[];
+  points: PlayerRoundPoints[];
   golfers: Golfer[];
   isAdmin: boolean;
 }) {
@@ -284,6 +288,54 @@ export function MatchResults({
           </table>
         </div>
       </section>
+
+      {points.length > 0 && (
+        <section>
+          <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
+          <p className="mb-3 text-sm text-muted">
+            A dollar won is a point, a dollar lost is half a point off. FB18
+            winnings are money only and do not appear here. The bonus is the
+            best eighteen hole score, 50 for the lowest and 25 for the next.
+          </p>
+          <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
+            <table className="w-full min-w-max text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                  <th className="p-3 text-left font-medium">Player</th>
+                  <th className="p-3 text-left font-medium">Team</th>
+                  <th className="w-28 p-3 text-right font-medium">From money</th>
+                  <th className="w-24 p-3 text-right font-medium">Bonus</th>
+                  <th className="w-28 p-3 text-right font-medium text-ink">Points</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...points].sort((a, b) => b.total - a.total).map((p) => (
+                  <tr key={p.golferId} className="border-b border-line last:border-0">
+                    <td className="p-3 font-medium">{golferName(p.golferId)}</td>
+                    <td className="p-3 text-muted">{teamName(p.teamId)}</td>
+                    <td className={`p-3 text-right tabular-nums ${
+                      p.fromMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
+                        : p.fromMoney < 0 ? "text-flag-500" : "text-muted"}`}>
+                      {p.fromMoney > 0 ? "+" : ""}{p.fromMoney.toFixed(1)}
+                    </td>
+                    <td className="p-3 text-right tabular-nums text-muted">
+                      {p.bonus > 0 ? `+${p.bonus}` : "—"}
+                    </td>
+                    <td className="p-3 text-right">
+                      <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${
+                        p.total > 0 ? "text-fairway-600 dark:text-fairway-300"
+                          : p.total < 0 ? "text-flag-500" : "text-muted"}`}>
+                        <TrophyIcon className="h-4 w-4 shrink-0" />
+                        {p.total.toFixed(1)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {money.length > 0 && (
         <section>
