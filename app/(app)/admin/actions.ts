@@ -505,3 +505,69 @@ export async function testAnthropicKey(): Promise<KeyTest> {
     return { ok: false, error: error instanceof Error ? error.message : "Unknown failure." };
   }
 }
+
+export type SchemaCheck = {
+  migration: string;
+  what: string;
+  present: boolean;
+  detail: string;
+};
+
+/**
+ * Reports which migrations have actually reached the database.
+ *
+ * Deploying code and running a migration are separate steps, and a database
+ * that is behind the code fails in ways that read as unrelated bugs: a
+ * missing column surfaces as "cannot find", a stale constraint as a rejected
+ * score. Probing for a marker from each migration turns that into a list.
+ *
+ * Each check selects one column or calls one function and reads the error
+ * code, which is the only schema introspection PostgREST exposes.
+ */
+export async function readSchemaReport(): Promise<SchemaCheck[]> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const column = async (
+    migration: string,
+    table: string,
+    col: string,
+  ): Promise<SchemaCheck> => {
+    const { error } = await supabase.from(table).select(col).limit(1);
+    const missing =
+      !!error && /does not exist|schema cache|PGRST204|PGRST205|42703/i.test(
+        `${error.code} ${error.message}`,
+      );
+    return {
+      migration,
+      what: `${table}.${col}`,
+      present: !missing,
+      detail: missing ? (error?.message ?? "missing") : "present",
+    };
+  };
+
+  const fn = async (
+    migration: string,
+    name: string,
+    args: Record<string, unknown>,
+  ): Promise<SchemaCheck> => {
+    const { error } = await supabase.rpc(name, args);
+    const missing = error?.code === "PGRST202";
+    return {
+      migration,
+      what: `${name}()`,
+      present: !missing,
+      detail: missing ? "function does not exist" : "present",
+    };
+  };
+
+  return Promise.all([
+    fn("0004", "is_approved", {}),
+    column("0005", "characteristics", "description"),
+    fn("0006", "set_my_photo", { p_image_path: null }),
+    column("0007", "matches", "team_count"),
+    column("0010", "matches", "fb18_dollars_per_unit"),
+    column("0012", "matches", "fb18_front_dollars_per_unit"),
+    column("0012", "matches", "fb18_total_dollars_per_unit"),
+  ]);
+}

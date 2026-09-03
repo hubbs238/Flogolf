@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { testAnthropicKey, type EnvReport, type KeyTest } from "@/app/(app)/admin/actions";
+import { testAnthropicKey, type EnvReport, type KeyTest, type SchemaCheck } from "@/app/(app)/admin/actions";
 
 function Row({ label, ok, detail }: { label: string; ok: boolean; detail: string }) {
   return (
@@ -13,7 +13,12 @@ function Row({ label, ok, detail }: { label: string; ok: boolean; detail: string
   );
 }
 
-export function DiagnosticsPanel({ report }: { report: EnvReport }) {
+export function DiagnosticsPanel({
+  report, schema,
+}: {
+  report: EnvReport;
+  schema: SchemaCheck[];
+}) {
   const [pending, startTransition] = useTransition();
   const [test, setTest] = useState<KeyTest | null>(null);
 
@@ -58,6 +63,25 @@ export function DiagnosticsPanel({ report }: { report: EnvReport }) {
           </p>
         </div>
       )}
+
+      <div className="border-t border-line pt-5">
+        <h2 className="text-lg font-semibold">Migrations</h2>
+        <p className="mt-1 mb-3 text-sm text-muted">
+          Deploying code and running a migration are separate steps. Anything
+          red here means the database is behind the app, which shows up as
+          &ldquo;cannot find&rdquo; errors that look unrelated.
+        </p>
+        <ul className="mb-8 space-y-2">
+          {schema.map((c) => (
+            <Row
+              key={`${c.migration}-${c.what}`}
+              label={`${c.migration} · ${c.what}`}
+              ok={c.present}
+              detail={c.present ? "applied" : "not applied"}
+            />
+          ))}
+        </ul>
+      </div>
 
       <div className="border-t border-line pt-5">
         <button
