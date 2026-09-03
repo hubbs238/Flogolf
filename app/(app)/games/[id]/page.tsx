@@ -8,6 +8,7 @@ import { RosterFill } from "@/components/roster-fill";
 import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
+import { MatchStakesEditor } from "@/components/match-stakes-editor";
 import { ScorecardUpload } from "@/components/scorecard-upload";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
@@ -86,6 +87,12 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
       {(match.status === "in_progress" || match.status === "complete") && (
         <div className="space-y-10">
+          {isAdmin && (
+            <MatchStakesEditor
+              match={match} teams={teams}
+              payouts={bundle.payouts} fb18Payouts={bundle.fb18Payouts}
+            />
+          )}
           {match.status === "in_progress" && scorableTeams.length > 0 && (
             <ScorecardUpload matchId={match.id} teams={scorableTeams} />
           )}

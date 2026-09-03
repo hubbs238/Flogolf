@@ -116,21 +116,18 @@ export function computeMatch(b: MatchBundle) {
       ? mainRate
       : Number(b.match.fb18_dollars_per_unit);
 
-  // The FB18 eighteen hole result counts toward the Cup. Its front nine and
-  // back nine payouts are money only.
-  const eighteenUnits: Record<string, number> = {};
-  const totalSegment = fb18.results.find((r) => r.segment === "total");
-  for (const award of totalSegment?.awards ?? []) {
-    eighteenUnits[award.teamId] = (eighteenUnits[award.teamId] ?? 0) + award.units;
-  }
-
   // These are per player figures: a unit pays its rate to each team member.
+  //
+  // No FB18 winnings feed the Cup. The eighteen hole result is already
+  // rewarded through the best-eighteen bonus, so counting its money as well
+  // would pay for the same achievement twice. Front and back nine were never
+  // meant to count.
   const dollarsPerPlayerByTeam: Record<string, number> = {};
   const cupDollarsPerPlayerByTeam: Record<string, number> = {};
   for (const id of teamIds) {
     const mainDollars = (main.unitsByTeam[id] ?? 0) * mainRate;
     dollarsPerPlayerByTeam[id] = mainDollars + (fb18.unitsByTeam[id] ?? 0) * fb18Rate;
-    cupDollarsPerPlayerByTeam[id] = mainDollars + (eighteenUnits[id] ?? 0) * fb18Rate;
+    cupDollarsPerPlayerByTeam[id] = mainDollars;
   }
 
   const rosters: Record<string, string[]> = {};

@@ -164,9 +164,13 @@ export function LiveScorecard({
     });
   }
 
-  // A captain posts for their own team only. Admins can post for anyone,
-  // which covers a dead phone or someone who never signed in.
-  const canEdit = (team: MatchTeam) => isAdmin || team.captain_user_id === myUserId;
+  // A captain posts for their own team only, and only while the round is
+  // running. Admins can post for anyone at any time, which is what makes
+  // reopening a finished round to fix a hole work. Mirrors the database
+  // rule exactly, so a cell is never editable when the write would be
+  // refused.
+  const canEdit = (team: MatchTeam) =>
+    isAdmin || (match.status === "in_progress" && team.captain_user_id === myUserId);
 
   const mine = teams.filter((t) => t.captain_user_id === myUserId);
 
@@ -181,11 +185,15 @@ export function LiveScorecard({
         {" "}<span className="font-medium text-ink">-1</span> a birdie,
         {" "}<span className="font-medium text-ink">2</span> a double bogey. Any whole
         number works, high or low. Lowest wins.
-        {mine.length > 0
-          ? ` You post for ${mine.map((t) => t.name).join(" and ")}.`
-          : isAdmin
-            ? " As an admin you can post for any team."
-            : " Only team captains post scores."}
+        {match.status === "complete"
+          ? isAdmin
+            ? " This round is final. You can still correct any hole."
+            : " This round is final. Ask an admin to correct a hole."
+          : mine.length > 0
+            ? ` You post for ${mine.map((t) => t.name).join(" and ")}.`
+            : isAdmin
+              ? " As an admin you can post for any team."
+              : " Only team captains post scores."}
       </p>
 
       <div>

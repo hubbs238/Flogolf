@@ -214,7 +214,7 @@ console.log("\n=== a unit pays every player, it is not divided ===");
     money.reduce((n, m) => n + m.dollars, 0), 270);
 }
 
-console.log("\n=== front and back nine money does not move the Cup ===");
+console.log("\n=== FB18 money does not move the Cup ===");
 {
   const money = awardMoney({
     dollarsPerPlayerByTeam: { t1: 300 },
@@ -222,7 +222,7 @@ console.log("\n=== front and back nine money does not move the Cup ===");
     rosters: { t1: ["p1", "p2", "p3", "p4"] },
   });
   check("money column reports the full figure", money[0].dollars, 300);
-  check("Cup figure excludes the nines", money[0].cupDollars, 180);
+  check("Cup figure excludes FB18 entirely", money[0].cupDollars, 180);
 }
 
 console.log("\n=== best eighteen bonus ===");
