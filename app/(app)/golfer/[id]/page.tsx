@@ -7,7 +7,8 @@ import { TrophyIcon } from "@/components/trophy-icon";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
-import { getSeasonStandings } from "@/lib/match-data";
+import { getGolferRounds, getSeasonStandings } from "@/lib/match-data";
+import { GolferRoundHistory } from "@/components/golfer-round-history";
 
 export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) {
   const { id } = await params;
@@ -17,7 +18,10 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
   const golfer = golfers.find((g) => g.id === id);
   if (!golfer) notFound();
 
-  const standings = await getSeasonStandings();
+  const [standings, roundHistory] = await Promise.all([
+    getSeasonStandings(),
+    getGolferRounds(golfer.id),
+  ]);
   const season = standings.find((r) => r.golferId === golfer.id);
 
   const isSelf = session.profile?.golfer_id === golfer.id;
@@ -119,6 +123,10 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
             />
           )}
         </aside>
+      </div>
+
+      <div className="mt-10">
+        <GolferRoundHistory rounds={roundHistory} />
       </div>
     </div>
   );
