@@ -39,19 +39,16 @@ export function CupPot({ pot }: { pot: CupPotData }) {
   const shown = useCountUp(pot.total);
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 p-6 text-white shadow-sm">
-      <div className="flex h-full items-center gap-5 sm:gap-7">
-        <Trophy />
+    <section className="relative flex flex-col items-center justify-center overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 px-6 py-8 text-center text-white shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fairway-200">
+        FloGolf Degent Cup
+      </p>
 
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fairway-200">
-            FloGolf Degent Cup
-          </p>
-          <p className="mt-2 text-5xl font-semibold leading-none tabular-nums sm:text-6xl">
-            ${shown.toLocaleString()}
-          </p>
-        </div>
-      </div>
+      <Trophy />
+
+      <p className="mt-4 text-6xl font-semibold leading-none tabular-nums sm:text-7xl">
+        ${shown.toLocaleString()}
+      </p>
     </section>
   );
 }
@@ -59,9 +56,10 @@ export function CupPot({ pot }: { pot: CupPotData }) {
 /**
  * The cup, carrying the FloGolf mark on its face.
  *
- * Sized to fill the card rather than sit in a corner of it. The level rises
- * once on mount and the shine repeats slowly, both in CSS so they cost
- * nothing to run and both stopping under reduced motion.
+ * Centred and sized to be the subject of the card rather than an ornament
+ * beside the number. The level rises once on mount and the shine repeats
+ * slowly, both in CSS so they cost nothing to run and both stopping under
+ * reduced motion.
  */
 function Trophy() {
   return (
@@ -69,7 +67,7 @@ function Trophy() {
       viewBox="0 0 104 124"
       role="img"
       aria-label="FloGolf Degent Cup trophy"
-      className="h-44 w-36 shrink-0 drop-shadow-xl sm:h-52 sm:w-44"
+      className="mt-5 h-60 w-52 shrink-0 drop-shadow-2xl sm:h-72 sm:w-60"
     >
       <defs>
         <linearGradient id="potGold" x1="0" y1="0" x2="0" y2="1">
