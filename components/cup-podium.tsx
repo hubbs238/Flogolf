@@ -5,16 +5,43 @@ import { photoUrl } from "@/lib/data";
 import type { Golfer } from "@/lib/types";
 import type { SeasonRow } from "@/lib/match-data";
 
+type Place = {
+  rank: number;
+  points: number;
+  golferIds: string[];
+};
+
 /**
- * Olympic podium for the top three.
+ * Groups players on equal points and assigns competition ranks.
  *
- * Rendered in visual order (2nd, 1st, 3rd) rather than rank order, which is
- * how a podium reads: the winner in the middle on the tallest block.
+ * Ties consume the places below them, the way a podium actually works: two
+ * players sharing gold means there is no silver, and the next player takes
+ * bronze. An empty block is therefore correct rather than missing data.
  */
-const PLACES = [
-  { rank: 2, height: "h-16", tint: "from-slate-300/80 to-slate-400/60", label: "2nd" },
-  { rank: 1, height: "h-24", tint: "from-amber-200/90 to-amber-400/70", label: "1st" },
-  { rank: 3, height: "h-11", tint: "from-orange-300/70 to-orange-500/50", label: "3rd" },
+function placesFrom(rows: SeasonRow[]): Map<number, Place> {
+  const byPoints = new Map<number, string[]>();
+  for (const row of rows) {
+    if (!byPoints.has(row.points)) byPoints.set(row.points, []);
+    byPoints.get(row.points)!.push(row.golferId);
+  }
+
+  const places = new Map<number, Place>();
+  let rank = 1;
+
+  for (const points of [...byPoints.keys()].sort((a, b) => b - a)) {
+    const golferIds = byPoints.get(points)!;
+    if (rank <= 3) places.set(rank, { rank, points, golferIds });
+    rank += golferIds.length;
+    if (rank > 3) break;
+  }
+  return places;
+}
+
+/** Visual order, not rank order: the winner sits centre on the tallest block. */
+const BLOCKS = [
+  { rank: 2, height: "h-20", tint: "from-slate-300/80 to-slate-400/60", label: "2nd" },
+  { rank: 1, height: "h-32", tint: "from-amber-200/90 to-amber-400/70", label: "1st" },
+  { rank: 3, height: "h-14", tint: "from-orange-300/70 to-orange-500/50", label: "3rd" },
 ] as const;
 
 export function CupPodium({
@@ -24,9 +51,9 @@ export function CupPodium({
   golfers: Golfer[];
 }) {
   const byId = new Map(golfers.map((g) => [g.id, g]));
-  const ranked = [...rows].sort((a, b) => b.points - a.points).slice(0, 3);
+  const places = placesFrom(rows);
 
-  if (ranked.length === 0) {
+  if (places.size === 0) {
     return (
       <section className="rounded-2xl border border-line bg-raised p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
@@ -40,43 +67,73 @@ export function CupPodium({
   }
 
   return (
-    <section className="rounded-2xl border border-line bg-raised p-6">
+    <section className="overflow-x-auto rounded-2xl border border-line bg-raised p-6">
       <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
         Podium
       </p>
 
-      <div className="mt-5 flex items-end justify-center gap-3 sm:gap-5">
-        {PLACES.map((place) => {
-          const row = ranked[place.rank - 1];
-          if (!row) return <div key={place.rank} className="w-20" />;
+      <div className="mt-6 flex min-w-max items-end justify-center gap-4 sm:gap-6">
+        {BLOCKS.map((block) => {
+          const place = places.get(block.rank);
+          const first = block.rank === 1;
+          const width = first ? "w-36 sm:w-40" : "w-28 sm:w-32";
 
-          const golfer = byId.get(row.golferId);
-          const name = golfer ? displayName(golfer) : "Unknown";
+          // A place a tie has consumed. Keep the block so the shape holds.
+          if (!place) {
+            return (
+              <div key={block.rank} className={`flex ${width} flex-col items-center`}>
+                <div className={`${first ? "h-32 w-32" : "h-24 w-24"} rounded-full border border-dashed border-line`} />
+                <p className="mt-3 text-center text-sm text-muted">No {block.label}</p>
+                <p className="mt-0.5 text-xs text-muted">taken by a tie above</p>
+                <div className={`podium-block mt-3 w-full rounded-t-lg bg-line/40 ${block.height} flex items-start justify-center pt-2`}>
+                  <span className="text-sm font-bold text-muted">{block.label}</span>
+                </div>
+              </div>
+            );
+          }
+
+          const tied = place.golferIds.length > 1;
+          const golfer = tied ? null : byId.get(place.golferIds[0]);
+          const name = tied
+            ? `${place.golferIds.length} way tie`
+            : golfer
+              ? displayName(golfer)
+              : "Unknown";
 
           return (
-            <div key={place.rank} className="flex w-20 flex-col items-center sm:w-24">
-              <GolferAvatar
-                name={name}
-                url={golfer ? photoUrl(golfer.image_path) : null}
-                size={place.rank === 1 ? "md" : "sm"}
-              />
+            <div key={block.rank} className={`flex ${width} flex-col items-center`}>
+              {tied ? (
+                // The count stands in for a face there is no single owner of.
+                <div
+                  className={`flex items-center justify-center rounded-full bg-fairway-100 font-semibold text-fairway-700 ring-1 ring-line dark:bg-fairway-800 dark:text-fairway-100 ${
+                    first ? "h-32 w-32 text-5xl" : "h-24 w-24 text-4xl"
+                  }`}
+                >
+                  {place.golferIds.length}
+                </div>
+              ) : (
+                <GolferAvatar
+                  name={name}
+                  url={golfer ? photoUrl(golfer.image_path) : null}
+                  size={first ? "xl" : "lg"}
+                />
+              )}
 
-              <p className="mt-2 w-full truncate text-center text-sm font-medium">
+              <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
                 {name}
               </p>
 
-              <span className="mt-0.5 inline-flex items-center gap-1 text-xs font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
-                <TrophyIcon className="h-3 w-3 shrink-0" />
-                {row.points.toFixed(1)}
+              <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
+                <TrophyIcon className={first ? "h-4 w-4 shrink-0" : "h-3.5 w-3.5 shrink-0"} />
+                {place.points.toFixed(1)}
               </span>
 
-              {/* The block. Grows from the base so the podium builds upward. */}
               <div
-                className={`podium-block mt-2 w-full rounded-t-lg bg-gradient-to-b ${place.tint} ${place.height} flex items-start justify-center pt-1.5`}
-                style={{ animationDelay: `${(3 - place.rank) * 120}ms` }}
+                className={`podium-block mt-3 w-full rounded-t-lg bg-gradient-to-b ${block.tint} ${block.height} flex items-start justify-center pt-2`}
+                style={{ animationDelay: `${(3 - block.rank) * 120}ms` }}
               >
-                <span className="text-xs font-bold text-fairway-900/70">
-                  {place.label}
+                <span className="text-sm font-bold text-fairway-900/70">
+                  {block.label}
                 </span>
               </div>
             </div>

@@ -5,6 +5,7 @@ const SIZES = {
   sm: "h-9 w-9 text-xs",
   md: "h-14 w-14 text-base",
   lg: "h-24 w-24 text-2xl",
+  xl: "h-32 w-32 text-4xl",
 };
 
 export function GolferAvatar({
@@ -16,7 +17,8 @@ export function GolferAvatar({
   url: string | null;
   size?: keyof typeof SIZES;
 }) {
-  const pixels = size === "sm" ? 36 : size === "md" ? 56 : 96;
+  const pixels =
+    size === "sm" ? 36 : size === "md" ? 56 : size === "lg" ? 96 : 128;
 
   return (
     <div
