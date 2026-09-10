@@ -178,8 +178,9 @@ console.log("\n=== FB18 ===");
     payouts: { front: { 1: 2, 2: -2 }, back: { 1: 2, 2: -2 }, total: { 1: 2, 2: -2 } },
   });
   const total = results.find((r) => r.segment === "total")!;
-  check("eighteen hole tie pushes", total.pushed, [1, 2]);
-  check("and pays nobody", total.awards.map((a) => a.units), [0, 0]);
+  check("eighteen hole tie shares the prize", total.split, [1, 2]);
+  // 1st +2 and 2nd -2 is 0 between them, so an even split is 0 each.
+  check("a symmetric table nets to nothing", total.awards.map((a) => a.units), [0, 0]);
 }
 
 console.log("\n=== a unit pays every player, it is not divided ===");
@@ -208,6 +209,29 @@ console.log("\n=== a unit pays every player, it is not divided ===");
     money.map((m) => m.dollars), [90, 90, 90]);
   check("so the team total is 270, not 90",
     money.reduce((n, m) => n + m.dollars, 0), 270);
+}
+
+console.log("\n=== FB18 top teams share an unbroken tie ===");
+{
+  // Level over all eighteen. 1st +4, 2nd 0, so 4 units between two teams.
+  const same = Array.from({ length: 18 }, () => 0);
+  const s: HoleScores = { A: card(...same), B: card(...same) };
+  const { results } = scoreFb18({
+    teamIds: ["A", "B"], scores: s,
+    payouts: { front: { 1: 4, 2: 0 }, back: { 1: 4, 2: 0 }, total: { 1: 4, 2: 0 } },
+  });
+  const total = results.find((r) => r.segment === "total")!;
+  check("2 units each, not nothing", total.awards.map((a) => a.units), [2, 2]);
+  check("flagged as shared", total.awards.every((a) => a.splitShare === true), true);
+  check("both contested places listed", total.split, [1, 2]);
+
+  // A three way tie divides the same pot three ways.
+  const s3: HoleScores = { A: card(...same), B: card(...same), C: card(...same) };
+  const r3 = scoreFb18({
+    teamIds: ["A", "B", "C"], scores: s3,
+    payouts: { front: { 1: 6, 2: 0, 3: 0 }, back: { 1: 6, 2: 0, 3: 0 }, total: { 1: 6, 2: 0, 3: 0 } },
+  }).results.find((r) => r.segment === "total")!;
+  check("three way tie splits 6 units", r3.awards.map((a) => a.units), [2, 2, 2]);
 }
 
 console.log("\n=== each FB18 segment converts at its own rate ===");

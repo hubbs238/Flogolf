@@ -397,8 +397,8 @@ export type Fb18Result = {
   status: "pending" | "complete";
   totals: Record<string, number | null>;
   awards: TeamAward[];
-  /** Positions nobody collected because a tie never broke. */
-  pushed: number[];
+  /** Positions whose units were shared out because a tie never broke. */
+  split: number[];
 };
 
 const FB18_HOLES: Record<Fb18Segment, readonly number[]> = {
@@ -412,8 +412,11 @@ const FB18_HOLES: Record<Fb18Segment, readonly number[]> = {
  *
  * `tiebreak` returns an ordering for a tied block, or null when it cannot
  * separate them. Only the front nine has one: a front nine tie is settled on
- * back nine scores among the tied teams. The back nine and the eighteen have
- * nothing left to play, so a tie there is a push.
+ * back nine scores among the tied teams.
+ *
+ * A tie that cannot be separated shares the contested prize evenly among the
+ * teams in it, matching the main game. Two teams level over eighteen split
+ * the money rather than both walking away with nothing.
  */
 function scoreFb18Segment(
   segment: Fb18Segment,
@@ -433,13 +436,23 @@ function scoreFb18Segment(
   }
 
   if (!complete || teamIds.length === 0) {
-    return { segment, status: "pending", totals, awards: [], pushed: [] };
+    return { segment, status: "pending", totals, awards: [], split: [] };
   }
 
   const blocks = blocksByScore(totals as Record<string, number>, teamIds);
   const awards: TeamAward[] = [];
-  const pushed: number[] = [];
+  const split: number[] = [];
   let position = 1;
+
+  /** Pools the contested positions and hands each tied team an equal share. */
+  const shareOut = (tied: string[], from: number) => {
+    const positions = tied.map((_, i) => from + i);
+    const share = shareOf(positions, payouts, tied.length);
+    for (const id of tied) {
+      awards.push({ teamId: id, position: from, units: share, splitShare: true });
+    }
+    split.push(...positions);
+  };
 
   for (const block of blocks) {
     if (block.length === 1) {
@@ -451,11 +464,7 @@ function scoreFb18Segment(
     const tiers = tiebreak ? tiebreak(block) : null;
 
     if (!tiers) {
-      // No way to separate them, so those positions go unpaid.
-      for (const id of block) {
-        awards.push({ teamId: id, position, units: 0 });
-      }
-      for (let i = 0; i < block.length; i++) pushed.push(position + i);
+      shareOut(block, position);
       position += block.length;
       continue;
     }
@@ -465,14 +474,13 @@ function scoreFb18Segment(
         awards.push({ teamId: tier[0], position, units: payouts[position] ?? 0 });
         position += 1;
       } else {
-        for (const id of tier) awards.push({ teamId: id, position, units: 0 });
-        for (let i = 0; i < tier.length; i++) pushed.push(position + i);
+        shareOut(tier, position);
         position += tier.length;
       }
     }
   }
 
-  return { segment, status: "complete", totals, awards, pushed };
+  return { segment, status: "complete", totals, awards, split };
 }
 
 export function scoreFb18(opts: {

@@ -188,8 +188,9 @@ export function MatchResults({
           <h3 className="mb-1 font-semibold">FB18</h3>
           <p className="mb-3 text-sm text-muted">
             Same scores, scored separately. Lowest front nine, lowest back nine,
-            lowest eighteen. All three pay money. None of it feeds FLO Cup
-            points, since the best eighteen bonus already rewards that.
+            lowest eighteen. A tie nobody can break shares that prize evenly.
+            All three pay money. None of it feeds FLO Cup points, since the
+            best eighteen bonus already rewards that.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -228,8 +229,8 @@ export function MatchResults({
                       );
                     })}
                 </ul>
-                {r.pushed.length > 0 && (
-                  <p className="mt-2 text-xs text-muted">Tie unbroken, push</p>
+                {r.split.length > 0 && (
+                  <p className="mt-2 text-xs text-muted">Tied, prize shared evenly</p>
                 )}
               </div>
             ))}
