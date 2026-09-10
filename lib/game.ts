@@ -690,15 +690,19 @@ export function eighteenHoleBonuses(
 
 /**
  * FLO Cup points from a round's Cup-eligible winnings: a dollar won is a
- * point, a dollar lost is half a point off.
+ * point, and a losing round is worth nothing rather than going negative.
  *
- * Applied per round, then summed across the season. That asymmetry is the
- * whole design: win $100 one week and lose $100 the next and you finish +50
- * points, not zero. Netting the season first would collapse the 1-to-0.5
- * ratio into a sign test and throw away the reason for having it.
+ * Floored per round, not on the season total. A bad week costs you nothing,
+ * it simply does not help, so it cannot wipe out weeks of good results. It
+ * also keeps every figure on screen consistent: a round showing -200 beside
+ * a season total of 0 reads as a bug.
+ *
+ * The old half-a-point-per-dollar-lost rule is deliberately gone. With every
+ * losing round flooring to zero it never fired, so keeping it would have
+ * been arithmetic nobody could ever observe.
  */
 export function pointsForRound(dollars: number): number {
-  return dollars >= 0 ? dollars : dollars * 0.5;
+  return dollars > 0 ? dollars : 0;
 }
 
 export type PlayerRoundPoints = {
@@ -738,7 +742,9 @@ export function roundPoints(opts: {
       teamId: m.teamId,
       fromMoney,
       bonus,
-      total: round2(fromMoney + bonus),
+      // Both parts are already zero or above, so the guard is belt and
+      // braces against a future negative bonus sneaking in.
+      total: Math.max(0, round2(fromMoney + bonus)),
     };
   });
 }

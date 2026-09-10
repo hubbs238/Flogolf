@@ -309,9 +309,10 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            A dollar won is a point, a dollar lost is half a point off. FB18
-            winnings are money only and do not appear here. The bonus is the
-            best eighteen hole score, 50 for the lowest and 25 for the next.
+            A dollar won is a point, and a losing round scores 0 rather than
+            going negative. FB18 winnings are money only and do not appear
+            here. The bonus is the best eighteen hole score, 50 for the lowest
+            and 25 for the next.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">

@@ -306,6 +306,33 @@ console.log("\n=== settlement includes every FB18 segment ===");
     money.find((m) => m.golferId === "a1")!.cupDollars, 100);
 }
 
+console.log("\n=== points never go below zero ===");
+{
+  const pts = roundPoints({
+    money: [
+      { golferId: "p1", teamId: "t1", dollars: 500, cupDollars: 500 },
+      { golferId: "p2", teamId: "t2", dollars: -500, cupDollars: -500 },
+    ],
+    bonuses: [],
+    rosters: { t1: ["p1"], t2: ["p2"] },
+  });
+  check("a big win still scores in full", pts.find((p) => p.golferId === "p1")!.total, 500);
+  check("a heavy loss floors at 0", pts.find((p) => p.golferId === "p2")!.total, 0);
+  check("and reads 0 from money, not a negative", pts.find((p) => p.golferId === "p2")!.fromMoney, 0);
+}
+{
+  // A bad round cannot eat an earlier good one: it contributes 0 rather
+  // than subtracting.
+  const season = [100, -400, 30].map((cupDollars) =>
+    roundPoints({
+      money: [{ golferId: "p1", teamId: "t1", dollars: cupDollars, cupDollars }],
+      bonuses: [], rosters: { t1: ["p1"] },
+    })[0].total,
+  );
+  check("round by round: 100, 0, 30", season, [100, 0, 30]);
+  check("season keeps the good weeks", season.reduce((a, b) => a + b, 0), 130);
+}
+
 console.log("\n=== changing a rate moves every player's money ===");
 {
   //   A: front -9, back -1, total -10  -> wins front and the eighteen
@@ -376,9 +403,9 @@ console.log("\n=== points earned in a round ===");
   check("winner: 250 total", winner.total, 250);
 
   const loser = pts.find((p) => p.golferId === "p5")!;
-  check("loser: a $200 loss is only -100 points", loser.fromMoney, -100);
+  check("loser: a losing round is worth 0, never negative", loser.fromMoney, 0);
   check("loser: still takes the 25 runner up bonus", loser.bonus, 25);
-  check("loser: -75 on the round", loser.total, -75);
+  check("loser: 25 on the round, the bonus alone", loser.total, 25);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);

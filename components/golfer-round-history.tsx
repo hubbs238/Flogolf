@@ -41,8 +41,9 @@ export function GolferRoundHistory({ rounds }: { rounds: GolferRoundRow[] }) {
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
         Points split into what came from money and what came from the best
-        eighteen bonus. FB18 winnings pay cash but earn no points, so the two
-        columns will not always agree.
+        eighteen bonus. A losing round scores 0 rather than going negative,
+        and FB18 winnings pay cash but earn no points, so money and points
+        will often disagree.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">

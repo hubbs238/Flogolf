@@ -14,8 +14,9 @@ export default async function FloCupPage() {
       <CupPot pot={pot} />
 
       <p className="mb-4 text-sm text-muted">
-        A dollar won is a point. A dollar lost is half a point off. Counted
-        each round and added up, so a good week is not wiped out by a bad one.
+        A dollar won is a point. A losing round is worth nothing rather than
+        going negative, so a bad week costs you nothing and cannot wipe out a
+        good one. Counted each round and added up.
         FB18 winnings are money only and do not move the Cup, since the best
         eighteen bonus already covers that. Best eighteen hole score in a round
         adds 50 points to every player on that team, second best adds 25.
