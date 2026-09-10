@@ -9,9 +9,9 @@ import type { SeasonRow } from "@/lib/match-data";
 
 /** Visual order, not rank order: the winner sits centre on the tallest block. */
 const BLOCKS = [
-  { rank: 2, height: "h-20", tint: "from-slate-300/80 to-slate-400/60", label: "2nd" },
-  { rank: 1, height: "h-32", tint: "from-amber-200/90 to-amber-400/70", label: "1st" },
-  { rank: 3, height: "h-14", tint: "from-orange-300/70 to-orange-500/50", label: "3rd" },
+  { rank: 2, height: "h-28", tint: "from-slate-300/80 to-slate-400/60", label: "2nd" },
+  { rank: 1, height: "h-44", tint: "from-amber-200/90 to-amber-400/70", label: "1st" },
+  { rank: 3, height: "h-20", tint: "from-orange-300/70 to-orange-500/50", label: "3rd" },
 ] as const;
 
 export function CupPodium({
@@ -37,26 +37,26 @@ export function CupPodium({
   }
 
   return (
-    <section className="overflow-x-auto rounded-2xl border border-line bg-raised p-6">
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">
+    <section className="flex flex-col overflow-x-auto rounded-2xl border border-line bg-raised px-6 py-8">
+      <p className="text-center text-xs font-semibold uppercase tracking-[0.16em] text-muted">
         Podium
       </p>
 
-      <div className="mt-6 flex min-w-max items-end justify-center gap-4 sm:gap-6">
+      <div className="mt-auto flex min-w-max items-end justify-center gap-3 pt-6 sm:gap-4">
         {BLOCKS.map((block) => {
           const place = places.get(block.rank);
           const first = block.rank === 1;
-          const width = first ? "w-36 sm:w-40" : "w-28 sm:w-32";
+          const width = first ? "w-44" : "w-36";
 
           // A place a tie has consumed. Keep the block so the shape holds.
           if (!place) {
             return (
               <div key={block.rank} className={`flex ${width} flex-col items-center`}>
-                <div className={`${first ? "h-32 w-32" : "h-24 w-24"} rounded-full border border-dashed border-line`} />
-                <p className="mt-3 text-center text-sm text-muted">No {block.label}</p>
+                <div className={`${first ? "h-40 w-40" : "h-32 w-32"} rounded-full border-2 border-dashed border-line`} />
+                <p className="mt-3 text-center text-base text-muted">No {block.label}</p>
                 <p className="mt-0.5 text-xs text-muted">taken by a tie above</p>
-                <div className={`podium-block mt-3 w-full rounded-t-lg bg-line/40 ${block.height} flex items-start justify-center pt-2`}>
-                  <span className="text-sm font-bold text-muted">{block.label}</span>
+                <div className={`podium-block mt-3 w-full rounded-t-xl bg-line/40 ${block.height} flex items-start justify-center pt-2.5`}>
+                  <span className="text-base font-bold text-muted">{block.label}</span>
                 </div>
               </div>
             );
@@ -77,7 +77,7 @@ export function CupPodium({
                 // so it is not a link. The names below it are.
                 <div
                   className={`flex items-center justify-center rounded-full bg-fairway-100 font-semibold text-fairway-700 ring-1 ring-line dark:bg-fairway-800 dark:text-fairway-100 ${
-                    first ? "h-32 w-32 text-5xl" : "h-24 w-24 text-4xl"
+                    first ? "h-40 w-40 text-6xl" : "h-32 w-32 text-5xl"
                   }`}
                 >
                   {place.golferIds.length}
@@ -91,16 +91,16 @@ export function CupPodium({
                   <GolferAvatar
                     name={name}
                     url={photoUrl(golfer.image_path)}
-                    size={first ? "xl" : "lg"}
+                    size={first ? "2xl" : "xl"}
                   />
                 </Link>
               ) : (
-                <GolferAvatar name={name} url={null} size={first ? "xl" : "lg"} />
+                <GolferAvatar name={name} url={null} size={first ? "2xl" : "xl"} />
               )}
 
               {tied ? (
                 <>
-                  <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
+                  <p className={`mt-3 w-full truncate text-center font-semibold ${first ? "text-xl" : "text-base"}`}>
                     {name}
                   </p>
                   {/* Every tied player still gets their own way through. */}
@@ -130,21 +130,21 @@ export function CupPodium({
                   {name}
                 </Link>
               ) : (
-                <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
+                <p className={`mt-3 w-full truncate text-center font-semibold ${first ? "text-xl" : "text-base"}`}>
                   {name}
                 </p>
               )}
 
-              <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
-                <TrophyIcon className={first ? "h-4 w-4 shrink-0" : "h-3.5 w-3.5 shrink-0"} />
+              <span className={`mt-1.5 inline-flex items-center gap-1.5 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300 ${first ? "text-2xl" : "text-lg"}`}>
+                <TrophyIcon className={first ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
                 {place.points.toFixed(1)}
               </span>
 
               <div
-                className={`podium-block mt-3 w-full rounded-t-lg bg-gradient-to-b ${block.tint} ${block.height} flex items-start justify-center pt-2`}
+                className={`podium-block mt-4 w-full rounded-t-xl bg-gradient-to-b ${block.tint} ${block.height} flex items-start justify-center pt-3`}
                 style={{ animationDelay: `${(3 - block.rank) * 120}ms` }}
               >
-                <span className="text-sm font-bold text-fairway-900/70">
+                <span className={`font-bold text-fairway-900/70 ${first ? "text-lg" : "text-base"}`}>
                   {block.label}
                 </span>
               </div>
