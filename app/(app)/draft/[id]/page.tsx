@@ -7,6 +7,7 @@ import { DraftSetup } from "@/components/draft-setup";
 import { DraftBoard } from "@/components/draft-board";
 import { DeleteDraftButton } from "@/components/delete-draft-button";
 import { PlayRoundButton } from "@/components/play-round-button";
+import { EditableTitle } from "@/components/editable-title";
 import type { Draft, DraftPick, DraftTeam } from "@/lib/types";
 
 export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
@@ -54,9 +55,7 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {typedDraft.name}
-          </h1>
+          <EditableTitle kind="draft" id={typedDraft.id} name={typedDraft.name} canEdit={isAdmin} />
           <p className="mt-1 text-sm text-muted">
             {new Date(typedDraft.draft_date).toLocaleDateString()} ·{" "}
             {typedDraft.team_count} teams of {typedDraft.roster_size}

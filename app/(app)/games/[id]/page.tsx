@@ -9,6 +9,7 @@ import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
 import { MatchStakesEditor } from "@/components/match-stakes-editor";
+import { EditableTitle } from "@/components/editable-title";
 import { ScorecardUpload } from "@/components/scorecard-upload";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
@@ -55,7 +56,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{match.name}</h1>
+          <EditableTitle kind="match" id={match.id} name={match.name} canEdit={isAdmin} />
           <p className="mt-1 text-sm text-muted">
             {new Date(match.match_date).toLocaleDateString()}
             {match.course ? ` · ${match.course}` : ""} · {match.team_count} teams of{" "}

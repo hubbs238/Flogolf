@@ -94,12 +94,23 @@ export async function updateDraftSettings(
     .single();
 
   if (!draft) return { ok: false, error: "Draft not found." };
-  if (draft.status !== "setup") {
-    return { ok: false, error: "Settings lock once the draft starts." };
-  }
 
   const update: Record<string, unknown> = {};
+
+  // The name is a label rather than a setting, so it stays editable for the
+  // life of the draft. Everything below changes how the draft plays out and
+  // locks once it starts.
   if (fields.name !== undefined) update.name = fields.name.trim() || draft.name;
+
+  const onlyRenaming =
+    fields.strategy === undefined &&
+    fields.rosterSize === undefined &&
+    fields.teamCount === undefined;
+
+  if (!onlyRenaming && draft.status !== "setup") {
+    return { ok: false, error: "Settings lock once the draft starts. You can still rename it." };
+  }
+
   if (fields.strategy !== undefined) update.strategy = fields.strategy;
   if (fields.rosterSize !== undefined) {
     if (fields.rosterSize < 2 || fields.rosterSize > 20) {
