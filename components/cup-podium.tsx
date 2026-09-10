@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
@@ -72,7 +73,8 @@ export function CupPodium({
           return (
             <div key={block.rank} className={`flex ${width} flex-col items-center`}>
               {tied ? (
-                // The count stands in for a face there is no single owner of.
+                // The count stands in for a face there is no single owner of,
+                // so it is not a link. The names below it are.
                 <div
                   className={`flex items-center justify-center rounded-full bg-fairway-100 font-semibold text-fairway-700 ring-1 ring-line dark:bg-fairway-800 dark:text-fairway-100 ${
                     first ? "h-32 w-32 text-5xl" : "h-24 w-24 text-4xl"
@@ -80,17 +82,58 @@ export function CupPodium({
                 >
                   {place.golferIds.length}
                 </div>
+              ) : golfer ? (
+                <Link
+                  href={`/golfer/${golfer.id}`}
+                  aria-label={`${name}, ${block.label} in the FLO Cup`}
+                  className="rounded-full transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fairway-400"
+                >
+                  <GolferAvatar
+                    name={name}
+                    url={photoUrl(golfer.image_path)}
+                    size={first ? "xl" : "lg"}
+                  />
+                </Link>
               ) : (
-                <GolferAvatar
-                  name={name}
-                  url={golfer ? photoUrl(golfer.image_path) : null}
-                  size={first ? "xl" : "lg"}
-                />
+                <GolferAvatar name={name} url={null} size={first ? "xl" : "lg"} />
               )}
 
-              <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
-                {name}
-              </p>
+              {tied ? (
+                <>
+                  <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
+                    {name}
+                  </p>
+                  {/* Every tied player still gets their own way through. */}
+                  <p className="mt-0.5 w-full text-center text-xs leading-snug text-muted">
+                    {place.golferIds.map((id, i) => {
+                      const g = byId.get(id);
+                      return (
+                        <span key={id}>
+                          {i > 0 && ", "}
+                          {g ? (
+                            <Link href={`/golfer/${g.id}`} className="hover:text-ink hover:underline">
+                              {displayName(g)}
+                            </Link>
+                          ) : (
+                            "Unknown"
+                          )}
+                        </span>
+                      );
+                    })}
+                  </p>
+                </>
+              ) : golfer ? (
+                <Link
+                  href={`/golfer/${golfer.id}`}
+                  className={`mt-3 w-full truncate text-center font-medium hover:underline ${first ? "text-base" : "text-sm"}`}
+                >
+                  {name}
+                </Link>
+              ) : (
+                <p className={`mt-3 w-full truncate text-center font-medium ${first ? "text-base" : "text-sm"}`}>
+                  {name}
+                </p>
+              )}
 
               <span className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
                 <TrophyIcon className={first ? "h-4 w-4 shrink-0" : "h-3.5 w-3.5 shrink-0"} />
