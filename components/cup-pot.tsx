@@ -41,7 +41,7 @@ export function CupPot({ pot }: { pot: CupPot }) {
   const shown = useCountUp(pot.total);
 
   return (
-    <section className="mb-8 overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 p-6 text-white shadow-sm">
+    <section className="overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 p-6 text-white shadow-sm">
       <div className="flex flex-wrap items-center gap-6">
         <Trophy />
 

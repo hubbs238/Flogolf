@@ -65,8 +65,6 @@ export function StandingsTable({
     );
   }
 
-  const pointsFirst = metric === "points";
-
   return (
     <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
       <table className="w-full min-w-max text-sm">
@@ -75,12 +73,10 @@ export function StandingsTable({
             <th className="w-12 p-3 text-center font-medium">#</th>
             <th className="p-3 text-left font-medium">Golfer</th>
             <th className="w-24 p-3 text-right font-medium">Rounds</th>
-            <th className="w-28 p-3 text-right font-medium">
-              {pointsFirst ? "Money" : "Points"}
-            </th>
-            <th className="w-28 p-3 text-right font-medium text-ink">
-              {pointsFirst ? "Points" : "Money"}
-            </th>
+            <th className="w-28 p-3 text-right font-medium">Money</th>
+            <th className="w-28 p-3 text-right font-medium">From money</th>
+            <th className="w-24 p-3 text-right font-medium">Bonus</th>
+            <th className="w-28 p-3 text-right font-medium text-ink">Points</th>
           </tr>
         </thead>
         <tbody>
@@ -118,15 +114,20 @@ export function StandingsTable({
                 </td>
 
                 <td className="p-3 text-right">
-                  {pointsFirst
-                    ? <Money n={row.dollars} strong={false} />
-                    : <Points n={row.points} strong={false} />}
+                  <Money n={row.dollars} strong={false} />
+                </td>
+
+                <td className={`p-3 text-right tabular-nums ${tone(row.pointsFromMoney)}`}>
+                  {row.pointsFromMoney > 0 ? "+" : ""}
+                  {row.pointsFromMoney.toFixed(1)}
+                </td>
+
+                <td className="p-3 text-right tabular-nums text-muted">
+                  {row.pointsBonus > 0 ? `+${row.pointsBonus}` : "—"}
                 </td>
 
                 <td className="p-3 text-right">
-                  {pointsFirst
-                    ? <Points n={row.points} strong />
-                    : <Money n={row.dollars} strong />}
+                  <Points n={row.points} strong />
                 </td>
               </tr>
             );

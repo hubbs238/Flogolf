@@ -1,5 +1,6 @@
 import { getAllGolfers, getCupPot, getSeasonStandings } from "@/lib/match-data";
 import { CupPot } from "@/components/cup-pot";
+import { CupPodium } from "@/components/cup-podium";
 import { StandingsTable } from "@/components/standings-table";
 
 export default async function FloCupPage() {
@@ -11,7 +12,10 @@ export default async function FloCupPage() {
 
   return (
     <div>
-      <CupPot pot={pot} />
+      <div className="mb-8 grid gap-4 lg:grid-cols-2">
+        <CupPot pot={pot} />
+        <CupPodium rows={rows} golfers={golfers} />
+      </div>
 
       <p className="mb-4 text-sm text-muted">
         A dollar won is a point. A losing round is worth nothing rather than

@@ -107,3 +107,19 @@ input[type="range"]::-moz-range-thumb {
   .cup-level { animation: none; transform: none; }
   .cup-shine { animation: none; opacity: 0; }
 }
+
+/* Podium blocks grow up from the base as the page settles. Decorative, so
+   they stop entirely under reduced motion. */
+@keyframes podium-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+.podium-block {
+  transform-origin: bottom;
+  animation: podium-grow 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .podium-block { animation: none; transform: none; }
+}

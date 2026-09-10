@@ -179,6 +179,10 @@ export type SeasonRow = {
   golferId: string;
   rounds: number;
   dollars: number;
+  /** Points from Cup-eligible money. FB18 winnings never count. */
+  pointsFromMoney: number;
+  /** Best eighteen bonuses, 50 for the lowest and 25 for the next. */
+  pointsBonus: number;
   points: number;
 };
 
@@ -263,19 +267,25 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   for (const round of rounds) {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
-        golferId: row.golferId, rounds: 0, dollars: 0, points: 0,
+        golferId: row.golferId, rounds: 0, dollars: 0,
+        pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
       cur.dollars += row.dollars;
+      cur.pointsFromMoney += row.pointsFromMoney;
+      cur.pointsBonus += row.pointsBonus;
       cur.points += row.points;
       totals.set(row.golferId, cur);
     }
   }
 
+  const round2 = (n: number) => Math.round(n * 100) / 100;
   return [...totals.values()].map((r) => ({
     ...r,
-    dollars: Math.round(r.dollars * 100) / 100,
-    points: Math.round(r.points * 100) / 100,
+    dollars: round2(r.dollars),
+    pointsFromMoney: round2(r.pointsFromMoney),
+    pointsBonus: round2(r.pointsBonus),
+    points: round2(r.points),
   }));
 }
 
