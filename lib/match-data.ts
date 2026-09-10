@@ -307,7 +307,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
  * What each player puts into the FLO Cup pot per round they play.
  * One place to change it if the buy in ever moves.
  */
-export const CUP_BUY_IN = 35;
+export const CUP_BUY_IN = 10;
 
 export type CupPot = {
   /** Player entries across every finished round, counting repeats. */
