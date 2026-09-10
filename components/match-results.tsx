@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
-import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import type {
   EighteenTier, Fb18Result, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
@@ -391,7 +390,6 @@ export function MatchResults({
                     <th className="px-3 pt-3" colSpan={3} />
                     <th className="px-3 pt-3 text-center font-medium" colSpan={3}>
                       Bonus Money
-                      <InfoIcon text={BONUS_MONEY_NOTE} />
                     </th>
                     <th className="px-3 pt-3" />
                   </tr>

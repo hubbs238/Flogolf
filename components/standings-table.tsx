@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
-import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import { displayName } from "@/lib/scoring";
 import { photoUrl } from "@/lib/data";
 import type { Golfer } from "@/lib/types";
@@ -75,10 +74,7 @@ export function StandingsTable({
             <th className="p-3 text-left font-medium">Golfer</th>
             <th className="w-24 p-3 text-right font-medium">Rounds</th>
             <th className="w-32 p-3 text-right font-medium">Match Money</th>
-            <th className="w-32 p-3 text-right font-medium">
-              Bonus Money
-              <InfoIcon text={BONUS_MONEY_NOTE} />
-            </th>
+            <th className="w-32 p-3 text-right font-medium">Bonus Money</th>
             <th className="w-32 p-3 text-right font-medium">Match Points</th>
             <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
             <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>

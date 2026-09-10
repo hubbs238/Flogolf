@@ -4,7 +4,6 @@ import { requireUser } from "@/lib/auth";
 import { getMyRating, getScoredGolfers, photoUrl } from "@/lib/data";
 import { GolferAvatar } from "@/components/golfer-avatar";
 import { TrophyIcon } from "@/components/trophy-icon";
-import { BONUS_MONEY_NOTE, InfoIcon } from "@/components/info-icon";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
@@ -77,10 +76,7 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                       : season.bonusMoney < 0 ? "text-flag-500" : "text-muted"}`}>
                     {season.bonusMoney > 0 ? "+" : season.bonusMoney < 0 ? "-" : ""}
                     ${Math.abs(season.bonusMoney).toFixed(2)}
-                    <span className="inline-flex items-center text-xs font-normal text-muted">
-                      Bonus Money
-                      <InfoIcon text={BONUS_MONEY_NOTE} />
-                    </span>
+                    <span className="text-xs font-normal text-muted">Bonus Money</span>
                   </span>
 
                   <span className="text-xs text-muted">
