@@ -4,6 +4,7 @@ import { requireUser } from "@/lib/auth";
 import { getMyRating, getScoredGolfers, photoUrl } from "@/lib/data";
 import { GolferAvatar } from "@/components/golfer-avatar";
 import { TrophyIcon } from "@/components/trophy-icon";
+import { BONUS_MONEY_NOTE, InfoIcon } from "@/components/info-icon";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
@@ -54,22 +55,36 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                   : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"} submitted`}
               </p>
               {season && season.rounds > 0 && (
-                <p className="mt-1 text-sm">
+                <p className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
                   <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
                     season.points > 0 ? "text-fairway-600 dark:text-fairway-300"
                       : season.points < 0 ? "text-flag-500" : "text-muted"}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {season.points.toFixed(1)} pts
+                    {season.points.toFixed(1)}
+                    <span className="text-xs font-normal text-muted">Total Points</span>
                   </span>
-                  <span className="text-muted"> · </span>
-                  <span className={`font-semibold tabular-nums ${
-                    season.dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
-                      : season.dollars < 0 ? "text-flag-500" : "text-muted"}`}>
-                    {season.dollars > 0 ? "+" : season.dollars < 0 ? "-" : ""}
-                    ${Math.abs(season.dollars).toFixed(2)}
+
+                  <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
+                    season.matchMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
+                      : season.matchMoney < 0 ? "text-flag-500" : "text-muted"}`}>
+                    {season.matchMoney > 0 ? "+" : season.matchMoney < 0 ? "-" : ""}
+                    ${Math.abs(season.matchMoney).toFixed(2)}
+                    <span className="text-xs font-normal text-muted">Match Money</span>
                   </span>
-                  <span className="text-muted">
-                    {" "}over {season.rounds} {season.rounds === 1 ? "round" : "rounds"}
+
+                  <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
+                    season.bonusMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
+                      : season.bonusMoney < 0 ? "text-flag-500" : "text-muted"}`}>
+                    {season.bonusMoney > 0 ? "+" : season.bonusMoney < 0 ? "-" : ""}
+                    ${Math.abs(season.bonusMoney).toFixed(2)}
+                    <span className="inline-flex items-center text-xs font-normal text-muted">
+                      Bonus Money
+                      <InfoIcon text={BONUS_MONEY_NOTE} />
+                    </span>
+                  </span>
+
+                  <span className="text-xs text-muted">
+                    over {season.rounds} {season.rounds === 1 ? "round" : "rounds"}
                   </span>
                 </p>
               )}

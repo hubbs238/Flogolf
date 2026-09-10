@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { TrophyIcon } from "./trophy-icon";
+import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import type { GolferRoundRow } from "@/lib/match-data";
 
 function tone(n: number) {
@@ -28,22 +29,23 @@ export function GolferRoundHistory({ rounds }: { rounds: GolferRoundRow[] }) {
 
   const totals = rounds.reduce(
     (acc, r) => ({
-      dollars: acc.dollars + r.dollars,
+      matchMoney: acc.matchMoney + r.matchMoney,
+      bonusMoney: acc.bonusMoney + r.bonusMoney,
       fromMoney: acc.fromMoney + r.pointsFromMoney,
       bonus: acc.bonus + r.pointsBonus,
       points: acc.points + r.points,
     }),
-    { dollars: 0, fromMoney: 0, bonus: 0, points: 0 },
+    { matchMoney: 0, bonusMoney: 0, fromMoney: 0, bonus: 0, points: 0 },
   );
 
   return (
     <section>
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
-        Points split into what came from money and what came from the best
-        eighteen bonus. A losing round scores 0 rather than going negative,
-        and FB18 winnings pay cash but earn no points, so money and points
-        will often disagree.
+        Match Money is the six three-hole matches; Bonus Money is F9, B9 and
+        all eighteen. Only Match Money earns points, and a losing round scores
+        0 rather than going negative, so the money and points columns will
+        often disagree.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -51,10 +53,14 @@ export function GolferRoundHistory({ rounds }: { rounds: GolferRoundRow[] }) {
           <thead>
             <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
               <th className="p-3 text-left font-medium">Round</th>
-              <th className="w-28 p-3 text-right font-medium">Money</th>
-              <th className="w-28 p-3 text-right font-medium">From money</th>
-              <th className="w-24 p-3 text-right font-medium">Bonus</th>
-              <th className="w-28 p-3 text-right font-medium text-ink">Points</th>
+              <th className="w-32 p-3 text-right font-medium">Match Money</th>
+              <th className="w-32 p-3 text-right font-medium">
+                Bonus Money
+                <InfoIcon text={BONUS_MONEY_NOTE} />
+              </th>
+              <th className="w-32 p-3 text-right font-medium">Match Points</th>
+              <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
+              <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
             </tr>
           </thead>
           <tbody>
@@ -73,8 +79,11 @@ export function GolferRoundHistory({ rounds }: { rounds: GolferRoundRow[] }) {
                     {r.teamName ? ` · ${r.teamName}` : ""}
                   </span>
                 </td>
-                <td className={`p-3 text-right font-semibold tabular-nums ${tone(r.dollars)}`}>
-                  {money(r.dollars)}
+                <td className={`p-3 text-right tabular-nums ${tone(r.matchMoney)}`}>
+                  {money(r.matchMoney)}
+                </td>
+                <td className={`p-3 text-right tabular-nums ${tone(r.bonusMoney)}`}>
+                  {money(r.bonusMoney)}
                 </td>
                 <td className={`p-3 text-right tabular-nums ${tone(r.pointsFromMoney)}`}>
                   {r.pointsFromMoney > 0 ? "+" : ""}
@@ -98,8 +107,11 @@ export function GolferRoundHistory({ rounds }: { rounds: GolferRoundRow[] }) {
               <td className="p-3 font-semibold">
                 {rounds.length} {rounds.length === 1 ? "round" : "rounds"}
               </td>
-              <td className={`p-3 text-right font-semibold tabular-nums ${tone(totals.dollars)}`}>
-                {money(totals.dollars)}
+              <td className={`p-3 text-right tabular-nums ${tone(totals.matchMoney)}`}>
+                {money(totals.matchMoney)}
+              </td>
+              <td className={`p-3 text-right tabular-nums ${tone(totals.bonusMoney)}`}>
+                {money(totals.bonusMoney)}
               </td>
               <td className={`p-3 text-right tabular-nums ${tone(totals.fromMoney)}`}>
                 {totals.fromMoney > 0 ? "+" : ""}

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
+import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import type {
   EighteenTier, Fb18Result, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
@@ -329,10 +330,10 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            A dollar won is a point, and a losing round scores 0 rather than
-            going negative. FB18 winnings are money only and do not appear
-            here. The bonus is the best eighteen hole score, 50 for the lowest
-            and 25 for the next.
+            Match Points come from Match Money, a dollar a point, with a losing
+            round scoring 0 rather than going negative. Bonus Money earns
+            nothing here. Bonus Points are the best eighteen hole score, 50 for
+            the lowest and 25 for the next.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -340,9 +341,9 @@ export function MatchResults({
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 text-left font-medium">Player</th>
                   <th className="p-3 text-left font-medium">Team</th>
-                  <th className="w-28 p-3 text-right font-medium">From money</th>
-                  <th className="w-24 p-3 text-right font-medium">Bonus</th>
-                  <th className="w-28 p-3 text-right font-medium text-ink">Points</th>
+                  <th className="w-32 p-3 text-right font-medium">Match Points</th>
+                  <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
+                  <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
                 </tr>
               </thead>
               <tbody>
@@ -385,10 +386,20 @@ export function MatchResults({
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
               <thead>
+                {anyFb18 && (
+                  <tr className="text-xs uppercase tracking-wide text-muted">
+                    <th className="px-3 pt-3" colSpan={3} />
+                    <th className="px-3 pt-3 text-center font-medium" colSpan={3}>
+                      Bonus Money
+                      <InfoIcon text={BONUS_MONEY_NOTE} />
+                    </th>
+                    <th className="px-3 pt-3" />
+                  </tr>
+                )}
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 text-left font-medium">Player</th>
                   <th className="p-3 text-left font-medium">Team</th>
-                  <th className="w-28 p-3 text-right font-medium">Hole matches</th>
+                  <th className="w-32 p-3 text-right font-medium">Match Money</th>
                   {anyFb18 && (
                     <>
                       <th className="w-24 p-3 text-right font-medium">F9</th>

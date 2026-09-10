@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
+import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import { displayName } from "@/lib/scoring";
 import { MEDAL, medalByGolfer } from "@/lib/podium";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
@@ -12,12 +13,13 @@ type BoardGolfer = ScoredGolfer & { photo: string | null };
 
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; dollars: number }
+  { rounds: number; points: number; matchMoney: number; bonusMoney: number }
 >;
 
-/** The two season sorts sit alongside Overall and the rated categories. */
+/** Season sorts, sitting alongside Overall and the rated categories. */
 const POINTS = "points";
-const MONEY = "money";
+const MATCH_MONEY = "matchMoney";
+const BONUS_MONEY = "bonusMoney";
 
 export function RankingsBoard({
   golfers, characteristics, ratedGolferIds, myGolferId, season,
@@ -45,8 +47,10 @@ export function RankingsBoard({
 
   const sorted = useMemo(() => {
     const value = (g: BoardGolfer): number | null => {
-      if (sortBy === POINTS) return season[g.id]?.rounds ? season[g.id].points : null;
-      if (sortBy === MONEY) return season[g.id]?.rounds ? season[g.id].dollars : null;
+      const played = season[g.id]?.rounds ? season[g.id] : null;
+      if (sortBy === POINTS) return played ? played.points : null;
+      if (sortBy === MATCH_MONEY) return played ? played.matchMoney : null;
+      if (sortBy === BONUS_MONEY) return played ? played.bonusMoney : null;
       if (sortBy === "overall") return g.overall;
       return g.scores[sortBy] ?? null;
     };
@@ -63,10 +67,11 @@ export function RankingsBoard({
   }, [golfers, sortBy, season]);
 
   const sortLabel =
-    sortBy === POINTS ? "FLO Cup points"
-      : sortBy === MONEY ? "Money"
-        : sortBy === "overall" ? "Overall"
-          : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
+    sortBy === POINTS ? "Total Points"
+      : sortBy === MATCH_MONEY ? "Match Money"
+        : sortBy === BONUS_MONEY ? "Bonus Money"
+          : sortBy === "overall" ? "Overall"
+            : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
 
   const unrated = sorted.filter((g) => !rated.has(g.id) && g.id !== myGolferId).length;
 
@@ -89,8 +94,9 @@ export function RankingsBoard({
             onChange={(event) => setSortBy(event.target.value)}
             className="rounded-lg border border-line bg-raised px-3 py-2 text-sm font-medium outline-none transition focus:border-fairway-400"
           >
-            <option value={POINTS}>FLO Cup points</option>
-            <option value={MONEY}>Money</option>
+            <option value={POINTS}>Total Points</option>
+            <option value={MATCH_MONEY}>Match Money</option>
+            <option value={BONUS_MONEY}>Bonus Money</option>
             <option value="overall">Overall rating</option>
             {characteristics.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
@@ -131,11 +137,12 @@ function GolferCard({
   sortLabel: string;
   hasRated: boolean;
   isSelf: boolean;
-  season?: { rounds: number; points: number; dollars: number };
+  season?: { rounds: number; points: number; matchMoney: number; bonusMoney: number };
   medal?: 1 | 2 | 3;
 }) {
   const played = (season?.rounds ?? 0) > 0;
-  const money = season?.dollars ?? 0;
+  const matchMoney = season?.matchMoney ?? 0;
+  const bonusMoney = season?.bonusMoney ?? 0;
   const points = season?.points ?? 0;
 
   // Points, money and overall all have their own chip below, so repeating
@@ -143,7 +150,11 @@ function GolferCard({
   // worth the space when the board is sorted by a rated category, which is
   // the one value the chips do not carry.
   const sortedByCategory =
-    sortBy !== POINTS && sortBy !== MONEY && sortBy !== "overall";
+    sortBy !== POINTS && sortBy !== MATCH_MONEY &&
+    sortBy !== BONUS_MONEY && sortBy !== "overall";
+
+  const cash = (n: number) =>
+    `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 
   const tone = (n: number) =>
     n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -216,18 +227,26 @@ function GolferCard({
             {played ? points.toFixed(1) : "—"}
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Pts
+            Total Points
           </span>
         </span>
 
         <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
-          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(money) : "text-muted"}`}>
-            {played
-              ? `${money > 0 ? "+" : money < 0 ? "-" : ""}$${Math.abs(money).toFixed(2)}`
-              : "—"}
+          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(matchMoney) : "text-muted"}`}>
+            {played ? cash(matchMoney) : "—"}
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Money
+            Match Money
+          </span>
+        </span>
+
+        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(bonusMoney) : "text-muted"}`}>
+            {played ? cash(bonusMoney) : "—"}
+          </span>
+          <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Bonus Money
+            <InfoIcon text={BONUS_MONEY_NOTE} />
           </span>
         </span>
       </div>

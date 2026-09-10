@@ -178,6 +178,10 @@ export function computeMatch(b: MatchBundle) {
 export type SeasonRow = {
   golferId: string;
   rounds: number;
+  /** The six three-hole matches. The only money that earns points. */
+  matchMoney: number;
+  /** FB18 front nine, back nine and all eighteen. Money only. */
+  bonusMoney: number;
   dollars: number;
   /** Points from Cup-eligible money. FB18 winnings never count. */
   pointsFromMoney: number;
@@ -192,6 +196,8 @@ export type GolferRoundRow = {
   matchDate: string;
   course: string;
   teamName: string;
+  matchMoney: number;
+  bonusMoney: number;
   dollars: number;
   pointsFromMoney: number;
   pointsBonus: number;
@@ -242,6 +248,9 @@ async function scoreCompletedRounds(): Promise<
           matchDate: m.match_date,
           course: m.course,
           teamName: teamName.get(row.teamId) ?? "",
+          matchMoney: row.breakdown.main,
+          bonusMoney:
+            row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,
           dollars: row.dollars,
           pointsFromMoney: p?.fromMoney ?? 0,
           pointsBonus: p?.bonus ?? 0,
@@ -267,10 +276,13 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   for (const round of rounds) {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
-        golferId: row.golferId, rounds: 0, dollars: 0,
+        golferId: row.golferId, rounds: 0,
+        matchMoney: 0, bonusMoney: 0, dollars: 0,
         pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
+      cur.matchMoney += row.matchMoney;
+      cur.bonusMoney += row.bonusMoney;
       cur.dollars += row.dollars;
       cur.pointsFromMoney += row.pointsFromMoney;
       cur.pointsBonus += row.pointsBonus;
@@ -282,6 +294,8 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   return [...totals.values()].map((r) => ({
     ...r,
+    matchMoney: round2(r.matchMoney),
+    bonusMoney: round2(r.bonusMoney),
     dollars: round2(r.dollars),
     pointsFromMoney: round2(r.pointsFromMoney),
     pointsBonus: round2(r.pointsBonus),

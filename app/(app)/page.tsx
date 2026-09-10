@@ -14,7 +14,12 @@ export default async function RankingsPage() {
   const season = Object.fromEntries(
     standings.map((row) => [
       row.golferId,
-      { rounds: row.rounds, points: row.points, dollars: row.dollars },
+      {
+        rounds: row.rounds,
+        points: row.points,
+        matchMoney: row.matchMoney,
+        bonusMoney: row.bonusMoney,
+      },
     ]),
   );
 
