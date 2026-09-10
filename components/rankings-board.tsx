@@ -181,18 +181,6 @@ function GolferCard({
               : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"}`}
             {played && ` · ${season!.rounds} ${season!.rounds === 1 ? "round" : "rounds"}`}
           </p>
-
-          {played && (
-            <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-              <span className={`inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${tone(points)}`}>
-                <TrophyIcon className="h-3.5 w-3.5 shrink-0" />
-                {points.toFixed(1)}
-              </span>
-              <span className={`text-sm font-semibold tabular-nums ${tone(money)}`}>
-                {money > 0 ? "+" : money < 0 ? "-" : ""}${Math.abs(money).toFixed(2)}
-              </span>
-            </div>
-          )}
         </div>
 
         <div className="text-right">
@@ -201,6 +189,44 @@ function GolferCard({
             {sortLabel}
           </div>
         </div>
+      </div>
+
+      {/*
+        The three figures that matter, on their own row rather than squeezed
+        beside the name. Overall is the one that would otherwise vanish
+        whenever the board is sorted by anything else, so it gets the filled
+        treatment.
+      */}
+      <div className="mt-4 flex flex-wrap items-stretch gap-2">
+        <span className="inline-flex items-baseline gap-1.5 rounded-lg bg-fairway-100 px-2.5 py-1.5 dark:bg-fairway-800">
+          <span className="text-lg font-semibold leading-none tabular-nums text-fairway-700 dark:text-fairway-100">
+            {golfer.overall ?? "—"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-fairway-700/70 dark:text-fairway-200/80">
+            Overall
+          </span>
+        </span>
+
+        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+          <TrophyIcon className={`h-3.5 w-3.5 shrink-0 self-center ${tone(points)}`} />
+          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(points) : "text-muted"}`}>
+            {played ? points.toFixed(1) : "—"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Pts
+          </span>
+        </span>
+
+        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(money) : "text-muted"}`}>
+            {played
+              ? `${money > 0 ? "+" : money < 0 ? "-" : ""}$${Math.abs(money).toFixed(2)}`
+              : "—"}
+          </span>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Money
+          </span>
+        </span>
       </div>
 
       {/*
