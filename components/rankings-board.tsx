@@ -149,12 +149,15 @@ function GolferCard({
   // one of them large is just the same number twice. The headline is only
   // worth the space when the board is sorted by a rated category, which is
   // the one value the chips do not carry.
-  const sortedByCategory =
-    sortBy !== POINTS && sortBy !== MATCH_MONEY &&
-    sortBy !== BONUS_MONEY && sortBy !== "overall";
-
   const cash = (n: number) =>
     `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
+
+  const headline =
+    sortBy === POINTS ? (played ? points.toFixed(1) : "—")
+      : sortBy === MATCH_MONEY ? (played ? cash(matchMoney) : "—")
+        : sortBy === BONUS_MONEY ? (played ? cash(bonusMoney) : "—")
+          : sortBy === "overall" ? (golfer.overall ?? "—")
+            : (golfer.scores[sortBy] ?? "—");
 
   const tone = (n: number) =>
     n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -193,16 +196,17 @@ function GolferCard({
           </p>
         </div>
 
-        {sortedByCategory && (
-          <div className="text-right">
-            <div className="text-3xl font-semibold tabular-nums">
-              {golfer.scores[sortBy] ?? "—"}
-            </div>
-            <div className="text-[11px] uppercase tracking-wide text-muted">
-              {sortLabel}
-            </div>
+        {/* The figure the board is sorted by, kept prominent. */}
+        <div className="text-right">
+          <div className={`flex items-center justify-end gap-1.5 text-3xl font-semibold tabular-nums ${
+            sortBy === POINTS && played ? tone(points) : ""}`}>
+            {sortBy === POINTS && <TrophyIcon className="h-6 w-6 shrink-0" />}
+            {headline}
           </div>
-        )}
+          <div className="text-[11px] uppercase tracking-wide text-muted">
+            {sortLabel}
+          </div>
+        </div>
       </div>
 
       {/*
@@ -218,16 +222,6 @@ function GolferCard({
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-fairway-700/70 dark:text-fairway-200/80">
             Overall
-          </span>
-        </span>
-
-        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
-          <TrophyIcon className={`h-3.5 w-3.5 shrink-0 self-center ${tone(points)}`} />
-          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(points) : "text-muted"}`}>
-            {played ? points.toFixed(1) : "—"}
-          </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Total Points
           </span>
         </span>
 
