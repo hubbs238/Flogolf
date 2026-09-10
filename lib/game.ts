@@ -517,20 +517,22 @@ export function scoreFb18(opts: {
 }
 
 /**
- * Converts FB18 results to dollars, each segment at its own rate.
+ * Converts FB18 results to dollars per segment, each at its own rate.
  *
- * Front nine, back nine, and the eighteen can be worth different money, so
- * the units cannot be summed before conversion.
+ * Kept separate rather than summed so settlement can show where the money
+ * came from. Front nine, back nine, and the eighteen can be worth different
+ * money, so the units cannot be added before conversion anyway.
  */
-export function fb18DollarsByTeam(
+export function fb18DollarsBySegment(
   results: Fb18Result[],
   rates: Record<Fb18Segment, number>,
-): Record<string, number> {
-  const out: Record<string, number> = {};
+): Record<string, Record<Fb18Segment, number>> {
+  const out: Record<string, Record<Fb18Segment, number>> = {};
   for (const result of results) {
     const rate = rates[result.segment] ?? 0;
     for (const award of result.awards) {
-      out[award.teamId] = (out[award.teamId] ?? 0) + award.units * rate;
+      out[award.teamId] ??= { front: 0, back: 0, total: 0 };
+      out[award.teamId][result.segment] += award.units * rate;
     }
   }
   return out;
@@ -540,19 +542,27 @@ export function fb18DollarsByTeam(
 //  Money
 // ------------------------------------------------------------
 
+/** Where a player's money came from. Each figure is per player. */
+export type MoneyBreakdown = {
+  /** The six three-hole matches. */
+  main: number;
+  front: number;
+  back: number;
+  /** The FB18 all-eighteen result, not the grand total. */
+  eighteen: number;
+};
+
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
   /** What this player earns this round. Not a share of a team pot. */
   dollars: number;
   /**
-   * The portion that counts toward FLO Cup points.
-   *
-   * Excludes the FB18 front nine and back nine payouts. Those are real money
-   * and appear in `dollars`, they simply do not move the Cup. Only the main
-   * game and the FB18 eighteen hole result do.
+   * The portion that counts toward FLO Cup points: the main game alone.
+   * Every FB18 payout is money only.
    */
   cupDollars: number;
+  breakdown: MoneyBreakdown;
 };
 
 /**
@@ -571,20 +581,32 @@ export type PlayerMoney = {
  * The conversion happens upstream where both rates are known.
  */
 export function awardMoney(opts: {
-  dollarsPerPlayerByTeam: Record<string, number>;
-  cupDollarsPerPlayerByTeam: Record<string, number>;
+  breakdownByTeam: Record<string, MoneyBreakdown>;
   rosters: Record<string, string[]>;
 }): PlayerMoney[] {
-  const { dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters } = opts;
+  const { breakdownByTeam, rosters } = opts;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
   const out: PlayerMoney[] = [];
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
+    const b = breakdownByTeam[teamId] ?? { main: 0, front: 0, back: 0, eighteen: 0 };
+    const breakdown: MoneyBreakdown = {
+      main: round2(b.main),
+      front: round2(b.front),
+      back: round2(b.back),
+      eighteen: round2(b.eighteen),
+    };
+    const dollars = round2(
+      breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen,
+    );
+
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
-        dollars: Math.round((dollarsPerPlayerByTeam[teamId] ?? 0) * 100) / 100,
-        cupDollars: Math.round((cupDollarsPerPlayerByTeam[teamId] ?? 0) * 100) / 100,
+        dollars,
+        cupDollars: breakdown.main,
+        breakdown,
       });
     }
   }

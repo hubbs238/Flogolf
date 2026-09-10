@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import {
   eighteenHoleBonuses,
-  fb18DollarsByTeam,
+  fb18DollarsBySegment,
   roundPoints,
   scoreFb18,
   scoreMainGame,
@@ -11,6 +11,7 @@ import {
   type PayoutTable,
   type TieDecisions,
 } from "./game";
+import type { MoneyBreakdown } from "./game";
 import type {
   Fb18Payout,
   Golfer,
@@ -124,20 +125,29 @@ export function computeMatch(b: MatchBundle) {
     total: pick(b.match.fb18_total_dollars_per_unit, fb18Rate),
   };
 
-  // These are per player figures: a unit pays its rate to each team member.
+  // Per player figures, a unit paying its rate to each team member, and kept
+  // split by source so settlement can show where the money came from.
   //
-  // No FB18 winnings feed the Cup. The eighteen hole result is already
-  // rewarded through the best-eighteen bonus, so counting its money as well
-  // would pay for the same achievement twice. Front and back nine were never
-  // meant to count.
-  const fb18Dollars = fb18DollarsByTeam(fb18.results, segmentRate);
+  // Only the main game feeds the Cup. Every FB18 payout is money alone: the
+  // eighteen hole result is already rewarded through the best-eighteen
+  // bonus, so counting its money too would pay for the same thing twice.
+  const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
+  const breakdownByTeam: Record<string, MoneyBreakdown> = {};
   const dollarsPerPlayerByTeam: Record<string, number> = {};
   const cupDollarsPerPlayerByTeam: Record<string, number> = {};
+
   for (const id of teamIds) {
-    const mainDollars = (main.unitsByTeam[id] ?? 0) * mainRate;
-    dollarsPerPlayerByTeam[id] = mainDollars + (fb18Dollars[id] ?? 0);
-    cupDollarsPerPlayerByTeam[id] = mainDollars;
+    const fb = fb18Dollars[id] ?? { front: 0, back: 0, total: 0 };
+    const b18: MoneyBreakdown = {
+      main: (main.unitsByTeam[id] ?? 0) * mainRate,
+      front: fb.front,
+      back: fb.back,
+      eighteen: fb.total,
+    };
+    breakdownByTeam[id] = b18;
+    dollarsPerPlayerByTeam[id] = b18.main + b18.front + b18.back + b18.eighteen;
+    cupDollarsPerPlayerByTeam[id] = b18.main;
   }
 
   const rosters: Record<string, string[]> = {};
@@ -148,7 +158,7 @@ export function computeMatch(b: MatchBundle) {
       .map((p) => p.golfer_id);
   }
 
-  const money = awardMoney({ dollarsPerPlayerByTeam, cupDollarsPerPlayerByTeam, rosters });
+  const money = awardMoney({ breakdownByTeam, rosters });
   const bonuses = eighteenHoleBonuses(teamIds, b.scores);
 
   return {

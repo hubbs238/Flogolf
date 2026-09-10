@@ -11,6 +11,17 @@ import type {
 } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
 
+function Cash({ n, strong = false }: { n: number; strong?: boolean }) {
+  const cls = n > 0 ? "text-fairway-600 dark:text-fairway-300"
+    : n < 0 ? "text-flag-500" : "text-muted";
+  if (n === 0) return <span className="tabular-nums text-muted">—</span>;
+  return (
+    <span className={`tabular-nums ${strong ? "font-semibold" : ""} ${cls}`}>
+      {n > 0 ? "+" : "-"}${Math.abs(n).toFixed(2)}
+    </span>
+  );
+}
+
 function Units({ n }: { n: number }) {
   const cls = n > 0 ? "text-fairway-600 dark:text-fairway-300"
     : n < 0 ? "text-flag-500" : "text-muted";
@@ -58,6 +69,14 @@ export function MatchResults({
   );
 
   const fb18Teams = teams.filter((t) => t.in_fb18);
+
+  // Hide the three side game columns entirely when nobody played it, rather
+  // than showing a wall of dashes.
+  const anyFb18 = money.some(
+    (m) => m.breakdown.front !== 0 || m.breakdown.back !== 0 || m.breakdown.eighteen !== 0,
+  );
+  const sumBy = (pick: (m: PlayerMoney) => number) =>
+    Math.round(money.reduce((n, m) => n + pick(m), 0) * 100) / 100;
 
   // A unit pays each player, so the team figure is the sum of the roster
   // rather than a pot being divided into it.
@@ -359,23 +378,70 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">Player settlement</h3>
           <p className="mb-3 text-sm text-muted">
-            Everything each player takes home: the main game plus all three
-            FB18 segments, at whatever rate each was set to.
+            What each player owes or collects, and where it came from. Positive
+            is money in, negative is money out.
           </p>
-          <ul className="grid gap-1.5 sm:grid-cols-2">
-            {[...money].sort((a, b) => b.dollars - a.dollars).map((m) => (
-              <li key={m.golferId}
-                className="flex items-center gap-3 rounded-xl border border-line bg-raised px-3 py-2 text-sm">
-                <span className="min-w-0 flex-1 truncate">{golferName(m.golferId)}</span>
-                <span className="shrink-0 text-xs text-muted">{teamName(m.teamId)}</span>
-                <span className={`w-20 shrink-0 text-right font-semibold tabular-nums ${
-                  m.dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
-                  : m.dollars < 0 ? "text-flag-500" : "text-muted"}`}>
-                  {m.dollars > 0 ? "+" : ""}${m.dollars.toFixed(2)}
-                </span>
-              </li>
-            ))}
-          </ul>
+
+          <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
+            <table className="w-full min-w-max text-sm">
+              <thead>
+                <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                  <th className="p-3 text-left font-medium">Player</th>
+                  <th className="p-3 text-left font-medium">Team</th>
+                  <th className="w-28 p-3 text-right font-medium">Hole matches</th>
+                  {anyFb18 && (
+                    <>
+                      <th className="w-24 p-3 text-right font-medium">F9</th>
+                      <th className="w-24 p-3 text-right font-medium">B9</th>
+                      <th className="w-24 p-3 text-right font-medium">All 18</th>
+                    </>
+                  )}
+                  <th className="w-28 p-3 text-right font-medium text-ink">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...money].sort((a, b) => b.dollars - a.dollars).map((m) => (
+                  <tr key={m.golferId} className="border-b border-line last:border-0">
+                    <td className="p-3 font-medium">{golferName(m.golferId)}</td>
+                    <td className="p-3 text-muted">{teamName(m.teamId)}</td>
+                    <td className="p-3 text-right"><Cash n={m.breakdown.main} /></td>
+                    {anyFb18 && (
+                      <>
+                        <td className="p-3 text-right"><Cash n={m.breakdown.front} /></td>
+                        <td className="p-3 text-right"><Cash n={m.breakdown.back} /></td>
+                        <td className="p-3 text-right"><Cash n={m.breakdown.eighteen} /></td>
+                      </>
+                    )}
+                    <td className="p-3 text-right"><Cash n={m.dollars} strong /></td>
+                  </tr>
+                ))}
+              </tbody>
+
+              <tfoot>
+                <tr className="border-t-2 border-line bg-surface/60">
+                  <td className="p-3 font-semibold" colSpan={2}>
+                    Round total
+                  </td>
+                  <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.main)} /></td>
+                  {anyFb18 && (
+                    <>
+                      <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.front)} /></td>
+                      <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.back)} /></td>
+                      <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.eighteen)} /></td>
+                    </>
+                  )}
+                  <td className="p-3 text-right"><Cash n={sumBy((m) => m.dollars)} strong /></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <p className="mt-2 text-xs text-muted">
+            The round total is what the group is up or down overall. It lands on
+            zero when every team fields the same number of players, and drifts
+            when one plays a man short, since a unit pays each player rather
+            than being divided among them.
+          </p>
         </section>
       )}
     </div>

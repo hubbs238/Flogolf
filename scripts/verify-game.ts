@@ -1,7 +1,7 @@
 import {
   awardMoney,
   eighteenHoleBonuses,
-  fb18DollarsByTeam,
+  fb18DollarsBySegment,
   resolveSuddenDeath,
   roundPoints,
   scoreFb18,
@@ -9,6 +9,22 @@ import {
   type HoleScores,
   type PayoutTable,
 } from "../lib/game";
+
+/** Shorthand for a money breakdown in fixtures. */
+function bd(main: number, front = 0, back = 0, eighteen = 0) {
+  return { main, front, back, eighteen };
+}
+
+/** Shorthand for a PlayerMoney fixture. */
+function pm(golferId: string, teamId: string, main: number, extra = 0) {
+  const breakdown = bd(main, extra);
+  return {
+    golferId, teamId,
+    dollars: main + extra,
+    cupDollars: main,
+    breakdown,
+  };
+}
 
 let failures = 0;
 function check(label: string, got: unknown, want: unknown) {
@@ -187,8 +203,7 @@ console.log("\n=== a unit pays every player, it is not divided ===");
 {
   // 3 units at $100 is $300 each, so a four man team collects $1,200.
   const money = awardMoney({
-    dollarsPerPlayerByTeam: { t1: 300, t2: -300 },
-    cupDollarsPerPlayerByTeam: { t1: 300, t2: -300 },
+    breakdownByTeam: { t1: bd(300), t2: bd(-300) },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7", "p8"] },
   });
   check("every winner earns the full 300",
@@ -201,8 +216,7 @@ console.log("\n=== a unit pays every player, it is not divided ===");
 {
   // Roster size no longer divides anything, it multiplies the team total.
   const money = awardMoney({
-    dollarsPerPlayerByTeam: { t1: 90 },
-    cupDollarsPerPlayerByTeam: { t1: 90 },
+    breakdownByTeam: { t1: bd(90) },
     rosters: { t1: ["p1", "p2", "p3"] },
   });
   check("a man short still earns the same each",
@@ -249,23 +263,32 @@ console.log("\n=== each FB18 segment converts at its own rate ===");
     teamIds: ["A", "B"], scores: s,
     payouts: { front: { 1: 1, 2: 0 }, back: { 1: 1, 2: 0 }, total: { 1: 1, 2: 0 } },
   });
-  const dollars = fb18DollarsByTeam(results, { front: 20, back: 20, total: 50 });
-  check("A: front $20 plus the eighteen $50", dollars.A, 70);
-  check("B: back nine only, $20", dollars.B, 20);
+  const seg = fb18DollarsBySegment(results, { front: 20, back: 20, total: 50 });
+  const sum = (id: string) => seg[id].front + seg[id].back + seg[id].total;
+  check("A: front $20 plus the eighteen $50", sum("A"), 70);
+  check("B: back nine only, $20", sum("B"), 20);
+  check("and it says which segment each came from",
+    [seg.A.front, seg.A.back, seg.A.total], [20, 0, 50]);
 
-  const flat = fb18DollarsByTeam(results, { front: 20, back: 20, total: 20 });
+  const flatSeg = fb18DollarsBySegment(results, { front: 20, back: 20, total: 20 });
+  const flat = {
+    A: flatSeg.A.front + flatSeg.A.back + flatSeg.A.total,
+    B: flatSeg.B.front + flatSeg.B.back + flatSeg.B.total,
+  };
   check("same units, one flat rate, totals differ", [flat.A, flat.B], [40, 20]);
 }
 
 console.log("\n=== FB18 money does not move the Cup ===");
 {
+  // $180 from the main game, $120 across the FB18 segments.
   const money = awardMoney({
-    dollarsPerPlayerByTeam: { t1: 300 },
-    cupDollarsPerPlayerByTeam: { t1: 180 },
+    breakdownByTeam: { t1: bd(180, 40, 30, 50) },
     rosters: { t1: ["p1", "p2", "p3", "p4"] },
   });
   check("money column reports the full figure", money[0].dollars, 300);
   check("Cup figure excludes FB18 entirely", money[0].cupDollars, 180);
+  check("and the breakdown says where it came from",
+    money[0].breakdown, { main: 180, front: 40, back: 30, eighteen: 50 });
 }
 
 console.log("\n=== best eighteen bonus ===");
@@ -312,15 +335,21 @@ console.log("\n=== settlement includes every FB18 segment ===");
     teamIds: ["A", "B"], scores: s,
     payouts: { front: { 1: 1, 2: -1 }, back: { 1: 1, 2: -1 }, total: { 1: 1, 2: -1 } },
   });
-  const fb = fb18DollarsByTeam(results, { front: 20, back: 20, total: 50 });
+  const perSeg = fb18DollarsBySegment(results, { front: 20, back: 20, total: 50 });
+  const fb = {
+    A: perSeg.A.front + perSeg.A.back + perSeg.A.total,
+    B: perSeg.B.front + perSeg.B.back + perSeg.B.total,
+  };
 
   // A: +20 front, -20 back, +50 eighteen = +50. B is the mirror.
   check("FB18 nets out per team", [fb.A, fb.B], [50, -50]);
 
   // Main game gave A +100 a head. Settlement must carry both.
   const money = awardMoney({
-    dollarsPerPlayerByTeam: { A: 100 + fb.A, B: -100 + fb.B },
-    cupDollarsPerPlayerByTeam: { A: 100, B: -100 },
+    breakdownByTeam: {
+      A: { main: 100, front: perSeg.A.front, back: perSeg.A.back, eighteen: perSeg.A.total },
+      B: { main: -100, front: perSeg.B.front, back: perSeg.B.back, eighteen: perSeg.B.total },
+    },
     rosters: { A: ["a1", "a2"], B: ["b1", "b2"] },
   });
   check("settlement is main game plus all three segments",
@@ -334,8 +363,8 @@ console.log("\n=== points never go below zero ===");
 {
   const pts = roundPoints({
     money: [
-      { golferId: "p1", teamId: "t1", dollars: 500, cupDollars: 500 },
-      { golferId: "p2", teamId: "t2", dollars: -500, cupDollars: -500 },
+      pm("p1", "t1", 500, 0),
+      pm("p2", "t2", -500, 0),
     ],
     bonuses: [],
     rosters: { t1: ["p1"], t2: ["p2"] },
@@ -349,7 +378,7 @@ console.log("\n=== points never go below zero ===");
   // than subtracting.
   const season = [100, -400, 30].map((cupDollars) =>
     roundPoints({
-      money: [{ golferId: "p1", teamId: "t1", dollars: cupDollars, cupDollars }],
+      money: [pm("p1", "t1", cupDollars)],
       bonuses: [], rosters: { t1: ["p1"] },
     })[0].total,
   );
@@ -373,10 +402,13 @@ console.log("\n=== changing a rate moves every player's money ===");
   const rosters = { A: ["a1", "a2", "a3", "a4"], B: ["b1", "b2", "b3", "b4"] };
 
   const settle = (rates: { front: number; back: number; total: number }) => {
-    const fb = fb18DollarsByTeam(results, rates);
+    const fb = fb18DollarsBySegment(results, rates);
+    const seg = (id: string) => fb[id] ?? { front: 0, back: 0, total: 0 };
     return awardMoney({
-      dollarsPerPlayerByTeam: { A: 100 + (fb.A ?? 0), B: -100 + (fb.B ?? 0) },
-      cupDollarsPerPlayerByTeam: { A: 100, B: -100 },
+      breakdownByTeam: {
+        A: { main: 100, front: seg("A").front, back: seg("A").back, eighteen: seg("A").total },
+        B: { main: -100, front: seg("B").front, back: seg("B").back, eighteen: seg("B").total },
+      },
       rosters,
     });
   };
@@ -407,12 +439,8 @@ console.log("\n=== points earned in a round ===");
   // p5..p8 lost $200 and finished second.
   const pts = roundPoints({
     money: [
-      ...["p1","p2","p3","p4"].map((golferId) => ({
-        golferId, teamId: "t1", dollars: 300, cupDollars: 200,
-      })),
-      ...["p5","p6","p7","p8"].map((golferId) => ({
-        golferId, teamId: "t2", dollars: -200, cupDollars: -200,
-      })),
+      ...["p1","p2","p3","p4"].map((g) => pm(g, "t1", 200, 100)),
+      ...["p5","p6","p7","p8"].map((g) => pm(g, "t2", -200)),
     ],
     bonuses: [
       { teamIds: ["t1"], total: -6, bonus: 50 },
