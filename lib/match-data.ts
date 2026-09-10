@@ -269,6 +269,36 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
   }));
 }
 
+/**
+ * What each player puts into the FLO Cup pot per round they play.
+ * One place to change it if the buy in ever moves.
+ */
+export const CUP_BUY_IN = 35;
+
+export type CupPot = {
+  /** Player entries across every finished round, counting repeats. */
+  entries: number;
+  rounds: number;
+  perEntry: number;
+  total: number;
+};
+
+/**
+ * The trophy pot: every player entry across every finished round, times the
+ * buy in. Someone who played four rounds contributes four times.
+ */
+export async function getCupPot(): Promise<CupPot> {
+  const rounds = await scoreCompletedRounds();
+  const entries = rounds.reduce((n, r) => n + r.rows.length, 0);
+
+  return {
+    entries,
+    rounds: rounds.length,
+    perEntry: CUP_BUY_IN,
+    total: entries * CUP_BUY_IN,
+  };
+}
+
 /** One golfer's finished rounds, newest first. */
 export async function getGolferRounds(golferId: string): Promise<GolferRoundRow[]> {
   const rounds = await scoreCompletedRounds();

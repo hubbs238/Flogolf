@@ -81,3 +81,29 @@ input[type="range"]::-moz-range-thumb {
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
   cursor: grab;
 }
+
+/* FLO Cup trophy. The level rises once on mount, the shine repeats slowly.
+   Both are decorative, so both stop entirely under reduced motion. */
+@keyframes cup-rise {
+  from { transform: translateY(44px); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes cup-sweep {
+  0%        { transform: translateX(0); }
+  55%, 100% { transform: translateX(150px); }
+}
+
+.cup-level {
+  transform-origin: bottom;
+  animation: cup-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cup-shine {
+  animation: cup-sweep 4.5s ease-in-out 0.8s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cup-level { animation: none; transform: none; }
+  .cup-shine { animation: none; opacity: 0; }
+}
