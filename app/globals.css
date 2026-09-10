@@ -82,30 +82,30 @@ input[type="range"]::-moz-range-thumb {
   cursor: grab;
 }
 
-/* FLO Cup trophy. The level rises once on mount, the shine repeats slowly.
+/* The Degent Cup. The level rises once on mount, the shine repeats slowly.
    Both are decorative, so both stop entirely under reduced motion. */
-@keyframes cup-rise {
-  from { transform: translateY(44px); }
+@keyframes pot-rise {
+  from { transform: translateY(60px); }
   to   { transform: translateY(0); }
 }
 
-@keyframes cup-sweep {
+@keyframes pot-sweep {
   0%        { transform: translateX(0); }
-  55%, 100% { transform: translateX(150px); }
+  55%, 100% { transform: translateX(170px); }
 }
 
-.cup-level {
+.pot-level {
   transform-origin: bottom;
-  animation: cup-rise 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: pot-rise 1.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.cup-shine {
-  animation: cup-sweep 4.5s ease-in-out 0.8s infinite;
+.pot-shine {
+  animation: pot-sweep 5s ease-in-out 1s infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cup-level { animation: none; transform: none; }
-  .cup-shine { animation: none; opacity: 0; }
+  .pot-level { animation: none; transform: none; }
+  .pot-shine { animation: none; opacity: 0; }
 }
 
 /* Podium blocks grow up from the base as the page settles. Decorative, so

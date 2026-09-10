@@ -1,22 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CupPot } from "@/lib/match-data";
+import type { CupPot as CupPotData } from "@/lib/match-data";
 
 /**
  * Counts from zero to the target with an ease-out curve.
  *
- * Returns the final value immediately when the viewer prefers reduced
- * motion, so nobody gets a number ticking in their peripheral vision.
+ * Reduced motion takes the same path with a zero length run, so the first
+ * frame lands on the final value. Branching to a synchronous setState here
+ * would trigger a cascading render.
  */
-function useCountUp(target: number, ms = 1400) {
+function useCountUp(target: number, ms = 1600) {
   const [value, setValue] = useState(0);
   const frame = useRef<number | null>(null);
 
   useEffect(() => {
-    // Reduced motion takes the same path with a zero length run, so the
-    // first frame lands on the final value. Branching to a synchronous
-    // setState here would trigger a cascading render.
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const duration = reduced || target === 0 ? 0 : ms;
     const start = performance.now();
@@ -37,26 +35,20 @@ function useCountUp(target: number, ms = 1400) {
   return value;
 }
 
-export function CupPot({ pot }: { pot: CupPot }) {
+export function CupPot({ pot }: { pot: CupPotData }) {
   const shown = useCountUp(pot.total);
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 p-6 text-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-6">
+    <section className="relative overflow-hidden rounded-2xl border border-line bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 p-6 text-white shadow-sm">
+      <div className="flex h-full items-center gap-5 sm:gap-7">
         <Trophy />
 
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-fairway-200">
-            FLO Cup pot
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-fairway-200">
+            FloGolf Degent Cup
           </p>
-          <p className="mt-1 text-4xl font-semibold tabular-nums sm:text-5xl">
+          <p className="mt-2 text-5xl font-semibold leading-none tabular-nums sm:text-6xl">
             ${shown.toLocaleString()}
-          </p>
-          <p className="mt-2 text-sm text-fairway-200">
-            {pot.entries.toLocaleString()}{" "}
-            {pot.entries === 1 ? "entry" : "entries"} across{" "}
-            {pot.rounds} {pot.rounds === 1 ? "round" : "rounds"}, at $
-            {pot.perEntry} a player per round.
           </p>
         </div>
       </div>
@@ -65,65 +57,75 @@ export function CupPot({ pot }: { pot: CupPot }) {
 }
 
 /**
- * Trophy with the pot level rising inside it and a shine sweeping across.
+ * The cup, carrying the FloGolf mark on its face.
  *
- * Everything animates in CSS rather than JavaScript so it costs nothing to
- * run, and every animation sits behind a reduced-motion guard.
+ * Sized to fill the card rather than sit in a corner of it. The level rises
+ * once on mount and the shine repeats slowly, both in CSS so they cost
+ * nothing to run and both stopping under reduced motion.
  */
 function Trophy() {
   return (
-    <div className="shrink-0">
-      <svg
-        viewBox="0 0 96 112"
-        role="img"
-        aria-label="FLO Cup trophy"
-        className="h-28 w-24 drop-shadow-lg"
-      >
-        <defs>
-          <linearGradient id="cupGold" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#ffe9a8" />
-            <stop offset="45%" stopColor="#f2c14e" />
-            <stop offset="100%" stopColor="#c98f22" />
-          </linearGradient>
+    <svg
+      viewBox="0 0 104 124"
+      role="img"
+      aria-label="FloGolf Degent Cup trophy"
+      className="h-44 w-36 shrink-0 drop-shadow-xl sm:h-52 sm:w-44"
+    >
+      <defs>
+        <linearGradient id="potGold" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#ffeeb4" />
+          <stop offset="42%" stopColor="#f2c14e" />
+          <stop offset="100%" stopColor="#b8801a" />
+        </linearGradient>
 
-          <linearGradient id="cupFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#fff4cc" />
-            <stop offset="100%" stopColor="#e0a52c" />
-          </linearGradient>
+        <linearGradient id="potFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#fff6d6" />
+          <stop offset="100%" stopColor="#dc9f22" />
+        </linearGradient>
 
-          <linearGradient id="cupShine" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="#fff" stopOpacity="0" />
-            <stop offset="50%" stopColor="#fff" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="#fff" stopOpacity="0" />
-          </linearGradient>
+        <linearGradient id="potShine" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stopColor="#fff" stopOpacity="0" />
+          <stop offset="50%" stopColor="#fff" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
 
-          {/* The bowl, used to clip the rising level so it never spills. */}
-          <clipPath id="cupBowl">
-            <path d="M26 12h44v22a22 22 0 0 1-44 0V12Z" />
-          </clipPath>
-        </defs>
+        {/* The bowl, clipping the rising level so it never spills. */}
+        <clipPath id="potBowl">
+          <path d="M22 14h60v30a30 30 0 0 1-60 0V14Z" />
+        </clipPath>
 
-        {/* handles */}
-        <path d="M26 18H16a10 10 0 0 0 10 10" fill="none" stroke="url(#cupGold)" strokeWidth="5" strokeLinecap="round" />
-        <path d="M70 18h10a10 10 0 0 1-10 10" fill="none" stroke="url(#cupGold)" strokeWidth="5" strokeLinecap="round" />
+        {/* The mark sits on a rounded square, matching the logo artwork. */}
+        <clipPath id="potLogo">
+          <rect x="38" y="22" width="28" height="28" rx="7" />
+        </clipPath>
+      </defs>
 
-        {/* bowl */}
-        <path d="M26 12h44v22a22 22 0 0 1-44 0V12Z" fill="url(#cupGold)" />
+      {/* handles */}
+      <path d="M22 20H9a13 13 0 0 0 13 13" fill="none" stroke="url(#potGold)" strokeWidth="6" strokeLinecap="round" />
+      <path d="M82 20h13a13 13 0 0 1-13 13" fill="none" stroke="url(#potGold)" strokeWidth="6" strokeLinecap="round" />
 
-        {/* the pot level, rising on mount */}
-        <g clipPath="url(#cupBowl)">
-          <rect className="cup-level" x="26" y="12" width="44" height="44" fill="url(#cupFill)" opacity="0.95" />
-        </g>
+      {/* bowl */}
+      <path d="M22 14h60v30a30 30 0 0 1-60 0V14Z" fill="url(#potGold)" />
 
-        {/* rim, stem, base */}
-        <rect x="24" y="8" width="48" height="6" rx="3" fill="url(#cupGold)" />
-        <rect x="43" y="56" width="10" height="18" fill="url(#cupGold)" />
-        <rect x="32" y="74" width="32" height="7" rx="3" fill="url(#cupGold)" />
-        <rect x="26" y="83" width="44" height="9" rx="4" fill="url(#cupGold)" />
+      {/* the pot level, rising on mount */}
+      <g clipPath="url(#potBowl)">
+        <rect className="pot-level" x="22" y="14" width="60" height="60" fill="url(#potFill)" opacity="0.92" />
+      </g>
 
-        {/* shine sweeping across */}
-        <rect className="cup-shine" x="-30" y="0" width="26" height="112" fill="url(#cupShine)" />
-      </svg>
-    </div>
+      {/* the FloGolf mark on the face of the cup */}
+      <g clipPath="url(#potLogo)">
+        <image href="/logo.png" x="38" y="22" width="28" height="28" preserveAspectRatio="xMidYMid slice" />
+      </g>
+      <rect x="38" y="22" width="28" height="28" rx="7" fill="none" stroke="#8a5f10" strokeOpacity="0.5" strokeWidth="1.5" />
+
+      {/* rim, stem, base */}
+      <rect x="19" y="9" width="66" height="7" rx="3.5" fill="url(#potGold)" />
+      <rect x="46" y="74" width="12" height="20" fill="url(#potGold)" />
+      <rect x="34" y="94" width="36" height="8" rx="3" fill="url(#potGold)" />
+      <rect x="26" y="104" width="52" height="11" rx="5" fill="url(#potGold)" />
+
+      {/* shine sweeping across */}
+      <rect className="pot-shine" x="-34" y="0" width="30" height="124" fill="url(#potShine)" />
+    </svg>
   );
 }
