@@ -3,39 +3,8 @@ import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { photoUrl } from "@/lib/data";
 import type { Golfer } from "@/lib/types";
+import { rankPlaces } from "@/lib/podium";
 import type { SeasonRow } from "@/lib/match-data";
-
-type Place = {
-  rank: number;
-  points: number;
-  golferIds: string[];
-};
-
-/**
- * Groups players on equal points and assigns competition ranks.
- *
- * Ties consume the places below them, the way a podium actually works: two
- * players sharing gold means there is no silver, and the next player takes
- * bronze. An empty block is therefore correct rather than missing data.
- */
-function placesFrom(rows: SeasonRow[]): Map<number, Place> {
-  const byPoints = new Map<number, string[]>();
-  for (const row of rows) {
-    if (!byPoints.has(row.points)) byPoints.set(row.points, []);
-    byPoints.get(row.points)!.push(row.golferId);
-  }
-
-  const places = new Map<number, Place>();
-  let rank = 1;
-
-  for (const points of [...byPoints.keys()].sort((a, b) => b - a)) {
-    const golferIds = byPoints.get(points)!;
-    if (rank <= 3) places.set(rank, { rank, points, golferIds });
-    rank += golferIds.length;
-    if (rank > 3) break;
-  }
-  return places;
-}
 
 /** Visual order, not rank order: the winner sits centre on the tallest block. */
 const BLOCKS = [
@@ -51,7 +20,7 @@ export function CupPodium({
   golfers: Golfer[];
 }) {
   const byId = new Map(golfers.map((g) => [g.id, g]));
-  const places = placesFrom(rows);
+  const places = rankPlaces(rows);
 
   if (places.size === 0) {
     return (

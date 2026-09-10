@@ -123,3 +123,36 @@ input[type="range"]::-moz-range-thumb {
 @media (prefers-reduced-motion: reduce) {
   .podium-block { animation: none; transform: none; }
 }
+
+/* Golfer tiles: category detail folds away until the tile is hovered or
+   focused. Devices without hover keep it open, because tapping is not
+   hovering and losing the ratings entirely on a phone is worse than a
+   taller card. */
+@media (hover: hover) {
+  .card-details {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.28s ease, opacity 0.2s ease, margin-top 0.28s ease;
+  }
+  .group:hover .card-details,
+  .group:focus-within .card-details {
+    max-height: 16rem;
+    opacity: 1;
+  }
+}
+
+/* Medal chip on the top three. A slow sheen, nothing that jumps. */
+@keyframes medal-sheen {
+  0%, 70%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0); }
+  85%           { box-shadow: 0 0 10px 2px rgb(255 255 255 / 0.55); }
+}
+
+.medal-chip {
+  animation: medal-sheen 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-details { transition: none; }
+  .medal-chip { animation: none; }
+}

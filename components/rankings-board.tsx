@@ -4,49 +4,23 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
-import { displayName, sortGolfers } from "@/lib/scoring";
+import { displayName } from "@/lib/scoring";
+import { MEDAL, medalByGolfer } from "@/lib/podium";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
 
-/** golferId -> season figures. Absent means they have not played a round. */
 export type SeasonByGolfer = Record<
   string,
   { rounds: number; points: number; dollars: number }
 >;
 
-/** Points and winnings, sized to sit inside a card without shouting. */
-function SeasonLine({ season }: { season?: { rounds: number; points: number; dollars: number } }) {
-  if (!season || season.rounds === 0) return null;
-
-  const tone = (n: number) =>
-    n > 0 ? "text-fairway-600 dark:text-fairway-300"
-      : n < 0 ? "text-flag-500"
-        : "text-muted";
-
-  return (
-    <p className="mt-0.5 text-xs">
-      {/* Trophy stands in for the plus sign. A minus is kept where it exists,
-          since dropping it would turn a loss into a gain. */}
-      <span className={`inline-flex items-center gap-1 font-semibold tabular-nums ${tone(season.points)}`}>
-        <TrophyIcon className="h-3 w-3 shrink-0" />
-        {season.points.toFixed(1)} pts
-      </span>
-      <span className="text-muted"> · </span>
-      <span className={`font-semibold tabular-nums ${tone(season.dollars)}`}>
-        {season.dollars > 0 ? "+" : season.dollars < 0 ? "-" : ""}
-        ${Math.abs(season.dollars).toFixed(2)}
-      </span>
-    </p>
-  );
-}
+/** The two season sorts sit alongside Overall and the rated categories. */
+const POINTS = "points";
+const MONEY = "money";
 
 export function RankingsBoard({
-  golfers,
-  characteristics,
-  ratedGolferIds,
-  myGolferId,
-  season,
+  golfers, characteristics, ratedGolferIds, myGolferId, season,
 }: {
   golfers: BoardGolfer[];
   characteristics: Characteristic[];
@@ -54,30 +28,53 @@ export function RankingsBoard({
   myGolferId: string | null;
   season: SeasonByGolfer;
 }) {
-  const [sortBy, setSortBy] = useState("overall");
+  const [sortBy, setSortBy] = useState<string>(POINTS);
   const rated = useMemo(() => new Set(ratedGolferIds), [ratedGolferIds]);
 
-  const sorted = useMemo(
-    () => sortGolfers(golfers, sortBy) as BoardGolfer[],
-    [golfers, sortBy],
+  // Medals follow the FLO Cup standing, not whatever the board is sorted by.
+  // A gold medal for Putting would mean nothing.
+  const medals = useMemo(
+    () =>
+      medalByGolfer(
+        Object.entries(season)
+          .filter(([, s]) => s.rounds > 0)
+          .map(([golferId, s]) => ({ golferId, points: s.points })),
+      ),
+    [season],
   );
 
-  const sortLabel =
-    sortBy === "overall"
-      ? "Overall"
-      : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
+  const sorted = useMemo(() => {
+    const value = (g: BoardGolfer): number | null => {
+      if (sortBy === POINTS) return season[g.id]?.rounds ? season[g.id].points : null;
+      if (sortBy === MONEY) return season[g.id]?.rounds ? season[g.id].dollars : null;
+      if (sortBy === "overall") return g.overall;
+      return g.scores[sortBy] ?? null;
+    };
 
-  const unrated = sorted.filter(
-    (g) => !rated.has(g.id) && g.id !== myGolferId,
-  ).length;
+    return [...golfers].sort((a, b) => {
+      const av = value(a);
+      const bv = value(b);
+      // Anyone without a figure sinks to the bottom rather than sorting as 0.
+      if (av === null) return bv === null ? displayName(a).localeCompare(displayName(b)) : 1;
+      if (bv === null) return -1;
+      if (bv !== av) return bv - av;
+      return displayName(a).localeCompare(displayName(b));
+    });
+  }, [golfers, sortBy, season]);
+
+  const sortLabel =
+    sortBy === POINTS ? "FLO Cup points"
+      : sortBy === MONEY ? "Money"
+        : sortBy === "overall" ? "Overall"
+          : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
+
+  const unrated = sorted.filter((g) => !rated.has(g.id) && g.id !== myGolferId).length;
 
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Golfer Rating
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Golfers</h1>
           <p className="mt-1 text-sm text-muted">
             {unrated > 0
               ? `${unrated} ${unrated === 1 ? "golfer" : "golfers"} still waiting on your rating.`
@@ -92,11 +89,11 @@ export function RankingsBoard({
             onChange={(event) => setSortBy(event.target.value)}
             className="rounded-lg border border-line bg-raised px-3 py-2 text-sm font-medium outline-none transition focus:border-fairway-400"
           >
-            <option value="overall">Overall</option>
+            <option value={POINTS}>FLO Cup points</option>
+            <option value={MONEY}>Money</option>
+            <option value="overall">Overall rating</option>
             {characteristics.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
+              <option key={c.id} value={c.id}>{c.label}</option>
             ))}
           </select>
         </label>
@@ -116,6 +113,7 @@ export function RankingsBoard({
               hasRated={rated.has(golfer.id)}
               isSelf={golfer.id === myGolferId}
               season={season[golfer.id]}
+              medal={medals[golfer.id]}
             />
           ))}
         </ul>
@@ -125,78 +123,105 @@ export function RankingsBoard({
 }
 
 function GolferCard({
-  golfer,
-  characteristics,
-  sortBy,
-  sortLabel,
-  hasRated,
-  isSelf,
-  season,
+  golfer, characteristics, sortBy, sortLabel, hasRated, isSelf, season, medal,
 }: {
   golfer: BoardGolfer;
-  season?: { rounds: number; points: number; dollars: number };
   characteristics: Characteristic[];
   sortBy: string;
   sortLabel: string;
   hasRated: boolean;
   isSelf: boolean;
+  season?: { rounds: number; points: number; dollars: number };
+  medal?: 1 | 2 | 3;
 }) {
+  const played = (season?.rounds ?? 0) > 0;
+  const money = season?.dollars ?? 0;
+  const points = season?.points ?? 0;
+
+  // What the current sort is ranking on, shown large so the ordering is
+  // legible rather than mysterious.
   const headline =
-    sortBy === "overall" ? golfer.overall : golfer.scores[sortBy];
+    sortBy === POINTS ? (played ? points.toFixed(1) : "—")
+      : sortBy === MONEY ? (played ? `$${Math.abs(money).toFixed(0)}` : "—")
+        : sortBy === "overall" ? (golfer.overall ?? "—")
+          : (golfer.scores[sortBy] ?? "—");
+
+  const tone = (n: number) =>
+    n > 0 ? "text-fairway-600 dark:text-fairway-300"
+      : n < 0 ? "text-flag-500" : "text-muted";
 
   return (
-    <li className="flex flex-col rounded-2xl border border-line bg-raised p-5 shadow-sm transition hover:shadow-md">
+    <li className="group flex flex-col rounded-2xl border border-line bg-raised p-5 shadow-sm transition hover:shadow-md focus-within:shadow-md">
       <div className="flex items-start gap-4">
-        <GolferAvatar
-          name={displayName(golfer)}
-          url={golfer.photo}
-          size="md"
-        />
+        <div className="relative shrink-0">
+          <div className={medal ? `rounded-full ring-4 ${MEDAL[medal].ring}` : ""}>
+            <GolferAvatar name={displayName(golfer)} url={golfer.photo} size="lg" />
+          </div>
+          {medal && (
+            <span
+              className={`medal-chip absolute -right-1 -top-1 flex h-7 w-7 items-center justify-center rounded-full text-[10px] font-bold ring-2 ring-raised ${MEDAL[medal].chip}`}
+              title={`${MEDAL[medal].label} in the FLO Cup`}
+            >
+              {MEDAL[medal].label}
+            </span>
+          )}
+        </div>
 
         <div className="min-w-0 flex-1">
           <Link
             href={`/golfer/${golfer.id}`}
-            className="block truncate font-semibold hover:underline"
+            className="block truncate text-lg font-semibold hover:underline"
           >
             {displayName(golfer)}
           </Link>
+
           <p className="mt-0.5 text-xs text-muted">
             {golfer.ratingCount === 0
               ? "No ratings yet"
               : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"}`}
+            {played && ` · ${season!.rounds} ${season!.rounds === 1 ? "round" : "rounds"}`}
           </p>
-          <SeasonLine season={season} />
+
+          {played && (
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <span className={`inline-flex items-center gap-1 text-sm font-semibold tabular-nums ${tone(points)}`}>
+                <TrophyIcon className="h-3.5 w-3.5 shrink-0" />
+                {points.toFixed(1)}
+              </span>
+              <span className={`text-sm font-semibold tabular-nums ${tone(money)}`}>
+                {money > 0 ? "+" : money < 0 ? "-" : ""}${Math.abs(money).toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="text-right">
-          <div className="text-2xl font-semibold tabular-nums">
-            {headline === null || headline === undefined ? "—" : headline}
-          </div>
+          <div className="text-3xl font-semibold tabular-nums">{headline}</div>
           <div className="text-[11px] uppercase tracking-wide text-muted">
             {sortLabel}
           </div>
         </div>
       </div>
 
-      <dl className="mt-4 space-y-1.5">
+      {/*
+        Category detail folds away until the tile is hovered or focused.
+        Devices without hover keep it open, since tapping is not hovering and
+        losing the ratings entirely on a phone would be worse than a taller
+        card.
+      */}
+      <dl className="card-details mt-0 space-y-1.5 group-hover:mt-4 group-focus-within:mt-4">
         {characteristics.map((c) => {
           const score = golfer.scores[c.id];
           const highlighted = c.id === sortBy;
           return (
             <div key={c.id} className="flex items-center gap-3 text-sm">
-              <dt
-                className={`w-24 shrink-0 truncate text-xs ${
-                  highlighted ? "font-semibold text-ink" : "text-muted"
-                }`}
-              >
+              <dt className={`w-24 shrink-0 truncate text-xs ${highlighted ? "font-semibold text-ink" : "text-muted"}`}>
                 {c.label}
               </dt>
               <dd className="flex flex-1 items-center gap-2">
                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-line">
                   <div
-                    className={`h-full rounded-full ${
-                      highlighted ? "bg-fairway-600" : "bg-fairway-400"
-                    }`}
+                    className={`h-full rounded-full ${highlighted ? "bg-fairway-600" : "bg-fairway-400"}`}
                     style={{ width: `${score ?? 0}%` }}
                   />
                 </div>
@@ -214,9 +239,7 @@ function GolferCard({
           <Link
             href={`/golfer/${golfer.id}`}
             className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-              golfer.photo
-                ? "text-muted hover:text-ink"
-                : "text-fairway-600 dark:text-fairway-300"
+              golfer.photo ? "text-muted hover:text-ink" : "text-fairway-600 dark:text-fairway-300"
             }`}
           >
             {golfer.photo ? "This is you" : "This is you. Add your photo"}
@@ -226,9 +249,7 @@ function GolferCard({
           <Link
             href={`/golfer/${golfer.id}`}
             className={`inline-flex items-center gap-1.5 text-sm font-medium ${
-              hasRated
-                ? "text-muted hover:text-ink"
-                : "text-fairway-600 dark:text-fairway-300"
+              hasRated ? "text-muted hover:text-ink" : "text-fairway-600 dark:text-fairway-300"
             }`}
           >
             {hasRated ? "Update your rating" : "Rate this golfer"}
