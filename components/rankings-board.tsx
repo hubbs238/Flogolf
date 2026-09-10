@@ -138,13 +138,12 @@ function GolferCard({
   const money = season?.dollars ?? 0;
   const points = season?.points ?? 0;
 
-  // What the current sort is ranking on, shown large so the ordering is
-  // legible rather than mysterious.
-  const headline =
-    sortBy === POINTS ? (played ? points.toFixed(1) : "—")
-      : sortBy === MONEY ? (played ? `$${Math.abs(money).toFixed(0)}` : "—")
-        : sortBy === "overall" ? (golfer.overall ?? "—")
-          : (golfer.scores[sortBy] ?? "—");
+  // Points, money and overall all have their own chip below, so repeating
+  // one of them large is just the same number twice. The headline is only
+  // worth the space when the board is sorted by a rated category, which is
+  // the one value the chips do not carry.
+  const sortedByCategory =
+    sortBy !== POINTS && sortBy !== MONEY && sortBy !== "overall";
 
   const tone = (n: number) =>
     n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -183,12 +182,16 @@ function GolferCard({
           </p>
         </div>
 
-        <div className="text-right">
-          <div className="text-3xl font-semibold tabular-nums">{headline}</div>
-          <div className="text-[11px] uppercase tracking-wide text-muted">
-            {sortLabel}
+        {sortedByCategory && (
+          <div className="text-right">
+            <div className="text-3xl font-semibold tabular-nums">
+              {golfer.scores[sortBy] ?? "—"}
+            </div>
+            <div className="text-[11px] uppercase tracking-wide text-muted">
+              {sortLabel}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/*
