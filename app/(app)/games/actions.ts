@@ -9,10 +9,25 @@ import type { TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
-function revalidateMatch(matchId: string) {
+/**
+ * Clears every page that shows money or points.
+ *
+ * All of it is derived on read, so the arithmetic is never stale. The cache
+ * is a different matter: a rate change on a finished round moves the season
+ * standings and the figures on every golfer card, and clearing only the
+ * round page leaves those serving a payload from before the change. The
+ * numbers would be right on reload and wrong on navigation, which is the
+ * worst kind of wrong.
+ */
+function revalidateMoney(matchId?: string) {
   revalidatePath("/games");
-  revalidatePath(`/games/${matchId}`);
+  if (matchId) revalidatePath(`/games/${matchId}`);
+  revalidatePath("/standings");
+  revalidatePath("/");
+  revalidatePath("/golfer/[id]", "page");
 }
+
+const revalidateMatch = revalidateMoney;
 
 export async function createMatch(input: {
   name: string;
@@ -76,7 +91,7 @@ export async function createMatch(input: {
     ),
   );
 
-  revalidatePath("/games");
+  revalidateMoney();
   redirect(`/games/${match.id}`);
 }
 
@@ -474,7 +489,7 @@ export async function deleteMatch(matchId: string): Promise<ActionResult> {
   const supabase = await createClient();
   const { error } = await supabase.from("matches").delete().eq("id", matchId);
   if (error) return { ok: false, error: error.message };
-  revalidatePath("/games");
+  revalidateMoney();
   redirect("/games");
 }
 
@@ -554,7 +569,7 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
     if (rows.length) await supabase.from("match_players").insert(rows);
   }
 
-  revalidatePath("/games");
+  revalidateMoney();
   redirect(`/games/${match.id}`);
 }
 

@@ -306,6 +306,50 @@ console.log("\n=== settlement includes every FB18 segment ===");
     money.find((m) => m.golferId === "a1")!.cupDollars, 100);
 }
 
+console.log("\n=== changing a rate moves every player's money ===");
+{
+  //   A: front -9, back -1, total -10  -> wins front and the eighteen
+  //   B: front  0, back -2, total  -2  -> wins the back
+  const A = Array.from({ length: 18 }, (_, i) => (i < 9 ? -1 : 0)); A[9] = -1;
+  const B = Array.from({ length: 18 }, () => 0); B[9] = -1; B[10] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+
+  const { results } = scoreFb18({
+    teamIds: ["A", "B"], scores: s,
+    payouts: { front: { 1: 1, 2: -1 }, back: { 1: 1, 2: -1 }, total: { 1: 1, 2: -1 } },
+  });
+
+  const rosters = { A: ["a1", "a2", "a3", "a4"], B: ["b1", "b2", "b3", "b4"] };
+
+  const settle = (rates: { front: number; back: number; total: number }) => {
+    const fb = fb18DollarsByTeam(results, rates);
+    return awardMoney({
+      dollarsPerPlayerByTeam: { A: 100 + (fb.A ?? 0), B: -100 + (fb.B ?? 0) },
+      cupDollarsPerPlayerByTeam: { A: 100, B: -100 },
+      rosters,
+    });
+  };
+
+  // Before: every segment at $20. A takes front and eighteen, drops the back.
+  const before = settle({ front: 20, back: 20, total: 20 });
+  check("before: each A player on 120",
+    before.filter((m) => m.teamId === "A").map((m) => m.dollars), [120, 120, 120, 120]);
+
+  // After: the eighteen revalued to $80, the nines untouched.
+  const after = settle({ front: 20, back: 20, total: 80 });
+  check("after: each A player on 180",
+    after.filter((m) => m.teamId === "A").map((m) => m.dollars), [180, 180, 180, 180]);
+  check("and every B player moves the other way",
+    after.filter((m) => m.teamId === "B").map((m) => m.dollars), [-180, -180, -180, -180]);
+  check("all four teammates move together, nobody left behind",
+    new Set(after.filter((m) => m.teamId === "A").map((m) => m.dollars)).size, 1);
+
+  // Cup points are untouched: FB18 money never fed them.
+  check("Cup figure unchanged by an FB18 rate change",
+    after.find((m) => m.golferId === "a1")!.cupDollars,
+    before.find((m) => m.golferId === "a1")!.cupDollars);
+}
+
 console.log("\n=== points earned in a round ===");
 {
   // p1..p4 won $200 of Cup money and took the best eighteen.
