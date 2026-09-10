@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
-import { BONUS_MONEY_NOTE, InfoIcon } from "./info-icon";
 import { displayName } from "@/lib/scoring";
 import { MEDAL, medalByGolfer } from "@/lib/podium";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
@@ -18,6 +17,7 @@ export type SeasonByGolfer = Record<
 
 /** Season sorts, sitting alongside Overall and the rated categories. */
 const POINTS = "points";
+const WINNINGS = "winnings";
 const MATCH_MONEY = "matchMoney";
 const BONUS_MONEY = "bonusMoney";
 
@@ -49,6 +49,7 @@ export function RankingsBoard({
     const value = (g: BoardGolfer): number | null => {
       const played = season[g.id]?.rounds ? season[g.id] : null;
       if (sortBy === POINTS) return played ? played.points : null;
+      if (sortBy === WINNINGS) return played ? played.matchMoney + played.bonusMoney : null;
       if (sortBy === MATCH_MONEY) return played ? played.matchMoney : null;
       if (sortBy === BONUS_MONEY) return played ? played.bonusMoney : null;
       if (sortBy === "overall") return g.overall;
@@ -68,10 +69,11 @@ export function RankingsBoard({
 
   const sortLabel =
     sortBy === POINTS ? "Total Points"
-      : sortBy === MATCH_MONEY ? "Match Money"
-        : sortBy === BONUS_MONEY ? "Bonus Money"
-          : sortBy === "overall" ? "Overall"
-            : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
+      : sortBy === WINNINGS ? "Winnings"
+        : sortBy === MATCH_MONEY ? "Match Money"
+          : sortBy === BONUS_MONEY ? "Bonus Money"
+            : sortBy === "overall" ? "Overall"
+              : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
 
   const unrated = sorted.filter((g) => !rated.has(g.id) && g.id !== myGolferId).length;
 
@@ -95,6 +97,7 @@ export function RankingsBoard({
             className="rounded-lg border border-line bg-raised px-3 py-2 text-sm font-medium outline-none transition focus:border-fairway-400"
           >
             <option value={POINTS}>Total Points</option>
+            <option value={WINNINGS}>Winnings</option>
             <option value={MATCH_MONEY}>Match Money</option>
             <option value={BONUS_MONEY}>Bonus Money</option>
             <option value="overall">Overall rating</option>
@@ -143,6 +146,9 @@ function GolferCard({
   const played = (season?.rounds ?? 0) > 0;
   const matchMoney = season?.matchMoney ?? 0;
   const bonusMoney = season?.bonusMoney ?? 0;
+  // The tile carries one combined figure. The split lives on the FLO Cup
+  // standings and the golfer's own page, where there is room to explain it.
+  const winnings = matchMoney + bonusMoney;
   const points = season?.points ?? 0;
 
   // Points, money and overall all have their own chip below, so repeating
@@ -154,10 +160,11 @@ function GolferCard({
 
   const headline =
     sortBy === POINTS ? (played ? points.toFixed(1) : "—")
-      : sortBy === MATCH_MONEY ? (played ? cash(matchMoney) : "—")
-        : sortBy === BONUS_MONEY ? (played ? cash(bonusMoney) : "—")
-          : sortBy === "overall" ? (golfer.overall ?? "—")
-            : (golfer.scores[sortBy] ?? "—");
+      : sortBy === WINNINGS ? (played ? cash(winnings) : "—")
+        : sortBy === MATCH_MONEY ? (played ? cash(matchMoney) : "—")
+          : sortBy === BONUS_MONEY ? (played ? cash(bonusMoney) : "—")
+            : sortBy === "overall" ? (golfer.overall ?? "—")
+              : (golfer.scores[sortBy] ?? "—");
 
   const tone = (n: number) =>
     n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -226,21 +233,11 @@ function GolferCard({
         </span>
 
         <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
-          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(matchMoney) : "text-muted"}`}>
-            {played ? cash(matchMoney) : "—"}
+          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(winnings) : "text-muted"}`}>
+            {played ? cash(winnings) : "—"}
           </span>
           <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Match Money
-          </span>
-        </span>
-
-        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
-          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(bonusMoney) : "text-muted"}`}>
-            {played ? cash(bonusMoney) : "—"}
-          </span>
-          <span className="inline-flex items-center text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Bonus Money
-            <InfoIcon text={BONUS_MONEY_NOTE} />
+            Winnings
           </span>
         </span>
       </div>
