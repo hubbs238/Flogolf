@@ -19,7 +19,7 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
       className={`relative isolate overflow-hidden rounded-2xl border border-amber-400/30 bg-gradient-to-br from-fairway-900 via-fairway-800 to-fairway-900 text-white shadow-sm ${
         big ? "mb-8 px-6 py-7 sm:px-10 sm:py-9" : "mb-6 px-5 py-5 sm:px-7 sm:py-6"
       }`}
-      aria-label={`Major: ${major.name}`}
+      aria-label={`Major Event: ${major.name}`}
     >
       {/* The flash: a wide gold light crossing the card, behind the words. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
@@ -52,7 +52,7 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
                 big ? "text-xs" : "text-[11px]"
               }`}
             >
-              Major
+              Major Event
             </span>
             <span aria-hidden="true" className="text-amber-300/40">
               &middot;
