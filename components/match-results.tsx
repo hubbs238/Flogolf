@@ -37,7 +37,7 @@ function Units({ n }: { n: number }) {
 
 export function MatchResults({
   match, teams, segments, fb18, unitsByTeam, money, teamMoney, duesPerPlayer,
-  bonus, points, segmentRates, golfers, isAdmin,
+  bonus, points, segmentRates, golfers, isAdmin, showMoney,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -60,6 +60,8 @@ export function MatchResults({
   segmentRates: Record<"front" | "back" | "total", number>;
   golfers: Golfer[];
   isAdmin: boolean;
+  /** False for players, and for an admin previewing the player view. */
+  showMoney: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -223,8 +225,8 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
-            All three pay money. None of it feeds FLO Cup points, since the
-            bonus points already reward the same results.
+            {showMoney && " All three pay money."}
+            {" None of it feeds FLO Cup points, since the bonus points already reward the same results."}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -232,9 +234,11 @@ export function MatchResults({
                 <div className="mb-2 flex items-baseline justify-between">
                   <h4 className="font-semibold capitalize">
                     {r.segment === "total" ? "All 18" : `${r.segment} nine`}
-                    <span className="ml-2 text-xs font-normal text-muted">
-                      ${segmentRates[r.segment]}/unit
-                    </span>
+                    {showMoney && (
+                      <span className="ml-2 text-xs font-normal text-muted">
+                        ${segmentRates[r.segment]}/unit
+                      </span>
+                    )}
                   </h4>
                   {r.status === "pending" && <span className="text-xs text-muted">in progress</span>}
                 </div>
@@ -254,11 +258,13 @@ export function MatchResults({
                           </span>
                           {/* The cash figure, so this panel reconciles against
                               the settlement table below it. */}
-                          <span className={`w-16 shrink-0 text-right text-xs tabular-nums ${
-                            cash > 0 ? "text-fairway-600 dark:text-fairway-300"
-                              : cash < 0 ? "text-flag-500" : "text-muted"}`}>
-                            {award ? `${cash > 0 ? "+" : cash < 0 ? "-" : ""}$${Math.abs(cash).toFixed(2)}` : "—"}
-                          </span>
+                          {showMoney && (
+                            <span className={`w-16 shrink-0 text-right text-xs tabular-nums ${
+                              cash > 0 ? "text-fairway-600 dark:text-fairway-300"
+                                : cash < 0 ? "text-flag-500" : "text-muted"}`}>
+                              {award ? `${cash > 0 ? "+" : cash < 0 ? "-" : ""}$${Math.abs(cash).toFixed(2)}` : "—"}
+                            </span>
+                          )}
                         </li>
                       );
                     })}
@@ -315,9 +321,10 @@ export function MatchResults({
       <section>
         <h3 className="mb-1 font-semibold">Where it stands</h3>
         <p className="mb-3 text-sm text-muted">
-          A unit pays its dollar value to every player on the roster, so the
-          team total is the per player figure multiplied by the roster.
-          {anyDues &&
+          {showMoney
+            ? "A unit pays its dollar value to every player on the roster, so the team total is the per player figure multiplied by the roster."
+            : "Units won and lost across the six three-hole matches and the side game."}
+          {showMoney && anyDues &&
             ` These are winnings before dues: $${dues.toFixed(2)} a player` +
             " comes off what anyone actually collects."}
         </p>
@@ -326,9 +333,15 @@ export function MatchResults({
             <thead>
               <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                 <th className="p-3 text-left font-medium">Team</th>
-                <th className="p-3 text-right font-medium">Units</th>
-                <th className="p-3 text-right font-medium text-ink">Each player</th>
-                <th className="p-3 text-right font-medium">Team total</th>
+                <th className={`p-3 text-right font-medium ${showMoney ? "" : "text-ink"}`}>
+                  Units
+                </th>
+                {showMoney && (
+                  <>
+                    <th className="p-3 text-right font-medium text-ink">Each player</th>
+                    <th className="p-3 text-right font-medium">Team total</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -342,12 +355,16 @@ export function MatchResults({
                     <tr key={t.id} className="border-b border-line last:border-0">
                       <td className="p-3 font-medium">{t.name}</td>
                       <td className="p-3 text-right"><Units n={u} /></td>
-                      <td className="p-3 text-right font-semibold tabular-nums">
-                        {per >= 0 ? "+" : "-"}${Math.abs(per).toFixed(2)}
-                      </td>
-                      <td className="p-3 text-right tabular-nums text-muted">
-                        {teamTotal >= 0 ? "+" : "-"}${Math.abs(teamTotal).toFixed(2)}
-                      </td>
+                      {showMoney && (
+                        <>
+                          <td className="p-3 text-right font-semibold tabular-nums">
+                            {per >= 0 ? "+" : "-"}${Math.abs(per).toFixed(2)}
+                          </td>
+                          <td className="p-3 text-right tabular-nums text-muted">
+                            {teamTotal >= 0 ? "+" : "-"}${Math.abs(teamTotal).toFixed(2)}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   );
                 })}
@@ -360,10 +377,11 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            Match Points come from Match Money, a dollar a point, with a losing
-            round scoring 0 rather than going negative. Bonus Money earns
-            nothing here. Bonus Points are 10 for the lowest front nine, 10 for
-            the lowest back nine and 15 for the lowest eighteen.
+            {showMoney
+              ? "Match Points come from Match Money, a dollar a point, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here."
+              : "Match Points come from the six three-hole matches, with a losing round scoring 0 rather than going negative."}
+            {" "}Bonus Points are 10 for the lowest front nine, 10 for the
+            lowest back nine and 15 for the lowest eighteen.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -410,7 +428,7 @@ export function MatchResults({
         thing about who had a good round without a money column beside them to
         confuse the two.
       */}
-      {isAdmin && money.length > 0 && (
+      {showMoney && money.length > 0 && (
         <section>
           <h3 className="mb-1 font-semibold">Player settlement</h3>
           <p className="mb-3 text-sm text-muted">

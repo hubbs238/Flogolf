@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
+import { getViewMode } from "@/lib/view-mode";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Logo } from "@/components/logo";
+import { PlayerViewBanner } from "@/components/view-as-toggle";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const session = await requireUser();
   const isAdmin = session.profile?.is_admin ?? false;
+  const view = await getViewMode(isAdmin);
 
   return (
     <>
@@ -43,6 +46,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
             <SignOutButton />
           </div>
         </div>
+
+        {/* Stays with the admin onto pages that have no money of their own. */}
+        {view.asPlayer && <PlayerViewBanner />}
       </header>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8">{children}</main>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getViewMode } from "@/lib/view-mode";
 import { createClient } from "@/lib/supabase/server";
 import { computeMatch, getMatchBundle, getPoolGolfers } from "@/lib/match-data";
 import { MatchSetup } from "@/components/match-setup";
@@ -11,6 +12,7 @@ import { MatchAdminBar } from "@/components/match-admin-bar";
 import { MatchStakesEditor } from "@/components/match-stakes-editor";
 import { EditableTitle } from "@/components/editable-title";
 import { ScorecardUpload } from "@/components/scorecard-upload";
+import { ViewAsToggle } from "@/components/view-as-toggle";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
 
@@ -22,6 +24,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
   if (!bundle) notFound();
 
   const isAdmin = session.profile?.is_admin ?? false;
+  const view = await getViewMode(isAdmin);
   const golfers = await getPoolGolfers();
   const computed = computeMatch(bundle);
   const { match, teams, players, scores } = bundle;
@@ -50,6 +53,8 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
   return (
     <div>
+      {isAdmin && <ViewAsToggle asPlayer={view.asPlayer} />}
+
       <Link href="/games" className="mb-6 inline-block text-sm text-muted transition hover:text-ink">
         ← All rounds
       </Link>
@@ -61,7 +66,9 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             {new Date(match.match_date).toLocaleDateString()}
             {match.course ? ` · ${match.course}` : ""} · {match.team_count} teams of{" "}
             {match.roster_size}
-            {Number(match.dollars_per_unit) > 0 ? ` · $${match.dollars_per_unit} a unit` : ""}
+            {view.showMoney && Number(match.dollars_per_unit) > 0
+              ? ` · $${match.dollars_per_unit} a unit`
+              : ""}
           </p>
         </div>
         {isAdmin && match.status !== "setup" && <MatchAdminBar match={match} />}
@@ -88,7 +95,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
       {(match.status === "in_progress" || match.status === "complete") && (
         <div className="space-y-10">
-          {isAdmin && (
+          {view.showMoney && (
             <MatchStakesEditor
               match={match} teams={teams}
               payouts={bundle.payouts} fb18Payouts={bundle.fb18Payouts}
@@ -102,21 +109,30 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             isAdmin={isAdmin} myUserId={session.userId}
           />
           {/*
-            Settlement is admin only. The rows are dropped here rather than
-            hidden in the browser, so a player's page never carries a table of
-            who owes what. It is not a secret, though: anyone who can read the
-            scorecard can work the same figures out. The point is to keep money
-            away from the points tables, not to lock it up.
+            Every computed dollar figure is dropped here rather than hidden in
+            the browser, so a player's page carries no settlement rows, no team
+            winnings and no rates.
+
+            It is not a lock, and nothing here pretends to be one. The round's
+            own row still carries its stake, and any approved player can query
+            the scores through PostgREST and do the arithmetic themselves. The
+            point is to keep money away from the points tables, which is what
+            was confusing people.
           */}
           <MatchResults
             match={match} teams={teams}
             segments={computed.main.segments} fb18={computed.fb18.results}
             unitsByTeam={computed.unitsByTeam}
-            money={isAdmin ? computed.money : []}
-            teamMoney={computed.teamMoney} duesPerPlayer={computed.duesPerPlayer}
+            money={view.showMoney ? computed.money : []}
+            teamMoney={view.showMoney ? computed.teamMoney : {}}
+            duesPerPlayer={view.showMoney ? computed.duesPerPlayer : 0}
             bonus={computed.bonus} points={computed.points}
-            segmentRates={computed.rates.segment}
-            golfers={golfers} isAdmin={isAdmin}
+            segmentRates={
+              view.showMoney
+                ? computed.rates.segment
+                : { front: 0, back: 0, total: 0 }
+            }
+            golfers={golfers} isAdmin={isAdmin} showMoney={view.showMoney}
           />
         </div>
       )}

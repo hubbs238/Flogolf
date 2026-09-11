@@ -18,10 +18,17 @@ const STATUS: Record<Match["status"], { label: string; className: string }> = {
 
 export function GamesList({
   matches,
-  isAdmin,
+  isAdmin, showMoney,
 }: {
   matches: Match[];
   isAdmin: boolean;
+  /**
+   * False for players, and for an admin previewing the player view. It governs
+   * money only: the round creation form stays, because an admin previewing the
+   * player view is still an admin and hiding their tools mid-task would help
+   * nobody.
+   */
+  showMoney: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -53,7 +60,7 @@ export function GamesList({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Rounds</h1>
             <p className="mt-1 text-sm text-muted">
-              {isAdmin
+              {showMoney
                 ? "Live scoring, unit payouts, and who owes who."
                 : "Live scoring, the six matches, and where the Cup points landed."}
             </p>
@@ -131,7 +138,9 @@ export function GamesList({
                     <p className="text-xs text-muted">
                       {new Date(m.match_date).toLocaleDateString()}
                       {m.course ? ` · ${m.course}` : ""} · {m.team_count} teams
-                      {Number(m.dollars_per_unit) > 0 ? ` · $${m.dollars_per_unit}/unit` : ""}
+                      {showMoney && Number(m.dollars_per_unit) > 0
+                        ? ` · $${m.dollars_per_unit}/unit`
+                        : ""}
                     </p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS[m.status].className}`}>
@@ -147,7 +156,9 @@ export function GamesList({
       <div className="rounded-2xl border border-line bg-raised p-5">
         <h2 className="font-semibold">Season standings</h2>
         <p className="mt-1 text-sm text-muted">
-          Points, money, and rounds played, per player across every finished round.
+          {showMoney
+            ? "Points, money, and rounds played, per player across every finished round."
+            : "Points and rounds played, per player across every finished round."}
         </p>
         <Link
           href="/standings"

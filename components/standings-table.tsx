@@ -38,12 +38,14 @@ function Money({ n, strong }: { n: number; strong: boolean }) {
 }
 
 export function StandingsTable({
-  rows, golfers, metric, emptyMessage,
+  rows, golfers, metric, emptyMessage, showMoney,
 }: {
   rows: SeasonRow[];
   golfers: Golfer[];
   metric: StandingsMetric;
   emptyMessage: string;
+  /** False for players, and for an admin previewing the player view. */
+  showMoney: boolean;
 }) {
   const byId = new Map(golfers.map((g) => [g.id, g]));
 
@@ -73,8 +75,12 @@ export function StandingsTable({
             <th className="w-12 p-3 text-center font-medium">#</th>
             <th className="p-3 text-left font-medium">Golfer</th>
             <th className="w-24 p-3 text-right font-medium">Rounds</th>
-            <th className="w-32 p-3 text-right font-medium">Match Money</th>
-            <th className="w-32 p-3 text-right font-medium">Bonus Money</th>
+            {showMoney && (
+              <>
+                <th className="w-32 p-3 text-right font-medium">Match Money</th>
+                <th className="w-32 p-3 text-right font-medium">Bonus Money</th>
+              </>
+            )}
             <th className="w-32 p-3 text-right font-medium">Match Points</th>
             <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
             <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
@@ -114,13 +120,17 @@ export function StandingsTable({
                   {row.rounds}
                 </td>
 
-                <td className="p-3 text-right">
-                  <Money n={row.matchMoney} strong={false} />
-                </td>
+                {showMoney && (
+                  <>
+                    <td className="p-3 text-right">
+                      <Money n={row.matchMoney} strong={false} />
+                    </td>
 
-                <td className="p-3 text-right">
-                  <Money n={row.bonusMoney} strong={false} />
-                </td>
+                    <td className="p-3 text-right">
+                      <Money n={row.bonusMoney} strong={false} />
+                    </td>
+                  </>
+                )}
 
                 <td className={`p-3 text-right tabular-nums ${tone(row.pointsFromMoney)}`}>
                   {row.pointsFromMoney > 0 ? "+" : ""}

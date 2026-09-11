@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
+import { getViewMode } from "@/lib/view-mode";
 import { getMyRating, getScoredGolfers, photoUrl } from "@/lib/data";
 import { GolferAvatar } from "@/components/golfer-avatar";
 import { TrophyIcon } from "@/components/trophy-icon";
@@ -9,6 +10,7 @@ import { MyPhotoUpload } from "@/components/my-photo-upload";
 import { displayName } from "@/lib/scoring";
 import { getGolferRounds, getSeasonStandings } from "@/lib/match-data";
 import { GolferRoundHistory } from "@/components/golfer-round-history";
+import { ViewAsToggle } from "@/components/view-as-toggle";
 
 export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) {
   const { id } = await params;
@@ -24,11 +26,13 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
   ]);
   const season = standings.find((r) => r.golferId === golfer.id);
 
+  const view = await getViewMode(session.profile?.is_admin ?? false);
   const isSelf = session.profile?.golfer_id === golfer.id;
   const existing = isSelf ? null : await getMyRating(session.userId, golfer.id);
 
   return (
     <div>
+      {view.isAdmin && <ViewAsToggle asPlayer={view.asPlayer} />}
       <Link
         href="/"
         className="mb-6 inline-block text-sm text-muted transition hover:text-ink"
@@ -63,21 +67,25 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                     <span className="text-xs font-normal text-muted">Total Points</span>
                   </span>
 
-                  <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
-                    season.matchMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
-                      : season.matchMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                    {season.matchMoney > 0 ? "+" : season.matchMoney < 0 ? "-" : ""}
-                    ${Math.abs(season.matchMoney).toFixed(2)}
-                    <span className="text-xs font-normal text-muted">Match Money</span>
-                  </span>
+                  {view.showMoney && (
+                    <>
+                      <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
+                        season.matchMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
+                          : season.matchMoney < 0 ? "text-flag-500" : "text-muted"}`}>
+                        {season.matchMoney > 0 ? "+" : season.matchMoney < 0 ? "-" : ""}
+                        ${Math.abs(season.matchMoney).toFixed(2)}
+                        <span className="text-xs font-normal text-muted">Match Money</span>
+                      </span>
 
-                  <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
-                    season.bonusMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
-                      : season.bonusMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                    {season.bonusMoney > 0 ? "+" : season.bonusMoney < 0 ? "-" : ""}
-                    ${Math.abs(season.bonusMoney).toFixed(2)}
-                    <span className="text-xs font-normal text-muted">Bonus Money</span>
-                  </span>
+                      <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
+                        season.bonusMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
+                          : season.bonusMoney < 0 ? "text-flag-500" : "text-muted"}`}>
+                        {season.bonusMoney > 0 ? "+" : season.bonusMoney < 0 ? "-" : ""}
+                        ${Math.abs(season.bonusMoney).toFixed(2)}
+                        <span className="text-xs font-normal text-muted">Bonus Money</span>
+                      </span>
+                    </>
+                  )}
 
                   <span className="text-xs text-muted">
                     over {season.rounds} {season.rounds === 1 ? "round" : "rounds"}
@@ -137,7 +145,7 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
       </div>
 
       <div className="mt-10">
-        <GolferRoundHistory rounds={roundHistory} />
+        <GolferRoundHistory rounds={roundHistory} showMoney={view.showMoney} />
       </div>
     </div>
   );

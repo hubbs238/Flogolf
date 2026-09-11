@@ -10,9 +10,14 @@ import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
 
+/** Match and bonus money together. Both absent means nothing to add up. */
+const winningsOf = (s: { matchMoney?: number; bonusMoney?: number }) =>
+  (s.matchMoney ?? 0) + (s.bonusMoney ?? 0);
+
+/** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; matchMoney: number; bonusMoney: number }
+  { rounds: number; points: number; matchMoney?: number; bonusMoney?: number }
 >;
 
 /** Season sorts, sitting alongside Overall and the rated categories. */
@@ -20,17 +25,26 @@ const POINTS = "points";
 const WINNINGS = "winnings";
 const MATCH_MONEY = "matchMoney";
 const BONUS_MONEY = "bonusMoney";
+const MONEY_SORTS = [WINNINGS, MATCH_MONEY, BONUS_MONEY];
 
 export function RankingsBoard({
-  golfers, characteristics, ratedGolferIds, myGolferId, season,
+  golfers, characteristics, ratedGolferIds, myGolferId, season, showMoney,
 }: {
   golfers: BoardGolfer[];
   characteristics: Characteristic[];
   ratedGolferIds: string[];
   myGolferId: string | null;
   season: SeasonByGolfer;
+  /** False for players, and for an admin previewing the player view. */
+  showMoney: boolean;
 }) {
   const [sortBy, setSortBy] = useState<string>(POINTS);
+
+  // An admin can flip to the player view while sorted by Winnings, which
+  // would leave the board ordered by a column that no longer exists. Falling
+  // back to points keeps the order honest, and the choice is remembered, so
+  // flipping back restores it.
+  const sort = !showMoney && MONEY_SORTS.includes(sortBy) ? POINTS : sortBy;
   const rated = useMemo(() => new Set(ratedGolferIds), [ratedGolferIds]);
 
   // Medals follow the FLO Cup standing, not whatever the board is sorted by.
@@ -48,12 +62,12 @@ export function RankingsBoard({
   const sorted = useMemo(() => {
     const value = (g: BoardGolfer): number | null => {
       const played = season[g.id]?.rounds ? season[g.id] : null;
-      if (sortBy === POINTS) return played ? played.points : null;
-      if (sortBy === WINNINGS) return played ? played.matchMoney + played.bonusMoney : null;
-      if (sortBy === MATCH_MONEY) return played ? played.matchMoney : null;
-      if (sortBy === BONUS_MONEY) return played ? played.bonusMoney : null;
-      if (sortBy === "overall") return g.overall;
-      return g.scores[sortBy] ?? null;
+      if (sort === POINTS) return played ? played.points : null;
+      if (sort === WINNINGS) return played ? winningsOf(played) : null;
+      if (sort === MATCH_MONEY) return played ? (played.matchMoney ?? 0) : null;
+      if (sort === BONUS_MONEY) return played ? (played.bonusMoney ?? 0) : null;
+      if (sort === "overall") return g.overall;
+      return g.scores[sort] ?? null;
     };
 
     return [...golfers].sort((a, b) => {
@@ -65,15 +79,15 @@ export function RankingsBoard({
       if (bv !== av) return bv - av;
       return displayName(a).localeCompare(displayName(b));
     });
-  }, [golfers, sortBy, season]);
+  }, [golfers, sort, season]);
 
   const sortLabel =
-    sortBy === POINTS ? "Total Points"
-      : sortBy === WINNINGS ? "Winnings"
-        : sortBy === MATCH_MONEY ? "Match Money"
-          : sortBy === BONUS_MONEY ? "Bonus Money"
-            : sortBy === "overall" ? "Overall"
-              : (characteristics.find((c) => c.id === sortBy)?.label ?? "Overall");
+    sort === POINTS ? "Total Points"
+      : sort === WINNINGS ? "Winnings"
+        : sort === MATCH_MONEY ? "Match Money"
+          : sort === BONUS_MONEY ? "Bonus Money"
+            : sort === "overall" ? "Overall"
+              : (characteristics.find((c) => c.id === sort)?.label ?? "Overall");
 
   const unrated = sorted.filter((g) => !rated.has(g.id) && g.id !== myGolferId).length;
 
@@ -92,14 +106,18 @@ export function RankingsBoard({
         <label className="flex items-center gap-2 text-sm">
           <span className="text-muted">Sort by</span>
           <select
-            value={sortBy}
+            value={sort}
             onChange={(event) => setSortBy(event.target.value)}
             className="rounded-lg border border-line bg-raised px-3 py-2 text-sm font-medium outline-none transition focus:border-fairway-400"
           >
             <option value={POINTS}>Total Points</option>
-            <option value={WINNINGS}>Winnings</option>
-            <option value={MATCH_MONEY}>Match Money</option>
-            <option value={BONUS_MONEY}>Bonus Money</option>
+            {showMoney && (
+              <>
+                <option value={WINNINGS}>Winnings</option>
+                <option value={MATCH_MONEY}>Match Money</option>
+                <option value={BONUS_MONEY}>Bonus Money</option>
+              </>
+            )}
             <option value="overall">Overall rating</option>
             {characteristics.map((c) => (
               <option key={c.id} value={c.id}>{c.label}</option>
@@ -117,8 +135,9 @@ export function RankingsBoard({
               key={golfer.id}
               golfer={golfer}
               characteristics={characteristics}
-              sortBy={sortBy}
+              sortBy={sort}
               sortLabel={sortLabel}
+              showMoney={showMoney}
               hasRated={rated.has(golfer.id)}
               isSelf={golfer.id === myGolferId}
               season={season[golfer.id]}
@@ -133,6 +152,7 @@ export function RankingsBoard({
 
 function GolferCard({
   golfer, characteristics, sortBy, sortLabel, hasRated, isSelf, season, medal,
+  showMoney,
 }: {
   golfer: BoardGolfer;
   characteristics: Characteristic[];
@@ -140,15 +160,16 @@ function GolferCard({
   sortLabel: string;
   hasRated: boolean;
   isSelf: boolean;
-  season?: { rounds: number; points: number; matchMoney: number; bonusMoney: number };
+  season?: { rounds: number; points: number; matchMoney?: number; bonusMoney?: number };
   medal?: 1 | 2 | 3;
+  showMoney: boolean;
 }) {
   const played = (season?.rounds ?? 0) > 0;
   const matchMoney = season?.matchMoney ?? 0;
   const bonusMoney = season?.bonusMoney ?? 0;
   // The tile carries one combined figure. The split lives on the FLO Cup
   // standings and the golfer's own page, where there is room to explain it.
-  const winnings = matchMoney + bonusMoney;
+  const winnings = winningsOf(season ?? {});
   const points = season?.points ?? 0;
 
   // Points, money and overall all have their own chip below, so repeating
@@ -232,14 +253,16 @@ function GolferCard({
           </span>
         </span>
 
-        <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
-          <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(winnings) : "text-muted"}`}>
-            {played ? cash(winnings) : "—"}
+        {showMoney && (
+          <span className="inline-flex items-baseline gap-1.5 rounded-lg border border-line px-2.5 py-1.5">
+            <span className={`text-sm font-semibold leading-none tabular-nums ${played ? tone(winnings) : "text-muted"}`}>
+              {played ? cash(winnings) : "—"}
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+              Winnings
+            </span>
           </span>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Winnings
-          </span>
-        </span>
+        )}
       </div>
 
       {/*

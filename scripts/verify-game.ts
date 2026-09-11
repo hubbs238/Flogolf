@@ -9,6 +9,7 @@ import {
   type HoleScores,
   type PayoutTable,
 } from "../lib/game";
+import { modeFrom } from "../lib/view-mode";
 
 /** Shorthand for a money breakdown in fixtures. */
 function bd(main: number, front = 0, back = 0, eighteen = 0) {
@@ -604,6 +605,37 @@ console.log("\n=== points earned in a round ===");
   });
   check("a split bonus keeps its half point", pts[0].bonus, 7.5);
   check("and carries into the total", pts[0].total, 7.5);
+}
+
+console.log("\n=== who is shown money ===");
+{
+  const player = modeFrom(false, undefined);
+  check("a player is never shown money", player.showMoney, false);
+  check("and is never offered the toggle", player.isAdmin, false);
+
+  // A forged cookie can only ever take money away from someone who was
+  // not going to be shown any, so this is inert rather than a hole.
+  check("a forged cookie cannot turn money on for a player",
+    modeFrom(false, "0").showMoney, false);
+  check("nor does it make them look like an admin",
+    [modeFrom(false, "1").isAdmin, modeFrom(false, "1").asPlayer], [false, false]);
+
+  const admin = modeFrom(true, undefined);
+  check("an admin with no cookie sees money", admin.showMoney, true);
+  check("and is not in the player view", admin.asPlayer, false);
+
+  const preview = modeFrom(true, "1");
+  check("an admin previewing the player view loses money",
+    preview.showMoney, false);
+  check("but stays an admin, so the way back is still on screen",
+    [preview.isAdmin, preview.asPlayer], [true, true]);
+
+  check("only the exact opt in value counts, so a stale cookie is ignored",
+    ["", "0", "true", "yes", "01"].map((v) => modeFrom(true, v).showMoney),
+    [true, true, true, true, true]);
+  check("showMoney is always the opposite of asPlayer for an admin",
+    [modeFrom(true, "1"), modeFrom(true, undefined)]
+      .every((m) => m.showMoney === !m.asPlayer), true);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);
