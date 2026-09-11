@@ -153,6 +153,28 @@ input[type="range"]::-moz-range-thumb {
   .touch-only { display: flex; }
 }
 
+/* The major banner. A gold light crosses the card on a slow loop and the
+   rule above the name glows on the same beat. Both are decoration on an
+   announcement, so both stop dead under reduced motion. */
+@keyframes major-sweep {
+  0%        { transform: translateX(-70%) skewX(-18deg); opacity: 0; }
+  10%       { opacity: 1; }
+  55%, 100% { transform: translateX(520%) skewX(-18deg); opacity: 0; }
+}
+
+@keyframes major-glow {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+
+.major-sweep { animation: major-sweep 6s ease-in-out 0.8s infinite; }
+.major-glow  { animation: major-glow 3.2s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .major-sweep { animation: none; opacity: 0; }
+  .major-glow  { animation: none; opacity: 1; }
+}
+
 /* Medal chip on the top three. A slow sheen, nothing that jumps. */
 /* The chip's 2px halo lives in the keyframes rather than on the element,
    because an animated box-shadow replaces the ring utility's box-shadow

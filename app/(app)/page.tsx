@@ -2,15 +2,18 @@ import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { getMyRatedGolferIds, getScoredGolfers, photoUrl } from "@/lib/data";
 import { getSeasonStandings } from "@/lib/match-data";
+import { getLiveMajor } from "@/lib/majors";
 import { RankingsBoard } from "@/components/rankings-board";
 import { ViewAsToggle } from "@/components/view-as-toggle";
+import { MajorBanner } from "@/components/major-banner";
 
 export default async function RankingsPage() {
   const session = await requireUser();
   const { golfers, characteristics } = await getScoredGolfers({ poolOnly: true });
-  const [rated, standings] = await Promise.all([
+  const [rated, standings, major] = await Promise.all([
     getMyRatedGolferIds(session.userId),
     getSeasonStandings(),
+    getLiveMajor(),
   ]);
 
   const view = await getViewMode(session.profile?.is_admin ?? false);
@@ -34,6 +37,7 @@ export default async function RankingsPage() {
   return (
     <>
       {view.isAdmin && <ViewAsToggle asPlayer={view.asPlayer} />}
+      {major && <MajorBanner major={major} />}
       <RankingsBoard
         golfers={golfers.map((g) => ({ ...g, photo: photoUrl(g.image_path) }))}
         characteristics={characteristics}

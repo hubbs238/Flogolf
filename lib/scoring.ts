@@ -121,3 +121,20 @@ export function initials(name: string): string {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/**
+ * "2027-03-14" to "March 14 2027".
+ *
+ * Formatted by hand from the string rather than through a Date, because a
+ * plain date parsed as UTC and rendered in a timezone behind it comes out a
+ * day early, and a major announced for the wrong day is worse than no banner.
+ */
+export function formatMajorDate(iso: string): string {
+  const MONTHS = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+  ];
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d || m < 1 || m > 12) return iso;
+  return `${MONTHS[m - 1]} ${d} ${y}`;
+}

@@ -94,6 +94,24 @@ export type DraftPick = {
 
 export type MatchStatus = "setup" | "filling" | "in_progress" | "complete";
 
+/**
+ * One of the season's marquee events.
+ *
+ * An announcement only: `points` is what the banner says the lowest eighteen
+ * is worth, not something the scoring engine reads. Exactly one row can have
+ * is_live true, enforced by a partial unique index.
+ */
+export type Major = {
+  id: string;
+  name: string;
+  /** A plain date, no time. Render it without constructing a Date. */
+  major_date: string;
+  points: number;
+  is_live: boolean;
+  created_by: string | null;
+  created_at: string;
+};
+
 export type Match = {
   id: string;
   name: string;

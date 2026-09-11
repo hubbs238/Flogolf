@@ -1,16 +1,19 @@
 import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { getAllGolfers, getCupPot, getSeasonStandings } from "@/lib/match-data";
+import { getLiveMajor } from "@/lib/majors";
 import { CupPot } from "@/components/cup-pot";
 import { CupPodium } from "@/components/cup-podium";
 import { StandingsTable } from "@/components/standings-table";
+import { MajorTile } from "@/components/major-banner";
 
 export default async function FloCupPage() {
   const session = await requireUser();
-  const [rows, golfers, pot] = await Promise.all([
+  const [rows, golfers, pot, major] = await Promise.all([
     getSeasonStandings(),
     getAllGolfers(),
     getCupPot(),
+    getLiveMajor(),
   ]);
   const view = await getViewMode(session.profile?.is_admin ?? false);
 
@@ -20,6 +23,8 @@ export default async function FloCupPage() {
         <CupPot pot={pot} />
         <CupPodium rows={rows} golfers={golfers} />
       </div>
+
+      {major && <MajorTile major={major} />}
 
       <p className="mb-4 text-sm text-muted">
         {view.showMoney

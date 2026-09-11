@@ -431,6 +431,116 @@ export async function linkProfileToGolfer(
   return { ok: true };
 }
 
+// ---------------------------------------------------------------- majors
+
+/** Turning one major on turns every other one off. */
+async function clearLive(supabase: Awaited<ReturnType<typeof createClient>>) {
+  await supabase.from("majors").update({ is_live: false }).eq("is_live", true);
+}
+
+function revalidateMajors() {
+  revalidatePath("/");
+  revalidatePath("/standings");
+  revalidatePath("/admin/majors");
+}
+
+function checkMajor(fields: { name?: string; date?: string; points?: number }): string | null {
+  if (fields.name !== undefined && !fields.name.trim()) {
+    return "A major needs a name.";
+  }
+  if (fields.name !== undefined && fields.name.trim().length > 80) {
+    return "Keep the name under 80 characters.";
+  }
+  // The date input hands back "" when it is cleared, which would otherwise
+  // reach Postgres as an invalid date and come back as a driver error.
+  if (fields.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(fields.date)) {
+    return "Pick a date for the major.";
+  }
+  if (fields.points !== undefined) {
+    if (!Number.isFinite(fields.points) || fields.points < 0) {
+      return "Points must be a number, zero or more.";
+    }
+    if (!Number.isInteger(fields.points)) return "Points must be a whole number.";
+  }
+  return null;
+}
+
+export async function createMajor(fields: {
+  name: string;
+  date: string;
+  points: number;
+}): Promise<ActionResult> {
+  const session = await requireAdmin();
+  const supabase = await createClient();
+
+  const bad = checkMajor(fields);
+  if (bad) return { ok: false, error: bad };
+
+  const { error } = await supabase.from("majors").insert({
+    name: fields.name.trim(),
+    major_date: fields.date,
+    points: fields.points,
+    created_by: session.userId,
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidateMajors();
+  return { ok: true };
+}
+
+export async function updateMajor(
+  id: string,
+  fields: { name?: string; date?: string; points?: number },
+): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const bad = checkMajor(fields);
+  if (bad) return { ok: false, error: bad };
+
+  const update: Record<string, unknown> = {};
+  if (fields.name !== undefined) update.name = fields.name.trim();
+  if (fields.date !== undefined) update.major_date = fields.date;
+  if (fields.points !== undefined) update.points = fields.points;
+  if (Object.keys(update).length === 0) return { ok: true };
+
+  const { error } = await supabase.from("majors").update(update).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidateMajors();
+  return { ok: true };
+}
+
+export async function deleteMajor(id: string): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { error } = await supabase.from("majors").delete().eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidateMajors();
+  return { ok: true };
+}
+
+/**
+ * Switches a major on or off.
+ *
+ * Switching one on clears the rest first, because the database allows only
+ * one live row and would otherwise reject the update outright.
+ */
+export async function setMajorLive(id: string, live: boolean): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  if (live) await clearLive(supabase);
+
+  const { error } = await supabase.from("majors").update({ is_live: live }).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidateMajors();
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------- diagnostics
 
 export type EnvReport = {
@@ -570,5 +680,6 @@ export async function readSchemaReport(): Promise<SchemaCheck[]> {
     column("0012", "matches", "fb18_front_dollars_per_unit"),
     column("0012", "matches", "fb18_total_dollars_per_unit"),
     column("0013", "matches", "dues_per_player"),
+    column("0014", "majors", "is_live"),
   ]);
 }
