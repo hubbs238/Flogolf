@@ -41,9 +41,29 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           and paint across the chips instead of pushing them onto a new line.
         */}
         <div className="flex-1 basis-56">
-          <p className={`font-semibold uppercase tracking-[0.22em] text-amber-300 ${big ? "text-xs" : "text-[11px]"}`}>
-            Major
+          {/*
+            The date rides the eyebrow rather than sitting in a labelled chip.
+            It needs no caption up here, and it leaves the name as the only
+            thing on its own line.
+          */}
+          <p className="flex flex-wrap items-baseline gap-x-2">
+            <span
+              className={`font-semibold uppercase tracking-[0.22em] text-amber-300 ${
+                big ? "text-xs" : "text-[11px]"
+              }`}
+            >
+              Major
+            </span>
+            <span aria-hidden="true" className="text-amber-300/40">
+              &middot;
+            </span>
+            <span
+              className={`font-medium text-amber-100/90 ${big ? "text-sm" : "text-xs"}`}
+            >
+              {formatMajorDate(major.major_date)}
+            </span>
           </p>
+
           <h2
             className={`mt-1 font-semibold leading-tight tracking-tight text-balance ${
               big ? "text-3xl sm:text-5xl" : "text-2xl sm:text-3xl"
@@ -53,53 +73,36 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           </h2>
         </div>
 
-        <dl className="flex shrink-0 flex-wrap items-stretch gap-2">
-          <Fact label="Date" value={formatMajorDate(major.major_date)} big={big} />
-          {/*
-            Zero points is a real choice, for an event played for the title
-            alone. A chip reading "0 pts" would read as a bug rather than as
-            the point, so it stands down instead.
-          */}
-          {major.points > 0 && (
+        {/*
+          Zero points is a real choice, for an event played for the title
+          alone. A chip reading "0 pts" would read as a bug rather than as the
+          point, so the whole list stands down with nothing left to show.
+        */}
+        {major.points > 0 && (
+          <dl className="flex shrink-0 flex-wrap items-stretch gap-2">
             <Fact
               label="Lowest 18"
               value={`${major.points.toLocaleString()} pts`}
               big={big}
-              gold
             />
-          )}
-        </dl>
+          </dl>
+        )}
       </div>
     </section>
   );
 }
 
-function Fact({
-  label, value, big, gold = false,
-}: {
-  label: string;
-  value: string;
-  big: boolean;
-  gold?: boolean;
-}) {
+function Fact({ label, value, big }: { label: string; value: string; big: boolean }) {
   return (
-    <div
-      className={`rounded-xl px-3.5 py-2.5 ${
-        gold ? "bg-amber-300/15 ring-1 ring-amber-300/40" : "bg-white/10"
-      }`}
-    >
+    <div className="rounded-xl bg-amber-300/15 px-3.5 py-2.5 ring-1 ring-amber-300/40">
       <dd
-        className={`font-semibold leading-none tabular-nums ${gold ? "text-amber-200" : "text-white"} ${
+        className={`font-semibold leading-none tabular-nums text-amber-200 ${
           big ? "text-xl sm:text-2xl" : "text-lg sm:text-xl"
         }`}
       >
         {value}
       </dd>
-      <dt
-        className={`mt-1.5 text-[10px] font-semibold uppercase tracking-wide ${
-          gold ? "text-amber-200/70" : "text-white/60"
-        }`}
-      >
+      <dt className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200/70">
         {label}
       </dt>
     </div>
