@@ -101,10 +101,19 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             match={match} teams={teams} captainNames={captainNames} scores={scores}
             isAdmin={isAdmin} myUserId={session.userId}
           />
+          {/*
+            Settlement is admin only. The rows are dropped here rather than
+            hidden in the browser, so a player's page never carries a table of
+            who owes what. It is not a secret, though: anyone who can read the
+            scorecard can work the same figures out. The point is to keep money
+            away from the points tables, not to lock it up.
+          */}
           <MatchResults
             match={match} teams={teams}
             segments={computed.main.segments} fb18={computed.fb18.results}
-            unitsByTeam={computed.unitsByTeam} money={computed.money}
+            unitsByTeam={computed.unitsByTeam}
+            money={isAdmin ? computed.money : []}
+            teamMoney={computed.teamMoney} duesPerPlayer={computed.duesPerPlayer}
             bonus={computed.bonus} points={computed.points}
             segmentRates={computed.rates.segment}
             golfers={golfers} isAdmin={isAdmin}

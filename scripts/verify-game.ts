@@ -16,11 +16,14 @@ function bd(main: number, front = 0, back = 0, eighteen = 0) {
 }
 
 /** Shorthand for a PlayerMoney fixture. */
-function pm(golferId: string, teamId: string, main: number, extra = 0) {
+function pm(golferId: string, teamId: string, main: number, extra = 0, dues = 0) {
   const breakdown = bd(main, extra);
+  const winnings = main + extra;
   return {
     golferId, teamId,
-    dollars: main + extra,
+    winnings,
+    dues,
+    dollars: winnings - dues,
     cupDollars: main,
     breakdown,
   };
@@ -468,6 +471,102 @@ console.log("\n=== changing a rate moves every player's money ===");
   check("Cup figure unchanged by an FB18 rate change",
     after.find((m) => m.golferId === "a1")!.cupDollars,
     before.find((m) => m.golferId === "a1")!.cupDollars);
+}
+
+console.log("\n=== dues come off settlement, never off points ===");
+{
+  const money = awardMoney({
+    breakdownByTeam: { t1: bd(180, 40, 30, 50), t2: bd(-180) },
+    rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
+    duesPerPlayer: 35,
+  });
+  const p1 = money.find((m) => m.golferId === "p1")!;
+  const p3 = money.find((m) => m.golferId === "p3")!;
+
+  check("winnings are reported before dues", p1.winnings, 300);
+  check("dues are held apart, not folded into the breakdown",
+    [p1.dues, p1.breakdown], [35, { main: 180, front: 40, back: 30, eighteen: 50 }]);
+  check("settlement is winnings less dues", p1.dollars, 265);
+  check("a loser pays dues on top of the loss", p3.dollars, -215);
+  check("everyone on the card is charged the same, whichever team they are on",
+    money.map((m) => [m.teamId, m.dues]),
+    [["t1", 35], ["t1", 35], ["t2", 35], ["t2", 35]]);
+
+  // The one that matters: points must not notice dues at all.
+  check("dues never touch the Cup figure", [p1.cupDollars, p3.cupDollars], [180, -180]);
+  const pts = roundPoints({
+    money, bonusByTeam: {}, rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
+  });
+  check("so the winner still scores the full 180",
+    pts.find((p) => p.golferId === "p1")!.total, 180);
+  check("and the loser still floors at 0, not at minus the dues",
+    pts.find((p) => p.golferId === "p3")!.total, 0);
+}
+{
+  // Winnings balance across a round, dues do not: they leave the group.
+  const money = awardMoney({
+    breakdownByTeam: { t1: bd(100), t2: bd(-100) },
+    rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
+    duesPerPlayer: 35,
+  });
+  const sum = (pick: (m: typeof money[number]) => number) =>
+    Math.round(money.reduce((n, m) => n + pick(m), 0) * 100) / 100;
+
+  check("equal rosters: winnings net to zero", sum((m) => m.winnings), 0);
+  check("but settlement is short the whole dues take", sum((m) => m.dollars), -140);
+  check("which is exactly dues times the players on the card",
+    sum((m) => m.dues), 140);
+}
+{
+  // A short roster already unbalances winnings. Dues follow heads, not teams,
+  // so the shorthanded side pays less in total.
+  const money = awardMoney({
+    breakdownByTeam: { t1: bd(100), t2: bd(-100) },
+    rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7"] },
+    duesPerPlayer: 35,
+  });
+  const duesFor = (team: string) =>
+    money.filter((m) => m.teamId === team).reduce((n, m) => n + m.dues, 0);
+
+  check("four players pay four lots of dues", duesFor("t1"), 140);
+  check("three players pay three", duesFor("t2"), 105);
+  check("and each player's own charge is unchanged by roster size",
+    [...new Set(money.map((m) => m.dues))], [35]);
+}
+{
+  const money = awardMoney({
+    breakdownByTeam: { t1: bd(100) },
+    rosters: { t1: ["p1"] },
+  });
+  check("no dues argument means no charge",
+    [money[0].winnings, money[0].dues, money[0].dollars], [100, 0, 100]);
+}
+{
+  const money = awardMoney({
+    breakdownByTeam: { t1: bd(0) },
+    rosters: { t1: ["p1"] },
+    duesPerPlayer: 12.5,
+  });
+  check("dues survive a half dollar", money[0].dollars, -12.5);
+}
+{
+  // A cleared input reaches Number() as NaN. Math.max(0, NaN) is NaN, so the
+  // clamp alone would poison every row on the round.
+  const bad = awardMoney({
+    breakdownByTeam: { t1: bd(100) },
+    rosters: { t1: ["p1"] },
+    duesPerPlayer: Number("") + Number("x"),
+  });
+  check("a NaN charge falls back to nothing rather than spreading",
+    [bad[0].dues, bad[0].dollars], [0, 100]);
+
+  const negative = awardMoney({
+    breakdownByTeam: { t1: bd(100) },
+    rosters: { t1: ["p1"] },
+    duesPerPlayer: -20,
+  });
+  check("and a negative charge cannot pay anyone",
+    [negative[0].dues, negative[0].dollars], [0, 100]);
 }
 
 console.log("\n=== points earned in a round ===");

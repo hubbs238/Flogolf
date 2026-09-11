@@ -53,7 +53,9 @@ export function GamesList({
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">Rounds</h1>
             <p className="mt-1 text-sm text-muted">
-              Live scoring, unit payouts, and who owes who.
+              {isAdmin
+                ? "Live scoring, unit payouts, and who owes who."
+                : "Live scoring, the six matches, and where the Cup points landed."}
             </p>
           </div>
           {isAdmin && (

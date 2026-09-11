@@ -36,15 +36,24 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, bonus, points,
-  segmentRates, golfers, isAdmin,
+  match, teams, segments, fb18, unitsByTeam, money, teamMoney, duesPerPlayer,
+  bonus, points, segmentRates, golfers, isAdmin,
 }: {
   match: Match;
   teams: MatchTeam[];
   segments: SegmentResult[];
   fb18: Fb18Result[];
   unitsByTeam: Record<string, number>;
+  /**
+   * Settlement, a row per player. Empty for anyone but an admin: these rows
+   * are the one thing on the page players are not shown, so the server drops
+   * them rather than sending them down and hiding them.
+   */
   money: PlayerMoney[];
+  /** Team winnings, rolled up server side so every viewer can see them. */
+  teamMoney: Record<string, { perPlayer: number; total: number }>;
+  /** Flat charge each player paid to play. Zero on a round without dues. */
+  duesPerPlayer: number;
   bonus: { segments: BonusSegment[]; pointsByTeam: Record<string, number> };
   points: PlayerRoundPoints[];
   /** Dollars per unit for each FB18 segment. They can differ. */
@@ -85,14 +94,13 @@ export function MatchResults({
   const sumBy = (pick: (m: PlayerMoney) => number) =>
     Math.round(money.reduce((n, m) => n + pick(m), 0) * 100) / 100;
 
-  // A unit pays each player, so the team figure is the sum of the roster
-  // rather than a pot being divided into it.
-  const perPlayerMoney = new Map<string, number>();
-  const teamTotalMoney = new Map<string, number>();
-  for (const m of money) {
-    perPlayerMoney.set(m.teamId, m.dollars);
-    teamTotalMoney.set(m.teamId, (teamTotalMoney.get(m.teamId) ?? 0) + m.dollars);
-  }
+  // Dues are per round, so every settlement row carries the same figure.
+  // Rounded the way awardMoney rounds it, so the prose below cannot disagree
+  // with the column it describes. Nothing to show on a round that is free.
+  const dues = Number.isFinite(duesPerPlayer)
+    ? Math.max(0, Math.round(duesPerPlayer * 100) / 100)
+    : 0;
+  const anyDues = dues > 0;
 
   return (
     <div className="space-y-8">
@@ -309,6 +317,9 @@ export function MatchResults({
         <p className="mb-3 text-sm text-muted">
           A unit pays its dollar value to every player on the roster, so the
           team total is the per player figure multiplied by the roster.
+          {anyDues &&
+            ` These are winnings before dues: $${dues.toFixed(2)} a player` +
+            " comes off what anyone actually collects."}
         </p>
         <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
           <table className="w-full text-sm">
@@ -325,8 +336,8 @@ export function MatchResults({
                 .sort((a, b) => (unitsByTeam[b.id] ?? 0) - (unitsByTeam[a.id] ?? 0))
                 .map((t) => {
                   const u = unitsByTeam[t.id] ?? 0;
-                  const per = perPlayerMoney.get(t.id) ?? 0;
-                  const teamTotal = teamTotalMoney.get(t.id) ?? 0;
+                  const per = teamMoney[t.id]?.perPlayer ?? 0;
+                  const teamTotal = teamMoney[t.id]?.total ?? 0;
                   return (
                     <tr key={t.id} className="border-b border-line last:border-0">
                       <td className="p-3 font-medium">{t.name}</td>
@@ -394,12 +405,19 @@ export function MatchResults({
         </section>
       )}
 
-      {money.length > 0 && (
+      {/*
+        Admins only. Players get the points tables above, which say the same
+        thing about who had a good round without a money column beside them to
+        confuse the two.
+      */}
+      {isAdmin && money.length > 0 && (
         <section>
           <h3 className="mb-1 font-semibold">Player settlement</h3>
           <p className="mb-3 text-sm text-muted">
             What each player owes or collects, and where it came from. Positive
             is money in, negative is money out.
+            {anyDues && ` Dues of $${dues.toFixed(2)} a player come off the total.`}
+            {" "}Only admins see this table.
           </p>
 
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -411,7 +429,7 @@ export function MatchResults({
                     <th className="px-3 pt-3 text-center font-medium" colSpan={3}>
                       Bonus Money
                     </th>
-                    <th className="px-3 pt-3" />
+                    <th className="px-3 pt-3" colSpan={anyDues ? 2 : 1} />
                   </tr>
                 )}
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
@@ -425,6 +443,7 @@ export function MatchResults({
                       <th className="w-24 p-3 text-right font-medium">All 18</th>
                     </>
                   )}
+                  {anyDues && <th className="w-24 p-3 text-right font-medium">Dues</th>}
                   <th className="w-28 p-3 text-right font-medium text-ink">Total</th>
                 </tr>
               </thead>
@@ -440,6 +459,9 @@ export function MatchResults({
                         <td className="p-3 text-right"><Cash n={m.breakdown.back} /></td>
                         <td className="p-3 text-right"><Cash n={m.breakdown.eighteen} /></td>
                       </>
+                    )}
+                    {anyDues && (
+                      <td className="p-3 text-right"><Cash n={-m.dues} /></td>
                     )}
                     <td className="p-3 text-right"><Cash n={m.dollars} strong /></td>
                   </tr>
@@ -459,6 +481,9 @@ export function MatchResults({
                       <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.eighteen)} /></td>
                     </>
                   )}
+                  {anyDues && (
+                    <td className="p-3 text-right"><Cash n={sumBy((m) => -m.dues)} /></td>
+                  )}
                   <td className="p-3 text-right"><Cash n={sumBy((m) => m.dollars)} strong /></td>
                 </tr>
               </tfoot>
@@ -466,10 +491,13 @@ export function MatchResults({
           </div>
 
           <p className="mt-2 text-xs text-muted">
-            The round total is what the group is up or down overall. It lands on
-            zero when every team fields the same number of players, and drifts
-            when one plays a man short, since a unit pays each player rather
-            than being divided among them.
+            The round total is what the group is up or down overall. The
+            winnings part lands on zero when every team fields the same number
+            of players, and drifts when one plays a man short, since a unit pays
+            each player rather than being divided among them.
+            {anyDues &&
+              ` Dues take a further $${(dues * money.length).toFixed(2)} out of the group,` +
+              " since they leave it rather than moving inside it."}
           </p>
         </section>
       )}

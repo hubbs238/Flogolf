@@ -102,6 +102,8 @@ export type Match = {
   team_count: number;
   roster_size: number;
   dollars_per_unit: number;
+  /** Flat charge each player pays to play. Money only, never points. */
+  dues_per_player: number;
   /** Null means the side game follows the main rate. */
   fb18_dollars_per_unit: number | null;
   /** Per segment overrides. Null falls back to fb18_dollars_per_unit. */

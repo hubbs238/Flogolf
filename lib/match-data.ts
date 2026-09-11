@@ -158,8 +158,17 @@ export function computeMatch(b: MatchBundle) {
       .map((p) => p.golfer_id);
   }
 
-  const money = awardMoney({ breakdownByTeam, rosters });
+  const duesPerPlayer = Number(b.match.dues_per_player ?? 0);
+  const money = awardMoney({ breakdownByTeam, rosters, duesPerPlayer });
   const bonus = scoreBonusPoints(teamIds, b.scores);
+
+  // Team level winnings, rolled up here rather than in the browser so a page
+  // can show the state of the round without shipping a row per player.
+  const teamMoney: Record<string, { perPlayer: number; total: number }> = {};
+  for (const m of money) {
+    const cur = teamMoney[m.teamId] ?? { perPlayer: m.winnings, total: 0 };
+    teamMoney[m.teamId] = { perPlayer: m.winnings, total: cur.total + m.winnings };
+  }
 
   return {
     main,
@@ -168,6 +177,8 @@ export function computeMatch(b: MatchBundle) {
     dollarsPerPlayerByTeam,
     cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
+    duesPerPlayer,
+    teamMoney,
     bonus,
     rosters,
     money,
@@ -182,6 +193,9 @@ export type SeasonRow = {
   matchMoney: number;
   /** FB18 front nine, back nine and all eighteen. Money only. */
   bonusMoney: number;
+  /** Flat charges paid to play. Money only, never points. */
+  dues: number;
+  /** What changed hands: match money plus bonus money, less dues. */
   dollars: number;
   /** Points from Cup-eligible money. FB18 winnings never count. */
   pointsFromMoney: number;
@@ -198,6 +212,7 @@ export type GolferRoundRow = {
   teamName: string;
   matchMoney: number;
   bonusMoney: number;
+  dues: number;
   dollars: number;
   pointsFromMoney: number;
   pointsBonus: number;
@@ -251,6 +266,7 @@ async function scoreCompletedRounds(): Promise<
           matchMoney: row.breakdown.main,
           bonusMoney:
             row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,
+          dues: row.dues,
           dollars: row.dollars,
           pointsFromMoney: p?.fromMoney ?? 0,
           pointsBonus: p?.bonus ?? 0,
@@ -277,12 +293,13 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
         golferId: row.golferId, rounds: 0,
-        matchMoney: 0, bonusMoney: 0, dollars: 0,
+        matchMoney: 0, bonusMoney: 0, dues: 0, dollars: 0,
         pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
       cur.matchMoney += row.matchMoney;
       cur.bonusMoney += row.bonusMoney;
+      cur.dues += row.dues;
       cur.dollars += row.dollars;
       cur.pointsFromMoney += row.pointsFromMoney;
       cur.pointsBonus += row.pointsBonus;
@@ -296,6 +313,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     ...r,
     matchMoney: round2(r.matchMoney),
     bonusMoney: round2(r.bonusMoney),
+    dues: round2(r.dues),
     dollars: round2(r.dollars),
     pointsFromMoney: round2(r.pointsFromMoney),
     pointsBonus: round2(r.pointsBonus),

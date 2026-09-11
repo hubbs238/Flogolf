@@ -37,6 +37,9 @@ export function MatchStakesEditor({
               .map(([label, v]) =>
                 `${label} $${v ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit}`)
               .join(", ")}
+            {Number(match.dues_per_player) > 0
+              ? `. Dues $${Number(match.dues_per_player)} a player`
+              : ""}
             . Changing anything here recalculates this round and the season table.
           </p>
         </div>

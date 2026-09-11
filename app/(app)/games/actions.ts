@@ -101,6 +101,8 @@ export async function updateMatchSettings(
     name?: string;
     course?: string;
     dollarsPerUnit?: number;
+    /** Flat per player charge for the round. Deducted at settlement. */
+    duesPerPlayer?: number;
     /** Null puts the side game back on the main rate. */
     fb18DollarsPerUnit?: number | null;
     /** Per segment. Null falls back to the side game rate. */
@@ -120,6 +122,14 @@ export async function updateMatchSettings(
   if (fields.dollarsPerUnit !== undefined) {
     if (fields.dollarsPerUnit < 0) return { ok: false, error: "Dollars per unit cannot be negative." };
     update.dollars_per_unit = fields.dollarsPerUnit;
+  }
+  if (fields.duesPerPlayer !== undefined) {
+    // A cleared input sends NaN, which slips past a < 0 test and would come
+    // back from the database as a raw constraint error nobody can read.
+    if (!Number.isFinite(fields.duesPerPlayer) || fields.duesPerPlayer < 0) {
+      return { ok: false, error: "Dues must be a number, zero or more." };
+    }
+    update.dues_per_player = fields.duesPerPlayer;
   }
   const rateFields = [
     ["fb18DollarsPerUnit", "fb18_dollars_per_unit"],

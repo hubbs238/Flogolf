@@ -569,5 +569,6 @@ export async function readSchemaReport(): Promise<SchemaCheck[]> {
     column("0010", "matches", "fb18_dollars_per_unit"),
     column("0012", "matches", "fb18_front_dollars_per_unit"),
     column("0012", "matches", "fb18_total_dollars_per_unit"),
+    column("0013", "matches", "dues_per_player"),
   ]);
 }

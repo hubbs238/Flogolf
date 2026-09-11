@@ -555,11 +555,18 @@ export type MoneyBreakdown = {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
-  /** What this player earns this round. Not a share of a team pot. */
+  /** What this player wins this round, before dues. Not a share of a pot. */
+  winnings: number;
+  /**
+   * The flat charge for playing, the same for everyone on the card. It leaves
+   * the group rather than changing hands, so it is held apart from winnings.
+   */
+  dues: number;
+  /** What actually changes hands: winnings less dues. */
   dollars: number;
   /**
    * The portion that counts toward FLO Cup points: the main game alone.
-   * Every FB18 payout is money only.
+   * Every FB18 payout is money only, and dues never reach it.
    */
   cupDollars: number;
   breakdown: MoneyBreakdown;
@@ -579,12 +586,22 @@ export type PlayerMoney = {
  * Takes dollars rather than units because the main game and FB18 can carry
  * different rates, which makes a single combined unit figure meaningless.
  * The conversion happens upstream where both rates are known.
+ *
+ * Dues come off the end. They are the same for everyone on the card and are
+ * money leaving the group rather than moving inside it, so they never reach
+ * cupDollars and a round carrying them will not net to zero.
  */
 export function awardMoney(opts: {
   breakdownByTeam: Record<string, MoneyBreakdown>;
   rosters: Record<string, string[]>;
+  /** Flat charge per player. Zero on a round with no dues. */
+  duesPerPlayer?: number;
 }): PlayerMoney[] {
   const { breakdownByTeam, rosters } = opts;
+  // Math.max(0, NaN) is NaN, so the clamp alone would let a bad figure
+  // through and poison every settlement row on the round.
+  const raw = opts.duesPerPlayer ?? 0;
+  const dues = Number.isFinite(raw) ? Math.max(0, Math.round(raw * 100) / 100) : 0;
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const out: PlayerMoney[] = [];
 
@@ -596,14 +613,17 @@ export function awardMoney(opts: {
       back: round2(b.back),
       eighteen: round2(b.eighteen),
     };
-    const dollars = round2(
+    const winnings = round2(
       breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen,
     );
+    const dollars = round2(winnings - dues);
 
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
+        winnings,
+        dues,
         dollars,
         cupDollars: breakdown.main,
         breakdown,
