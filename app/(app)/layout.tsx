@@ -16,7 +16,7 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
         <div className="mx-auto flex max-w-6xl items-center gap-6 px-4 py-3">
           <Link href="/" className="flex items-center gap-2.5 font-semibold">
             <Logo size={28} className="rounded-lg" />
-            <span className="hidden sm:inline">Flo Golf Draft</span>
+            <span className="hidden sm:inline">Flo Golf Tour</span>
           </Link>
 
           <nav className="flex items-center gap-4 text-sm">

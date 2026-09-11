@@ -20,7 +20,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             <Logo size={56} className="rounded-2xl" />
           </div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Flo Golf Draft
+            Flo Golf Tour
           </h1>
           <p className="mt-2 text-sm text-muted">
             Rate the pool, run the draft, settle it on the course.

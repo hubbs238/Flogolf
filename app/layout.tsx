@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Flo Golf Draft",
+  title: "Flo Golf Tour",
   description: "Player ratings and weekly draft board",
 };
 
