@@ -35,6 +35,13 @@ function useCountUp(target: number, ms = 1600) {
   return value;
 }
 
+/**
+ * When the pot gets paid out. A literal string rather than a Date, so the
+ * server and the browser cannot disagree about the timezone and render two
+ * different days.
+ */
+const SEASON_ENDS = "January 7th 2027";
+
 export function CupPot({ pot }: { pot: CupPotData }) {
   const shown = useCountUp(pot.total);
 
@@ -48,6 +55,10 @@ export function CupPot({ pot }: { pot: CupPotData }) {
 
       <p className="mt-4 text-6xl font-semibold leading-none tabular-nums sm:text-7xl">
         ${shown.toLocaleString()}
+      </p>
+
+      <p className="mt-3 text-xs font-medium tracking-wide text-fairway-200/80">
+        Season ends {SEASON_ENDS}
       </p>
     </section>
   );
