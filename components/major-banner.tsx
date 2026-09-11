@@ -55,12 +55,19 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
 
         <dl className="flex shrink-0 flex-wrap items-stretch gap-2">
           <Fact label="Date" value={formatMajorDate(major.major_date)} big={big} />
-          <Fact
-            label="Lowest 18"
-            value={`${major.points.toLocaleString()} pts`}
-            big={big}
-            gold
-          />
+          {/*
+            Zero points is a real choice, for an event played for the title
+            alone. A chip reading "0 pts" would read as a bug rather than as
+            the point, so it stands down instead.
+          */}
+          {major.points > 0 && (
+            <Fact
+              label="Lowest 18"
+              value={`${major.points.toLocaleString()} pts`}
+              big={big}
+              gold
+            />
+          )}
         </dl>
       </div>
     </section>

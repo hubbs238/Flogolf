@@ -433,9 +433,18 @@ export async function linkProfileToGolfer(
 
 // ---------------------------------------------------------------- majors
 
-/** Turning one major on turns every other one off. */
-async function clearLive(supabase: Awaited<ReturnType<typeof createClient>>) {
-  await supabase.from("majors").update({ is_live: false }).eq("is_live", true);
+/**
+ * Turning one major on turns every other one off.
+ *
+ * The error matters. If this silently fails, the update that follows hits the
+ * one-live unique index and the admin gets a raw 23505 instead of a sentence.
+ */
+async function clearLive(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+): Promise<string | null> {
+  const { error } = await supabase
+    .from("majors").update({ is_live: false }).eq("is_live", true);
+  return error ? error.message : null;
 }
 
 function revalidateMajors() {
@@ -532,7 +541,10 @@ export async function setMajorLive(id: string, live: boolean): Promise<ActionRes
   await requireAdmin();
   const supabase = await createClient();
 
-  if (live) await clearLive(supabase);
+  if (live) {
+    const failed = await clearLive(supabase);
+    if (failed) return { ok: false, error: failed };
+  }
 
   const { error } = await supabase.from("majors").update({ is_live: live }).eq("id", id);
   if (error) return { ok: false, error: error.message };
@@ -644,8 +656,11 @@ export async function readSchemaReport(): Promise<SchemaCheck[]> {
     col: string,
   ): Promise<SchemaCheck> => {
     const { error } = await supabase.from(table).select(col).limit(1);
+    // 42501 is "permission denied": the column may well exist, but a missing
+    // GRANT makes it unreadable, which is the same thing to the app. Without
+    // this the dot goes green while every read of the table fails.
     const missing =
-      !!error && /does not exist|schema cache|PGRST204|PGRST205|42703/i.test(
+      !!error && /does not exist|schema cache|PGRST204|PGRST205|42703|42501|permission denied/i.test(
         `${error.code} ${error.message}`,
       );
     return {

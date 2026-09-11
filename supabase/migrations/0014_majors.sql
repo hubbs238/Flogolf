@@ -30,11 +30,15 @@ create table if not exists public.majors (
 );
 
 -- One live major, enforced by the database rather than by good intentions.
--- Partial, so any number of majors can sit switched off.
-create unique index if not exists majors_one_live
-  on public.majors ((true)) where is_live;
+-- Partial, so any number of majors can sit switched off: only the live rows
+-- are in the index, every one of them holds true, and unique on that column
+-- therefore permits exactly one. Same shape as profiles_golfer_id_key in
+-- 0001. It also serves the is_live lookup the banner does on every page.
+create unique index if not exists majors_one_live_key
+  on public.majors (is_live) where is_live;
 
-create index if not exists majors_by_date on public.majors (major_date desc);
+create index if not exists majors_major_date_idx
+  on public.majors (major_date desc);
 
 alter table public.majors enable row level security;
 
@@ -50,6 +54,11 @@ create policy "admin writes majors" on public.majors
 -- Postgres checks the table grant before it ever reaches a policy, and this
 -- project does not hand these out by default.
 grant select, insert, update, delete on public.majors to authenticated;
+
+-- 0003 revoked these across every table that existed at the time, and this
+-- one did not exist yet. TRUNCATE in particular is never filtered by row
+-- level security, so a route to it would go straight past the policies above.
+revoke truncate, references, trigger on public.majors from anon, authenticated;
 
 select
   count(*) as majors,
