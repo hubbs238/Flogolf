@@ -1,9 +1,9 @@
 import {
   awardMoney,
-  eighteenHoleBonuses,
   fb18DollarsBySegment,
   resolveSuddenDeath,
   roundPoints,
+  scoreBonusPoints,
   scoreFb18,
   scoreMainGame,
   type HoleScores,
@@ -291,36 +291,73 @@ console.log("\n=== FB18 money does not move the Cup ===");
     money[0].breakdown, { main: 180, front: 40, back: 30, eighteen: 50 });
 }
 
-console.log("\n=== best eighteen bonus ===");
+console.log("\n=== bonus points: 10 front, 10 back, 15 for the eighteen ===");
 {
-  // A -3, B -1, C +2 over eighteen.
+  //   A: front -3, back  0, total -3  -> wins the front and the eighteen
+  //   B: front  0, back -2, total -2  -> wins the back
+  //   C: level everywhere             -> wins nothing
   const par = Array.from({ length: 18 }, () => 0);
-  const with3Under = [...par]; with3Under[0] = -1; with3Under[1] = -1; with3Under[2] = -1;
-  const with1Under = [...par]; with1Under[0] = -1;
-  const with2Over  = [...par]; with2Over[0] = 1; with2Over[1] = 1;
+  const A = [...par]; A[0] = -1; A[1] = -1; A[2] = -1;
+  const B = [...par]; B[9] = -1; B[10] = -1;
 
-  const s: HoleScores = {
-    A: card(...with3Under), B: card(...with1Under), C: card(...with2Over),
-  };
-  const tiers = eighteenHoleBonuses(["A", "B", "C"], s);
-  check("best eighteen takes 50", tiers[0], { teamIds: ["A"], total: -3, bonus: 50 });
-  check("runner up takes 25", tiers[1], { teamIds: ["B"], total: -1, bonus: 25 });
-  check("third place gets nothing", tiers.length, 2);
+  const s: HoleScores = { A: card(...A), B: card(...B), C: card(...par) };
+  const { segments, pointsByTeam } = scoreBonusPoints(["A", "B", "C"], s);
+
+  const seg = (name: string) => segments.find((x) => x.segment === name)!;
+  check("front nine: one winner, 10 points",
+    [seg("front").winners, seg("front").each], [["A"], 10]);
+  check("back nine: one winner, 10 points",
+    [seg("back").winners, seg("back").each], [["B"], 10]);
+  check("all eighteen: one winner, 15 points",
+    [seg("total").winners, seg("total").each], [["A"], 15]);
+  check("second place pays nothing anywhere", pointsByTeam.C, 0);
+  check("a team can take more than one", pointsByTeam, { A: 25, B: 10, C: 0 });
 }
 {
-  // A and B tie for best, C behind.
+  // A front nine tie is settled on the back nine among the tied teams.
+  //   A: front -2, back -1, total -3
+  //   B: front -2, back -3, total -5
   const par = Array.from({ length: 18 }, () => 0);
-  const under = [...par]; under[0] = -2;
-  const over = [...par]; over[0] = 1;
-  const s: HoleScores = { A: card(...under), B: card(...under), C: card(...over) };
-  const tiers = eighteenHoleBonuses(["A", "B", "C"], s);
-  check("tied leaders each take the full 50", tiers[0], { teamIds: ["A", "B"], total: -2, bonus: 50 });
-  check("next distinct score takes 25", tiers[1], { teamIds: ["C"], total: 1, bonus: 25 });
+  const A = [...par]; A[0] = -2; A[9] = -1;
+  const B = [...par]; B[0] = -2; B[9] = -3;
+
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+  const { segments, pointsByTeam } = scoreBonusPoints(["A", "B"], s);
+  const front = segments.find((x) => x.segment === "front")!;
+
+  check("a front nine tie carries to the back nine", front.winners, ["B"]);
+  check("and the winner takes the full 10, not a share", front.each, 10);
+  check("B sweeps all three", pointsByTeam, { A: 0, B: 35 });
+}
+{
+  // Level after eighteen and nothing left to settle it: split the 15.
+  //   A: front -1, back -1, total -2
+  //   B: front -2, back  0, total -2
+  const par = Array.from({ length: 18 }, () => 0);
+  const A = [...par]; A[0] = -1; A[9] = -1;
+  const B = [...par]; B[0] = -2;
+
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+  const { segments, pointsByTeam } = scoreBonusPoints(["A", "B"], s);
+  const total = segments.find((x) => x.segment === "total")!;
+
+  check("a tie after eighteen names both teams", total.winners, ["A", "B"]);
+  check("and splits the 15 between them", total.each, 7.5);
+  check("each side keeps its own nine plus half the eighteen",
+    pointsByTeam, { A: 17.5, B: 17.5 });
 }
 {
   const partial = Array.from({ length: 17 }, () => 0);
   const s: HoleScores = { A: card(...partial), B: card(...partial) };
-  check("no bonus while a card is unfinished", eighteenHoleBonuses(["A", "B"], s), []);
+  const { segments, pointsByTeam } = scoreBonusPoints(["A", "B"], s);
+
+  check("the eighteen stays pending while a card is unfinished",
+    segments.find((x) => x.segment === "total")!.status, "pending");
+  check("and awards nothing off a partial card",
+    segments.find((x) => x.segment === "total")!.winners, []);
+  check("the finished front nine still pays",
+    segments.find((x) => x.segment === "front")!.status, "complete");
+  check("so nobody banks the eighteen early", pointsByTeam, { A: 5, B: 5 });
 }
 
 console.log("\n=== settlement includes every FB18 segment ===");
@@ -366,7 +403,7 @@ console.log("\n=== points never go below zero ===");
       pm("p1", "t1", 500, 0),
       pm("p2", "t2", -500, 0),
     ],
-    bonuses: [],
+    bonusByTeam: {},
     rosters: { t1: ["p1"], t2: ["p2"] },
   });
   check("a big win still scores in full", pts.find((p) => p.golferId === "p1")!.total, 500);
@@ -379,7 +416,7 @@ console.log("\n=== points never go below zero ===");
   const season = [100, -400, 30].map((cupDollars) =>
     roundPoints({
       money: [pm("p1", "t1", cupDollars)],
-      bonuses: [], rosters: { t1: ["p1"] },
+      bonusByTeam: {}, rosters: { t1: ["p1"] },
     })[0].total,
   );
   check("round by round: 100, 0, 30", season, [100, 0, 30]);
@@ -435,29 +472,39 @@ console.log("\n=== changing a rate moves every player's money ===");
 
 console.log("\n=== points earned in a round ===");
 {
-  // p1..p4 won $200 of Cup money and took the best eighteen.
-  // p5..p8 lost $200 and finished second.
+  // t1 won $200 of Cup money and took the back nine and the eighteen.
+  // t2 lost $200 but still took the front nine.
   const pts = roundPoints({
     money: [
       ...["p1","p2","p3","p4"].map((g) => pm(g, "t1", 200, 100)),
       ...["p5","p6","p7","p8"].map((g) => pm(g, "t2", -200)),
     ],
-    bonuses: [
-      { teamIds: ["t1"], total: -6, bonus: 50 },
-      { teamIds: ["t2"], total: -4, bonus: 25 },
-    ],
+    bonusByTeam: { t1: 25, t2: 10 },
     rosters: { t1: ["p1","p2","p3","p4"], t2: ["p5","p6","p7","p8"] },
   });
 
   const winner = pts.find((p) => p.golferId === "p1")!;
   check("winner: 200 from money", winner.fromMoney, 200);
-  check("winner: 50 bonus", winner.bonus, 50);
-  check("winner: 250 total", winner.total, 250);
+  check("winner: 25 of bonus points", winner.bonus, 25);
+  check("winner: 225 total", winner.total, 225);
 
   const loser = pts.find((p) => p.golferId === "p5")!;
   check("loser: a losing round is worth 0, never negative", loser.fromMoney, 0);
-  check("loser: still takes the 25 runner up bonus", loser.bonus, 25);
-  check("loser: 25 on the round, the bonus alone", loser.total, 25);
+  check("loser: still takes the front nine bonus", loser.bonus, 10);
+  check("loser: 10 on the round, the bonus alone", loser.total, 10);
+
+  check("every teammate collects the same bonus in full",
+    new Set(pts.filter((p) => p.teamId === "t1").map((p) => p.bonus)).size, 1);
+}
+{
+  // A split bonus lands on a half point and must survive the rounding.
+  const pts = roundPoints({
+    money: [pm("p1", "t1", 0)],
+    bonusByTeam: { t1: 7.5 },
+    rosters: { t1: ["p1"] },
+  });
+  check("a split bonus keeps its half point", pts[0].bonus, 7.5);
+  check("and carries into the total", pts[0].total, 7.5);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);

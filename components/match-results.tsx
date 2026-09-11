@@ -3,13 +3,20 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
+import { BONUS_POINTS, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
-  EighteenTier, Fb18Result, PlayerMoney, PlayerRoundPoints,
+  BonusSegment, Fb18Result, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
 } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
+
+const BONUS_LABEL: Record<"front" | "back" | "total", string> = {
+  front: "Front nine",
+  back: "Back nine",
+  total: "All eighteen",
+};
 
 function Cash({ n, strong = false }: { n: number; strong?: boolean }) {
   const cls = n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -29,7 +36,7 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, bonuses, points,
+  match, teams, segments, fb18, unitsByTeam, money, bonus, points,
   segmentRates, golfers, isAdmin,
 }: {
   match: Match;
@@ -38,7 +45,7 @@ export function MatchResults({
   fb18: Fb18Result[];
   unitsByTeam: Record<string, number>;
   money: PlayerMoney[];
-  bonuses: EighteenTier[];
+  bonus: { segments: BonusSegment[]; pointsByTeam: Record<string, number> };
   points: PlayerRoundPoints[];
   /** Dollars per unit for each FB18 segment. They can differ. */
   segmentRates: Record<"front" | "back" | "total", number>;
@@ -209,7 +216,7 @@ export function MatchResults({
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
             All three pay money. None of it feeds FLO Cup points, since the
-            best eighteen bonus already rewards that.
+            bonus points already reward the same results.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -257,26 +264,39 @@ export function MatchResults({
         </section>
       )}
 
-      {bonuses.length > 0 && (
+      {bonus.segments.some((b) => b.winners.length > 0) && (
         <section>
-          <h3 className="mb-1 font-semibold">Best eighteen</h3>
+          <h3 className="mb-1 font-semibold">Bonus points</h3>
           <p className="mb-3 text-sm text-muted">
-            FLO Cup points, not money. Every player on these rosters collects
-            them toward the season standings.
+            FLO Cup points, not money. One winner each, and every player on
+            that roster collects the points toward the season standings.
           </p>
           <ul className="space-y-2">
-            {bonuses.map((tier) => (
+            {bonus.segments.map((b) => (
               <li
-                key={tier.teamIds.join("+")}
+                key={b.segment}
                 className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised p-3 text-sm"
               >
                 <TrophyIcon className="h-4 w-4 shrink-0 text-fairway-600 dark:text-fairway-300" />
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">{tier.teamIds.map(teamName).join(" and ")}</span>
-                  <span className="text-muted"> at {tier.total > 0 ? "+" : ""}{tier.total === 0 ? "E" : tier.total}</span>
+                <span className="w-24 shrink-0 font-medium">{BONUS_LABEL[b.segment]}</span>
+                <span className="min-w-0 flex-1 text-muted">
+                  {b.winners.length === 0 ? (
+                    b.status === "pending" ? "Not finished yet" : "No winner"
+                  ) : (
+                    <>
+                      <span className="font-medium text-ink">
+                        {b.winners.map(teamName).join(" and ")}
+                      </span>
+                      {" at "}
+                      {formatRelative(b.totals[b.winners[0]])}
+                      {b.winners.length > 1 && " · tied, points split"}
+                    </>
+                  )}
                 </span>
                 <span className="shrink-0 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
-                  +{tier.bonus} pts each
+                  {b.winners.length === 0
+                    ? `${BONUS_POINTS[b.segment]} pts`
+                    : `+${b.each} pts each`}
                 </span>
               </li>
             ))}
@@ -331,8 +351,8 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             Match Points come from Match Money, a dollar a point, with a losing
             round scoring 0 rather than going negative. Bonus Money earns
-            nothing here. Bonus Points are the best eighteen hole score, 50 for
-            the lowest and 25 for the next.
+            nothing here. Bonus Points are 10 for the lowest front nine, 10 for
+            the lowest back nine and 15 for the lowest eighteen.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">

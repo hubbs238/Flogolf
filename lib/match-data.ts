@@ -1,8 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import {
-  eighteenHoleBonuses,
   fb18DollarsBySegment,
   roundPoints,
+  scoreBonusPoints,
   scoreFb18,
   scoreMainGame,
   awardMoney,
@@ -129,8 +129,8 @@ export function computeMatch(b: MatchBundle) {
   // split by source so settlement can show where the money came from.
   //
   // Only the main game feeds the Cup. Every FB18 payout is money alone: the
-  // eighteen hole result is already rewarded through the best-eighteen
-  // bonus, so counting its money too would pay for the same thing twice.
+  // nine and eighteen hole results are already rewarded through the bonus
+  // points, so counting their money too would pay for the same thing twice.
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
@@ -159,7 +159,7 @@ export function computeMatch(b: MatchBundle) {
   }
 
   const money = awardMoney({ breakdownByTeam, rosters });
-  const bonuses = eighteenHoleBonuses(teamIds, b.scores);
+  const bonus = scoreBonusPoints(teamIds, b.scores);
 
   return {
     main,
@@ -168,10 +168,10 @@ export function computeMatch(b: MatchBundle) {
     dollarsPerPlayerByTeam,
     cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
-    bonuses,
+    bonus,
     rosters,
     money,
-    points: roundPoints({ money, bonuses, rosters }),
+    points: roundPoints({ money, bonusByTeam: bonus.pointsByTeam, rosters }),
   };
 }
 
@@ -185,7 +185,7 @@ export type SeasonRow = {
   dollars: number;
   /** Points from Cup-eligible money. FB18 winnings never count. */
   pointsFromMoney: number;
-  /** Best eighteen bonuses, 50 for the lowest and 25 for the next. */
+  /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. */
   pointsBonus: number;
   points: number;
 };

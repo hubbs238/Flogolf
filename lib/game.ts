@@ -666,56 +666,65 @@ export function isUnusualScore(relative: number): boolean {
 }
 
 // ------------------------------------------------------------
-//  Best eighteen bonus (FLO Cup points, not money)
+//  Bonus points (FLO Cup points, not money)
 // ------------------------------------------------------------
 
-export const BEST_EIGHTEEN_BONUS = 50;
-export const RUNNER_UP_EIGHTEEN_BONUS = 25;
+/**
+ * FLO Cup points for the three nine-and-eighteen results. One winner each.
+ */
+export const BONUS_POINTS: Record<Fb18Segment, number> = {
+  front: 10,
+  back: 10,
+  total: 15,
+};
 
-export type EighteenTier = {
-  /** Teams sharing this total. */
-  teamIds: string[];
-  total: number;
-  /** Points each player on these teams receives. */
-  bonus: number;
+export type BonusSegment = {
+  segment: Fb18Segment;
+  status: "pending" | "complete";
+  /** Each team's total for this segment, null while unfinished. */
+  totals: Record<string, number | null>;
+  /** The winning team, or several when a tie could not be broken. */
+  winners: string[];
+  /** Points each player on a winning roster receives. */
+  each: number;
 };
 
 /**
- * Ranks teams by their eighteen hole total and hands out FLO Cup bonus
- * points: the best score is worth BEST_EIGHTEEN_BONUS to every player on
- * that roster, the next distinct score RUNNER_UP_EIGHTEEN_BONUS.
+ * Awards the front nine, back nine and eighteen hole bonuses.
  *
- * Teams tied for a place all receive the full bonus rather than splitting
- * it. These are points rather than money, so nothing has to balance, and
- * halving a bonus because two teams shot the same number would punish both
- * for playing well.
+ * Same ranking rules as the FB18 side game, so this reuses that engine with a
+ * first-place-only payout table rather than repeating the tie handling: a
+ * front nine tie is settled on back nine scores among the tied teams, and a
+ * tie that never breaks splits the points evenly between them.
  *
- * Returns an empty list until every team has all eighteen holes in, so a
- * round in progress does not award a bonus off partial cards.
+ * Only first place pays. Nobody finishing second earns anything here.
  */
-export function eighteenHoleBonuses(
+export function scoreBonusPoints(
   teamIds: string[],
   scores: HoleScores,
-): EighteenTier[] {
-  if (teamIds.length === 0) return [];
+): { segments: BonusSegment[]; pointsByTeam: Record<string, number> } {
+  const { results, unitsByTeam } = scoreFb18({
+    teamIds,
+    scores,
+    payouts: {
+      front: { 1: BONUS_POINTS.front },
+      back: { 1: BONUS_POINTS.back },
+      total: { 1: BONUS_POINTS.total },
+    },
+  });
 
-  const totals: Record<string, number> = {};
-  const all = [...FRONT_NINE, ...BACK_NINE];
+  const segments: BonusSegment[] = results.map((r) => {
+    const winners = r.awards.filter((a) => a.units > 0);
+    return {
+      segment: r.segment,
+      status: r.status,
+      totals: r.totals,
+      winners: winners.map((a) => a.teamId),
+      each: winners[0]?.units ?? 0,
+    };
+  });
 
-  for (const id of teamIds) {
-    const t = sumHoles(scores[id], all);
-    if (t === null) return []; // someone is unfinished
-    totals[id] = t;
-  }
-
-  const blocks = blocksByScore(totals, teamIds);
-  const bonuses = [BEST_EIGHTEEN_BONUS, RUNNER_UP_EIGHTEEN_BONUS];
-
-  return blocks.slice(0, bonuses.length).map((ids, i) => ({
-    teamIds: ids,
-    total: totals[ids[0]],
-    bonus: bonuses[i],
-  }));
+  return { segments, pointsByTeam: unitsByTeam };
 }
 
 /**
@@ -740,7 +749,7 @@ export type PlayerRoundPoints = {
   teamId: string;
   /** Points from Cup-eligible money. FB18 winnings are excluded. */
   fromMoney: number;
-  /** Best eighteen bonus, 50 or 25, otherwise 0. */
+  /** Front nine, back nine and eighteen hole bonuses, otherwise 0. */
   bonus: number;
   total: number;
 };
@@ -748,17 +757,16 @@ export type PlayerRoundPoints = {
 /** Per player points for one round, broken into where they came from. */
 export function roundPoints(opts: {
   money: PlayerMoney[];
-  bonuses: EighteenTier[];
+  /** Bonus points won by each team, spread to every player on its roster. */
+  bonusByTeam: Record<string, number>;
   rosters: Record<string, string[]>;
 }): PlayerRoundPoints[] {
-  const { money, bonuses, rosters } = opts;
+  const { money, bonusByTeam, rosters } = opts;
 
   const bonusByGolfer = new Map<string, number>();
-  for (const tier of bonuses) {
-    for (const teamId of tier.teamIds) {
-      for (const golferId of rosters[teamId] ?? []) {
-        bonusByGolfer.set(golferId, (bonusByGolfer.get(golferId) ?? 0) + tier.bonus);
-      }
+  for (const [teamId, points] of Object.entries(bonusByTeam)) {
+    for (const golferId of rosters[teamId] ?? []) {
+      bonusByGolfer.set(golferId, (bonusByGolfer.get(golferId) ?? 0) + points);
     }
   }
 
@@ -766,7 +774,8 @@ export function roundPoints(opts: {
 
   return money.map((m) => {
     const fromMoney = round2(pointsForRound(m.cupDollars));
-    const bonus = bonusByGolfer.get(m.golferId) ?? 0;
+    // A split bonus can land on a half point, so this rounds too.
+    const bonus = round2(bonusByGolfer.get(m.golferId) ?? 0);
     return {
       golferId: m.golferId,
       teamId: m.teamId,

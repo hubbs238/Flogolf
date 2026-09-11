@@ -21,10 +21,12 @@ export default async function FloCupPage() {
         A dollar won is a point. A losing round is worth nothing rather than
         going negative, so a bad week costs you nothing and cannot wipe out a
         good one. Counted each round and added up.
-        FB18 winnings are money only and do not move the Cup, since the best
-        eighteen bonus already covers that. Best eighteen hole score in a round
-        adds 50 points to every player on that team, second best adds 25.
-        Rounds counts every finished round a golfer was rostered in.
+        FB18 winnings are money only and do not move the Cup, since the bonus
+        points already cover that. Bonus Points go to the lowest front nine
+        (10), the lowest back nine (10) and the lowest eighteen (15), and every
+        player on the winning team collects them. One winner each: a front nine
+        tie carries to the back nine, and a tie after eighteen splits the
+        points. Rounds counts every finished round a golfer was rostered in.
       </p>
       <StandingsTable
         rows={rows}
