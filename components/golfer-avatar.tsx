@@ -7,6 +7,8 @@ const SIZES = {
   lg: "h-24 w-24 text-2xl",
   xl: "h-32 w-32 text-4xl",
   "2xl": "h-40 w-40 text-5xl",
+  /** The Golfers tile: lg on a phone or a three column grid, xl once there is room. */
+  card: "h-24 w-24 text-2xl xl:h-32 xl:w-32 xl:text-4xl",
 };
 
 export function GolferAvatar({
@@ -22,7 +24,7 @@ export function GolferAvatar({
     size === "sm" ? 36
       : size === "md" ? 56
         : size === "lg" ? 96
-          : size === "xl" ? 128
+          : size === "xl" || size === "card" ? 128
             : 160;
 
   return (

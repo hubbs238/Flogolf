@@ -124,28 +124,43 @@ input[type="range"]::-moz-range-thumb {
   .podium-block { animation: none; transform: none; }
 }
 
-/* Golfer tiles: category detail folds away until the tile is hovered or
-   focused. Devices without hover keep it open, because tapping is not
-   hovering and losing the ratings entirely on a phone is worse than a
-   taller card. */
+/* Golfer tiles: category detail folds away on every device. A mouse reveals
+   it on hover or focus; a finger gets a Ratings toggle instead, since tapping
+   is not hovering and twenty always-open tiles make a very tall phone page. */
+.card-details {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: max-height 0.28s ease, opacity 0.2s ease, margin-top 0.28s ease;
+}
 @media (hover: hover) {
-  .card-details {
-    max-height: 0;
-    overflow: hidden;
-    opacity: 0;
-    transition: max-height 0.28s ease, opacity 0.2s ease, margin-top 0.28s ease;
-  }
   .group:hover .card-details,
   .group:focus-within .card-details {
     max-height: 16rem;
     opacity: 1;
+    margin-top: 1rem;
   }
+}
+.card-details.is-open {
+  max-height: 16rem;
+  opacity: 1;
+  margin-top: 1rem;
+}
+
+/* The Ratings toggle exists only where there is no hover to reveal with. */
+.touch-only { display: none; }
+@media (hover: none) {
+  .touch-only { display: flex; }
 }
 
 /* Medal chip on the top three. A slow sheen, nothing that jumps. */
+/* The chip's 2px halo lives in the keyframes rather than on the element,
+   because an animated box-shadow replaces the ring utility's box-shadow
+   outright, and the chip would sit on the medal ring with no gap between
+   two identical colours. */
 @keyframes medal-sheen {
-  0%, 70%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 0); }
-  85%           { box-shadow: 0 0 10px 2px rgb(255 255 255 / 0.55); }
+  0%, 70%, 100% { box-shadow: 0 0 0 2px var(--raised); }
+  85%           { box-shadow: 0 0 0 2px var(--raised), 0 0 10px 2px rgb(255 255 255 / 0.55); }
 }
 
 .medal-chip {

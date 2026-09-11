@@ -50,3 +50,14 @@ export const MEDAL = {
   2: { label: "2nd", ring: "ring-slate-300", chip: "bg-slate-300 text-slate-800" },
   3: { label: "3rd", ring: "ring-orange-400", chip: "bg-orange-400 text-orange-950" },
 } as const;
+
+/**
+ * The podium colour washed across the top of a medallist's tile, fading to
+ * the tile's own background. Same stops as the standings podium blocks, so
+ * gold, silver and bronze read the same on both pages.
+ */
+export const PODIUM_WASH = {
+  1: "from-amber-200/60 dark:from-amber-400/25",
+  2: "from-slate-300/50 dark:from-slate-300/20",
+  3: "from-orange-300/50 dark:from-orange-400/20",
+} as const;

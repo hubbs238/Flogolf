@@ -126,7 +126,8 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
           </dl>
         </section>
 
-        <aside className="rounded-2xl border border-line bg-raised p-6 shadow-sm">
+        {/* Rate next on the Golfers board links straight here, under the sticky header. */}
+        <aside id="rate" className="scroll-mt-32 rounded-2xl border border-line bg-raised p-6 shadow-sm">
           {isSelf ? (
             <MyPhotoUpload
               golferId={golfer.id}
