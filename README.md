@@ -1,4 +1,4 @@
-# Flo Golf Tour
+# FLO Golf Tour
 
 Player ratings and a weekly draft board. Everyone in the pool rates everyone
 else out of 100 across five categories, an admin controls how much each
