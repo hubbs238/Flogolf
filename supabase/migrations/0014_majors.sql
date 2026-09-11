@@ -20,6 +20,9 @@
 create table if not exists public.majors (
   id          uuid primary key default gen_random_uuid(),
   name        text not null check (length(btrim(name)) between 1 and 80),
+  -- Which course it is played on. Blank is allowed, for a major booked
+  -- before anyone has picked one; the banner simply says nothing.
+  course      text not null default '' check (length(course) <= 80),
   major_date  date not null,
   -- What the lowest eighteen is worth. Whole points, and zero is allowed for
   -- an event that is played for the title alone.
@@ -28,6 +31,17 @@ create table if not exists public.majors (
   created_by  uuid references public.profiles(id) on delete set null,
   created_at  timestamptz not null default now()
 );
+
+-- Course arrived after the table did. Harmless on a fresh run, and the whole
+-- point of the file staying one migration if this table already exists.
+--
+-- The check rides along, the way 0010 and 0012 carry theirs. Without it the
+-- two routes into this schema disagree: a fresh database gets the constraint
+-- from the create above, and one that took the earlier version of this file
+-- would have ended up with the column and no constraint at all.
+alter table public.majors
+  add column if not exists course text not null default ''
+    check (length(course) <= 80);
 
 -- One live major, enforced by the database rather than by good intentions.
 -- Partial, so any number of majors can sit switched off: only the live rows
@@ -63,5 +77,6 @@ revoke truncate, references, trigger on public.majors from anon, authenticated;
 select
   count(*) as majors,
   count(*) filter (where is_live) as live,
-  coalesce(max(name) filter (where is_live), '(none live)') as showing
+  coalesce(max(name) filter (where is_live), '(none live)') as showing,
+  coalesce(nullif(max(course) filter (where is_live), ''), '(no course)') as at
 from public.majors;

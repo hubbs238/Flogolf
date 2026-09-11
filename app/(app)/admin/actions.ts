@@ -453,12 +453,22 @@ function revalidateMajors() {
   revalidatePath("/admin/majors");
 }
 
-function checkMajor(fields: { name?: string; date?: string; points?: number }): string | null {
+function checkMajor(fields: {
+  name?: string;
+  course?: string;
+  date?: string;
+  points?: number;
+}): string | null {
   if (fields.name !== undefined && !fields.name.trim()) {
     return "A major needs a name.";
   }
   if (fields.name !== undefined && fields.name.trim().length > 80) {
     return "Keep the name under 80 characters.";
+  }
+  // A course is optional: a major can be on the calendar before anyone has
+  // picked one. Only the length is the database's business.
+  if (fields.course !== undefined && fields.course.trim().length > 80) {
+    return "Keep the course name under 80 characters.";
   }
   // The date input hands back "" when it is cleared, which would otherwise
   // reach Postgres as an invalid date and come back as a driver error.
@@ -476,6 +486,7 @@ function checkMajor(fields: { name?: string; date?: string; points?: number }): 
 
 export async function createMajor(fields: {
   name: string;
+  course: string;
   date: string;
   points: number;
 }): Promise<ActionResult> {
@@ -487,6 +498,7 @@ export async function createMajor(fields: {
 
   const { error } = await supabase.from("majors").insert({
     name: fields.name.trim(),
+    course: fields.course.trim(),
     major_date: fields.date,
     points: fields.points,
     created_by: session.userId,
@@ -499,7 +511,7 @@ export async function createMajor(fields: {
 
 export async function updateMajor(
   id: string,
-  fields: { name?: string; date?: string; points?: number },
+  fields: { name?: string; course?: string; date?: string; points?: number },
 ): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();
@@ -509,6 +521,7 @@ export async function updateMajor(
 
   const update: Record<string, unknown> = {};
   if (fields.name !== undefined) update.name = fields.name.trim();
+  if (fields.course !== undefined) update.course = fields.course.trim();
   if (fields.date !== undefined) update.major_date = fields.date;
   if (fields.points !== undefined) update.points = fields.points;
   if (Object.keys(update).length === 0) return { ok: true };

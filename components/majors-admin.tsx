@@ -21,6 +21,7 @@ export function MajorsAdmin({ majors }: { majors: Major[] }) {
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [course, setCourse] = useState("");
   const [date, setDate] = useState("");
   const [points, setPoints] = useState("");
 
@@ -55,13 +56,23 @@ export function MajorsAdmin({ majors }: { majors: Major[] }) {
 
       <section className="rounded-2xl border border-line bg-raised p-5 shadow-sm">
         <h3 className="font-semibold">Add a major</h3>
-        <div className="mt-4 grid gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <label>
             <span className={label}>Name</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="The Hubbs Invitational"
+              placeholder="The Green Hoodie"
+              maxLength={80}
+              className={field}
+            />
+          </label>
+          <label>
+            <span className={label}>Course</span>
+            <input
+              value={course}
+              onChange={(e) => setCourse(e.target.value)}
+              placeholder="Pebble Beach"
               maxLength={80}
               className={field}
             />
@@ -90,9 +101,10 @@ export function MajorsAdmin({ majors }: { majors: Major[] }) {
         <button
           onClick={() =>
             run(
-              () => createMajor({ name, date, points: Number(points || 0) }),
+              () => createMajor({ name, course, date, points: Number(points || 0) }),
               () => {
                 setName("");
+                setCourse("");
                 setDate("");
                 setPoints("");
               },
@@ -145,6 +157,10 @@ function MajorRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(major.name);
+  // ?? "" because a row read before the course migration lands has no such
+  // column, and seeding an input with undefined makes React switch it to
+  // uncontrolled and complain the first time it is typed in.
+  const [course, setCourse] = useState(major.course ?? "");
   const [date, setDate] = useState(major.major_date.slice(0, 10));
   const [points, setPoints] = useState(String(major.points));
   const [confirming, setConfirming] = useState(false);
@@ -157,16 +173,17 @@ function MajorRow({
     >
       {editing ? (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-[2fr_1fr_1fr]">
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} className={field} />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Name" className={field} />
+            <input value={course} onChange={(e) => setCourse(e.target.value)} maxLength={80} placeholder="Course" className={field} />
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
-            <input type="number" min={0} step={1} value={points} onChange={(e) => setPoints(e.target.value)} className={field} />
+            <input type="number" min={0} step={1} value={points} onChange={(e) => setPoints(e.target.value)} placeholder="Points" className={field} />
           </div>
           <div className="flex gap-2">
             <button
               onClick={() =>
                 run(
-                  () => updateMajor(major.id, { name, date, points: Number(points || 0) }),
+                  () => updateMajor(major.id, { name, course, date, points: Number(points || 0) }),
                   () => setEditing(false),
                 )
               }
@@ -178,6 +195,7 @@ function MajorRow({
             <button
               onClick={() => {
                 setName(major.name);
+                setCourse(major.course ?? "");
                 setDate(major.major_date.slice(0, 10));
                 setPoints(String(major.points));
                 setEditing(false);
@@ -200,7 +218,9 @@ function MajorRow({
               )}
             </p>
             <p className="mt-0.5 text-sm text-muted">
-              {formatMajorDate(major.major_date)} · {major.points} pts for the lowest eighteen
+              {formatMajorDate(major.major_date)}
+              {major.course && ` · ${major.course}`}
+              {` · ${major.points} pts for the lowest eighteen`}
             </p>
           </div>
 

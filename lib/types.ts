@@ -104,6 +104,8 @@ export type MatchStatus = "setup" | "filling" | "in_progress" | "complete";
 export type Major = {
   id: string;
   name: string;
+  /** The course it is played on. Empty string when nobody has picked one. */
+  course: string;
   /** A plain date, no time. Render it without constructing a Date. */
   major_date: string;
   points: number;

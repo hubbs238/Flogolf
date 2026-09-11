@@ -71,6 +71,27 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           >
             {major.name}
           </h2>
+
+          {/*
+            The venue, second only to the name. Blank when nobody has picked a
+            course yet, and then the line goes rather than sitting empty.
+
+            items-start, not items-center: a course long enough to wrap would
+            leave the pin floating halfway down the block instead of sitting on
+            the line it belongs to. The nudge lines it up with the caps.
+          */}
+          {major.course && (
+            <p
+              className={`mt-1.5 flex items-start gap-2 font-medium text-amber-100/90 ${
+                big ? "text-lg sm:text-xl" : "text-base"
+              }`}
+            >
+              <FlagIcon
+                className={big ? "mt-1 h-5 w-5 shrink-0" : "mt-0.5 h-4 w-4 shrink-0"}
+              />
+              <span className="min-w-0">{major.course}</span>
+            </p>
+          )}
         </div>
 
         {/*
@@ -106,6 +127,18 @@ function Fact({ label, value, big }: { label: string; value: string; big: boolea
         {label}
       </dt>
     </div>
+  );
+}
+
+/** A pin on a green, so the course reads as a place rather than a subtitle. */
+function FlagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <path d="M6 21V4" />
+      <path d="M6 4h11l-2.5 3.5L17 11H6" fill="currentColor" fillOpacity="0.35" />
+      <path d="M3.5 21h6" />
+    </svg>
   );
 }
 
