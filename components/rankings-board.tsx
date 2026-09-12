@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
@@ -135,12 +135,6 @@ export function RankingsBoard({
   const shown = onlyUnrated ? unrated : sorted;
   const filterOn = onlyUnrated && unrated.length > 0;
 
-  // The first golfer without a figure gets a heading above them, so the
-  // dashes at the bottom read as a group rather than as broken tiles.
-  const firstWithout = shown.find((g) => valueOf(g) === null)?.id;
-  const withoutLabel =
-    sort === POINTS || MONEY_SORTS.includes(sort) ? "Yet to play a round" : "Not rated yet";
-
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
@@ -223,27 +217,28 @@ export function RankingsBoard({
         </div>
       ) : (
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/*
+            One unbroken run of cards. A full width heading between the golfers
+            who have played and the ones who have not can only start a row, so
+            it left the tail of the previous row empty and punched a hole in
+            the middle of the list. The cards say "No rounds yet" on their own
+            meta line anyway, so the heading was buying nothing.
+          */}
           {shown.map((golfer) => (
-            <Fragment key={golfer.id}>
-              {golfer.id === firstWithout && (
-                <li className="col-span-full px-4 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-muted">
-                  {withoutLabel}
-                </li>
-              )}
-              <GolferCard
-                golfer={golfer}
-                characteristics={characteristics}
-                sortBy={sort}
-                sortLabel={sortLabel}
-                value={valueOf(golfer)}
-                rank={ranks[golfer.id]}
-                showMoney={showMoney}
-                hasRated={rated.has(golfer.id)}
-                isSelf={golfer.id === myGolferId}
-                season={season[golfer.id]}
-                medal={medals[golfer.id]}
-              />
-            </Fragment>
+            <GolferCard
+              key={golfer.id}
+              golfer={golfer}
+              characteristics={characteristics}
+              sortBy={sort}
+              sortLabel={sortLabel}
+              value={valueOf(golfer)}
+              rank={ranks[golfer.id]}
+              showMoney={showMoney}
+              hasRated={rated.has(golfer.id)}
+              isSelf={golfer.id === myGolferId}
+              season={season[golfer.id]}
+              medal={medals[golfer.id]}
+            />
           ))}
         </ul>
       )}
