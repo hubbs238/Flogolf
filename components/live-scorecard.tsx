@@ -42,23 +42,24 @@ function ScoreCell({
   const [draft, setDraft] = useState<string | null>(null);
   const [seen, setSeen] = useState(value);
 
+  const parse = (text: string): number | null => {
+    const raw = text.trim();
+    return raw === "" ? null : Number(raw);
+  };
+
   // Adjusting state during render, which is the pattern React documents for
   // "a prop changed, so some state should reset". It costs less than an
   // effect: React re-runs this one component before it paints, rather than
   // committing a frame and then a second one.
   //
-  // A changed value means either our own save landing - in which case it
-  // matches what was typed and nothing moves on screen - or someone else
-  // correcting the hole, which should win. Either way the draft is done.
+  // Only when the server agrees with what was typed. Clearing on any change
+  // at all loses work: type 1, blur, click straight back in and start typing
+  // 12, and the save of the 1 lands and wipes the 12 out from under you -
+  // which is the same bug this whole change exists to kill, wearing a hat.
   if (seen !== value) {
     setSeen(value);
-    setDraft(null);
+    if (draft !== null && (value ?? null) === parse(draft)) setDraft(null);
   }
-
-  const parse = (text: string): number | null => {
-    const raw = text.trim();
-    return raw === "" ? null : Number(raw);
-  };
 
   return (
     <input
@@ -69,6 +70,11 @@ function ScoreCell({
       step={1}
       value={draft ?? (value ?? "")}
       onChange={(event) => setDraft(event.target.value)}
+      onKeyDown={(event) => {
+        // Enter commits. Without it the last hole of a card lives only in
+        // React state until something else happens to take the focus away.
+        if (event.key === "Enter") event.currentTarget.blur();
+      }}
       onBlur={() => {
         if (draft === null) return;
         const next = parse(draft);
@@ -239,8 +245,10 @@ export function LiveScorecard({
   function save(teamId: string, hole: number, value: number | null) {
     setError(null);
     void setHoleScore(match.id, teamId, hole, value).then((r) => {
-      if (r.ok) refreshSoon();
-      else setError(r.error);
+      // No refresh on success. The action revalidates the round, and Next
+      // re-renders it inside the same response, so asking again would be a
+      // third render of a page we have already been handed.
+      if (!r.ok) setError(r.error);
     });
   }
 

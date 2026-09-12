@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import type { Profile } from "./types";
@@ -8,7 +9,16 @@ export type SessionUser = {
   profile: Profile | null;
 };
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+/**
+ * cache() so the layout and the page share one answer per render.
+ *
+ * supabase.auth.getUser() is a network call to Supabase, not a local token
+ * decode, and it drags a profiles select behind it. Both the app layout and
+ * every page call requireUser, so an uncached version pays for the same
+ * answer twice on every single render - including the re-render a score save
+ * triggers on its way back.
+ */
+export const getSessionUser = cache(async function getSessionUser(): Promise<SessionUser | null> {
   const supabase = await createClient();
   const {
     data: { user },
@@ -27,7 +37,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     email: user.email ?? "",
     profile: (profile as Profile) ?? null,
   };
-}
+});
 
 /**
  * Every authenticated page calls this. Proxy is only an optimistic check.

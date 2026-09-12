@@ -29,6 +29,19 @@ function revalidateMoney(matchId?: string) {
 
 const revalidateMatch = revalidateMoney;
 
+/**
+ * Just the round, for the one write that happens over and over.
+ *
+ * Entering a card fires this per hole. The season pages only count rounds
+ * marked complete, so a hole posted mid round cannot move them, and clearing
+ * them anyway made every score entry drop the cache on the four most
+ * expensive pages in the app. Finishing, reopening, deleting or repricing a
+ * round still uses the full sweep above, because those genuinely do move it.
+ */
+function revalidateScore(matchId: string) {
+  revalidatePath(`/games/${matchId}`);
+}
+
 export async function createMatch(input: {
   name: string;
   course: string;
@@ -466,7 +479,7 @@ export async function setHoleScore(
     if (error) return { ok: false, error: describeScoreWriteError(error.message) };
   }
 
-  revalidateMatch(matchId);
+  revalidateScore(matchId);
   return { ok: true };
 }
 

@@ -20,12 +20,17 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
   const { id } = await params;
   const session = await requireUser();
 
-  const bundle = await getMatchBundle(id);
+  // In parallel. These were four awaits in a row, so every render of this page
+  // - including the one a score save triggers on its way back - paid for each
+  // round trip end to end before starting the next.
+  const isAdmin = session.profile?.is_admin ?? false;
+  const [bundle, golfers, view] = await Promise.all([
+    getMatchBundle(id),
+    getPoolGolfers(),
+    getViewMode(isAdmin),
+  ]);
   if (!bundle) notFound();
 
-  const isAdmin = session.profile?.is_admin ?? false;
-  const view = await getViewMode(isAdmin);
-  const golfers = await getPoolGolfers();
   const computed = computeMatch(bundle);
   const { match, teams, players, scores } = bundle;
 
