@@ -81,27 +81,26 @@ export function MajorsAdmin({ majors }: { majors: Major[] }) {
             <span className={label}>Date</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
           </label>
-          <label>
-            <span className={label}>Points</span>
+          <label className="sm:col-span-2">
+            <span className={label}>What is on the line</span>
             <input
-              type="number"
-              min={0}
-              step={1}
               value={points}
               onChange={(e) => setPoints(e.target.value)}
-              placeholder="150"
+              placeholder="150 pts to the lowest 18"
+              maxLength={120}
               className={field}
             />
           </label>
         </div>
         <p className="mt-2 text-xs text-muted">
-          Points go to whoever posts the lowest eighteen on the day.
+          Written however you like, and shown on the banner as you write it.
+          Leave it empty for a major played for the title alone.
         </p>
 
         <button
           onClick={() =>
             run(
-              () => createMajor({ name, course, date, points: Number(points || 0) }),
+              () => createMajor({ name, course, date, points }),
               () => {
                 setName("");
                 setCourse("");
@@ -162,7 +161,7 @@ function MajorRow({
   // uncontrolled and complain the first time it is typed in.
   const [course, setCourse] = useState(major.course ?? "");
   const [date, setDate] = useState(major.major_date.slice(0, 10));
-  const [points, setPoints] = useState(String(major.points));
+  const [points, setPoints] = useState(major.points ?? "");
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -177,13 +176,13 @@ function MajorRow({
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Name" className={field} />
             <input value={course} onChange={(e) => setCourse(e.target.value)} maxLength={80} placeholder="Course" className={field} />
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={field} />
-            <input type="number" min={0} step={1} value={points} onChange={(e) => setPoints(e.target.value)} placeholder="Points" className={field} />
+            <input value={points} onChange={(e) => setPoints(e.target.value)} maxLength={120} placeholder="What is on the line" className="sm:col-span-2 w-full rounded-xl border border-line bg-surface px-3 py-2 text-sm outline-none transition focus:border-fairway-400" />
           </div>
           <div className="flex gap-2">
             <button
               onClick={() =>
                 run(
-                  () => updateMajor(major.id, { name, course, date, points: Number(points || 0) }),
+                  () => updateMajor(major.id, { name, course, date, points }),
                   () => setEditing(false),
                 )
               }
@@ -197,7 +196,7 @@ function MajorRow({
                 setName(major.name);
                 setCourse(major.course ?? "");
                 setDate(major.major_date.slice(0, 10));
-                setPoints(String(major.points));
+                setPoints(major.points ?? "");
                 setEditing(false);
               }}
               className="rounded-lg border border-line px-4 py-2 text-sm font-medium transition hover:border-fairway-300"
@@ -220,7 +219,7 @@ function MajorRow({
             <p className="mt-0.5 text-sm text-muted">
               {formatMajorDate(major.major_date)}
               {major.course && ` · ${major.course}`}
-              {` · ${major.points} pts for the lowest eighteen`}
+              {major.points && ` · ${major.points}`}
             </p>
           </div>
 

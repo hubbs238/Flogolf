@@ -1,7 +1,7 @@
 -- ============================================================
 --  Majors: the season's five marquee events
 --
---  An announcement, not a scoring rule. The points figure is a number an
+--  An announcement, not a scoring rule. What is on the line is free text an
 --  admin types so the banner can say what is on the line; nothing here
 --  reaches the scoring engine, and turning a major on cannot move a single
 --  FLO Cup point. Whoever wins it is paid by hand, the way it works today.
@@ -24,9 +24,9 @@ create table if not exists public.majors (
   -- before anyone has picked one; the banner simply says nothing.
   course      text not null default '' check (length(course) <= 80),
   major_date  date not null,
-  -- What the lowest eighteen is worth. Whole points, and zero is allowed for
-  -- an event that is played for the title alone.
-  points      int not null default 0 check (points >= 0 and points <= 100000),
+  -- What is on the line, in the admin's own words: "150 pts to the lowest
+  -- 18", "Green Hoodie and bragging rights". Blank is fine.
+  points      text not null default '' check (length(points) <= 120),
   is_live     boolean not null default false,
   created_by  uuid references public.profiles(id) on delete set null,
   created_at  timestamptz not null default now()
@@ -42,6 +42,29 @@ create table if not exists public.majors (
 alter table public.majors
   add column if not exists course text not null default ''
     check (length(course) <= 80);
+
+-- Points started life as an integer and became free text, so that the line
+-- can read however the admin wants it to. Converts in place if an earlier
+-- run of this file created the column as a number.
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'majors'
+      and column_name = 'points'
+      and data_type <> 'text'
+  ) then
+    alter table public.majors drop constraint if exists majors_points_check;
+    alter table public.majors alter column points drop default;
+    alter table public.majors alter column points type text
+      using case when points = 0 then '' else points::text || ' pts' end;
+    alter table public.majors alter column points set default '';
+    alter table public.majors add constraint majors_points_check
+      check (length(points) <= 120);
+  end if;
+end $$;
 
 -- One live major, enforced by the database rather than by good intentions.
 -- Partial, so any number of majors can sit switched off: only the live rows
@@ -78,5 +101,6 @@ select
   count(*) as majors,
   count(*) filter (where is_live) as live,
   coalesce(max(name) filter (where is_live), '(none live)') as showing,
-  coalesce(nullif(max(course) filter (where is_live), ''), '(no course)') as at
+  coalesce(nullif(max(course) filter (where is_live), ''), '(no course)') as at,
+  coalesce(nullif(max(points) filter (where is_live), ''), '(nothing stated)') as on_the_line
 from public.majors;

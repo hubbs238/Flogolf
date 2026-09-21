@@ -1,4 +1,5 @@
 import { formatMajorDate } from "@/lib/scoring";
+import { TrophyIcon } from "./trophy-icon";
 import type { Major } from "@/lib/types";
 
 /**
@@ -35,35 +36,14 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
       <div className={`flex flex-wrap items-center gap-x-6 gap-y-4 ${big ? "sm:gap-x-8" : ""}`}>
         <StarBadge className={big ? "h-14 w-14 sm:h-16 sm:w-16" : "h-11 w-11 sm:h-12 sm:w-12"} />
 
-        {/*
-          No min-w-0 here. The name wraps rather than truncates, so letting
-          this column shrink past its longest word makes the heading overflow
-          and paint across the chips instead of pushing them onto a new line.
-        */}
         <div className="flex-1 basis-56">
-          {/*
-            The date rides the eyebrow rather than sitting in a labelled chip.
-            It needs no caption up here, and it leaves the name as the only
-            thing on its own line.
-          */}
-          <p className="flex flex-wrap items-baseline gap-x-2">
-            <span
-              className={`font-semibold uppercase tracking-[0.22em] text-amber-300 ${
-                big ? "text-xs" : "text-[11px]"
-              }`}
-            >
-              Major Event
-            </span>
-            <span aria-hidden="true" className="text-amber-300/40">
-              &middot;
-            </span>
-            <span
-              className={`font-medium text-amber-100/90 ${big ? "text-sm" : "text-xs"}`}
-            >
-              {formatMajorDate(major.major_date)}
-            </span>
+          <p
+            className={`font-semibold uppercase tracking-[0.22em] text-amber-300 ${
+              big ? "text-xs" : "text-[11px]"
+            }`}
+          >
+            Major Event
           </p>
-
           <h2
             className={`mt-1 font-semibold leading-tight tracking-tight text-balance ${
               big ? "text-3xl sm:text-5xl" : "text-2xl sm:text-3xl"
@@ -71,62 +51,83 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           >
             {major.name}
           </h2>
-
-          {/*
-            The venue, second only to the name. Blank when nobody has picked a
-            course yet, and then the line goes rather than sitting empty.
-
-            items-start, not items-center: a course long enough to wrap would
-            leave the pin floating halfway down the block instead of sitting on
-            the line it belongs to. The nudge lines it up with the caps.
-          */}
-          {major.course && (
-            <p
-              className={`mt-1.5 flex items-start gap-2 font-medium text-amber-100/90 ${
-                big ? "text-lg sm:text-xl" : "text-base"
-              }`}
-            >
-              <FlagIcon
-                className={big ? "mt-1 h-5 w-5 shrink-0" : "mt-0.5 h-4 w-4 shrink-0"}
-              />
-              <span className="min-w-0">{major.course}</span>
-            </p>
-          )}
         </div>
+      </div>
 
-        {/*
-          Zero points is a real choice, for an event played for the title
-          alone. A chip reading "0 pts" would read as a bug rather than as the
-          point, so the whole list stands down with nothing left to show.
-        */}
-        {major.points > 0 && (
-          <dl className="flex shrink-0 flex-wrap items-stretch gap-2">
-            <Fact
-              label="Lowest 18"
-              value={`${major.points.toLocaleString()} pts`}
-              big={big}
-            />
-          </dl>
+      {/*
+        When and where, given their own tier. They used to be a caption under
+        the name and a chip in the corner; now they are the second thing the
+        eye lands on, which is what someone glancing at the banner actually
+        wants to know.
+      */}
+      <div
+        className={`flex flex-wrap items-center gap-x-8 gap-y-3 ${
+          big ? "mt-6 sm:mt-7" : "mt-5"
+        }`}
+      >
+        <Fact
+          icon={<CalendarIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
+          value={formatMajorDate(major.major_date)}
+          big={big}
+        />
+        {major.course && (
+          <Fact
+            icon={<FlagIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
+            value={major.course}
+            big={big}
+          />
         )}
       </div>
+
+      {/*
+        What is on the line, in the admin's own words. A sentence rather than
+        a number now, so it gets a line of its own to run along rather than a
+        fixed chip to be squeezed into.
+      */}
+      {major.points && (
+        <p
+          // w-fit so it hugs a short line. A bar running the full width with
+          // "150 pts" adrift at the left end reads as unfinished.
+          className={`flex w-fit max-w-full items-start gap-2.5 rounded-xl bg-amber-300/15 px-4 py-3 font-medium text-amber-100 ring-1 ring-amber-300/40 ${
+            big ? "mt-6 text-base sm:text-lg" : "mt-5 text-sm sm:text-base"
+          }`}
+        >
+          <TrophyIcon className={big ? "mt-0.5 h-5 w-5 shrink-0 text-amber-300" : "mt-0.5 h-4 w-4 shrink-0 text-amber-300"} />
+          <span className="min-w-0">{major.points}</span>
+        </p>
+      )}
     </section>
   );
 }
 
-function Fact({ label, value, big }: { label: string; value: string; big: boolean }) {
+function Fact({
+  icon, value, big,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  big: boolean;
+}) {
   return (
-    <div className="rounded-xl bg-amber-300/15 px-3.5 py-2.5 ring-1 ring-amber-300/40">
-      <dd
-        className={`font-semibold leading-none tabular-nums text-amber-200 ${
-          big ? "text-xl sm:text-2xl" : "text-lg sm:text-xl"
-        }`}
-      >
-        {value}
-      </dd>
-      <dt className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200/70">
-        {label}
-      </dt>
-    </div>
+    <span
+      className={`flex items-center gap-2.5 font-semibold tracking-tight ${
+        big ? "text-2xl sm:text-3xl" : "text-lg sm:text-xl"
+      }`}
+    >
+      <span className="shrink-0 text-amber-300">{icon}</span>
+      <span className="min-w-0">{value}</span>
+    </span>
+  );
+}
+
+
+/** A calendar, so the date reads at a glance rather than as a caption. */
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}
+      strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4" />
+    </svg>
   );
 }
 

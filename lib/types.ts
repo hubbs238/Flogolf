@@ -108,7 +108,8 @@ export type Major = {
   course: string;
   /** A plain date, no time. Render it without constructing a Date. */
   major_date: string;
-  points: number;
+  /** What is on the line, in the admin's own words. Empty when unstated. */
+  points: string;
   is_live: boolean;
   created_by: string | null;
   created_at: string;

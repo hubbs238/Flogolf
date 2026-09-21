@@ -457,7 +457,7 @@ function checkMajor(fields: {
   name?: string;
   course?: string;
   date?: string;
-  points?: number;
+  points?: string;
 }): string | null {
   if (fields.name !== undefined && !fields.name.trim()) {
     return "A major needs a name.";
@@ -475,11 +475,10 @@ function checkMajor(fields: {
   if (fields.date !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(fields.date)) {
     return "Pick a date for the major.";
   }
-  if (fields.points !== undefined) {
-    if (!Number.isFinite(fields.points) || fields.points < 0) {
-      return "Points must be a number, zero or more.";
-    }
-    if (!Number.isInteger(fields.points)) return "Points must be a whole number.";
+  // Free text now, so the line can read however the admin wants it to.
+  // Length is the only thing worth policing.
+  if (fields.points !== undefined && fields.points.trim().length > 120) {
+    return "Keep what is on the line under 120 characters.";
   }
   return null;
 }
@@ -488,7 +487,7 @@ export async function createMajor(fields: {
   name: string;
   course: string;
   date: string;
-  points: number;
+  points: string;
 }): Promise<ActionResult> {
   const session = await requireAdmin();
   const supabase = await createClient();
@@ -500,7 +499,7 @@ export async function createMajor(fields: {
     name: fields.name.trim(),
     course: fields.course.trim(),
     major_date: fields.date,
-    points: fields.points,
+    points: fields.points.trim(),
     created_by: session.userId,
   });
   if (error) return { ok: false, error: error.message };
@@ -511,7 +510,7 @@ export async function createMajor(fields: {
 
 export async function updateMajor(
   id: string,
-  fields: { name?: string; course?: string; date?: string; points?: number },
+  fields: { name?: string; course?: string; date?: string; points?: string },
 ): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();
@@ -523,7 +522,7 @@ export async function updateMajor(
   if (fields.name !== undefined) update.name = fields.name.trim();
   if (fields.course !== undefined) update.course = fields.course.trim();
   if (fields.date !== undefined) update.major_date = fields.date;
-  if (fields.points !== undefined) update.points = fields.points;
+  if (fields.points !== undefined) update.points = fields.points.trim();
   if (Object.keys(update).length === 0) return { ok: true };
 
   const { error } = await supabase.from("majors").update(update).eq("id", id);
