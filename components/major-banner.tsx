@@ -22,6 +22,18 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
       }`}
       aria-label={`Major Event: ${major.name}`}
     >
+      {/* Mowing stripes, so the card has a surface rather than a flat fill. */}
+      <div aria-hidden="true" className="major-turf pointer-events-none absolute inset-0 -z-10" />
+
+      {/*
+        A star the size of the card, bled off the right edge at almost no
+        opacity. It fills the space the words leave and gives the whole thing
+        some depth, without ever competing to be read.
+      */}
+      <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-24 -z-10 hidden sm:block">
+        <StarMark className={big ? "h-[26rem] w-[26rem]" : "h-64 w-64"} />
+      </div>
+
       {/* The flash: a wide gold light crossing the card, behind the words. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
         <div className="major-sweep absolute -inset-y-8 -left-1/3 w-1/3 bg-gradient-to-r from-transparent via-amber-200/25 to-transparent blur-md" />
@@ -44,13 +56,25 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           >
             Major Event
           </p>
+          {/*
+            Gold on the name, the way it is engraved on a trophy. This is the
+            one bold thing on the card; everything around it stays quiet so
+            this is what the eye lands on.
+          */}
           <h2
-            className={`mt-1 font-semibold leading-tight tracking-tight text-balance ${
+            className={`major-name mt-1 bg-gradient-to-b from-amber-50 via-amber-200 to-amber-400 bg-clip-text font-semibold leading-tight tracking-tight text-transparent text-balance ${
               big ? "text-3xl sm:text-5xl" : "text-2xl sm:text-3xl"
             }`}
           >
             {major.name}
           </h2>
+
+          <div
+            aria-hidden="true"
+            className={`h-0.5 rounded-full bg-gradient-to-r from-amber-400 via-amber-300/60 to-transparent ${
+              big ? "mt-4 w-40" : "mt-3 w-28"
+            }`}
+          />
         </div>
       </div>
 
@@ -61,8 +85,8 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
         wants to know.
       */}
       <div
-        className={`flex flex-wrap items-center gap-x-8 gap-y-3 ${
-          big ? "mt-6 sm:mt-7" : "mt-5"
+        className={`flex flex-wrap items-center gap-y-3 ${
+          big ? "mt-5 gap-x-5 sm:mt-6 sm:gap-x-7" : "mt-4 gap-x-4 sm:gap-x-5"
         }`}
       >
         <Fact
@@ -71,11 +95,17 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           big={big}
         />
         {major.course && (
-          <Fact
-            icon={<FlagIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
-            value={major.course}
-            big={big}
-          />
+          <>
+            <span
+              aria-hidden="true"
+              className={`w-px shrink-0 bg-white/20 ${big ? "h-8" : "h-6"}`}
+            />
+            <Fact
+              icon={<FlagIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
+              value={major.course}
+              big={big}
+            />
+          </>
         )}
       </div>
 
@@ -139,6 +169,20 @@ function FlagIcon({ className }: { className?: string }) {
       <path d="M6 21V4" />
       <path d="M6 4h11l-2.5 3.5L17 11H6" fill="currentColor" fillOpacity="0.35" />
       <path d="M3.5 21h6" />
+    </svg>
+  );
+}
+
+/** The star alone, as a watermark. No ring: at this size the ring was the
+ *  thing you noticed, which is the opposite of what a watermark is for. */
+function StarMark({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 48 48" aria-hidden="true" className={className}>
+      <path
+        fill="#f2c14e"
+        fillOpacity="0.055"
+        d="M24 11.5l3.7 7.9 8.3 1.1-6.1 5.9 1.5 8.5-7.4-4.1-7.4 4.1 1.5-8.5-6.1-5.9 8.3-1.1z"
+      />
     </svg>
   );
 }

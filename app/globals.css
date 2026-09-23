@@ -153,6 +153,28 @@ input[type="range"]::-moz-range-thumb {
   .touch-only { display: flex; }
 }
 
+/* The major's name is gold clipped to the glyphs, which is what makes it read
+   as engraved rather than coloured in. Transparent text is the mechanism, so
+   anywhere the clip is not honoured the name would vanish outright. This puts
+   it back. */
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .major-name {
+    color: var(--color-amber-200);
+    -webkit-text-fill-color: var(--color-amber-200);
+  }
+}
+
+/* Fairway mowing stripes, the texture a green actually has. Barely there on
+   purpose: it gives the card a surface instead of a flat fill, and anything
+   stronger would fight the words sitting on it. */
+.major-turf {
+  background-image: repeating-linear-gradient(
+    115deg,
+    rgb(255 255 255 / 0.022) 0 30px,
+    rgb(255 255 255 / 0) 30px 60px
+  );
+}
+
 /* The major banner. A gold light crosses the card on a slow loop and the
    rule above the name glows on the same beat. Both are decoration on an
    announcement, so both stop dead under reduced motion. */
