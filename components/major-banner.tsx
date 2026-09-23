@@ -45,10 +45,16 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
         className="major-glow pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300 to-transparent"
       />
 
-      <div className={`flex flex-wrap items-center gap-x-6 gap-y-4 ${big ? "sm:gap-x-8" : ""}`}>
+      {/*
+        The name takes the whole width and the facts spread across it
+        underneath, edge to edge. Three columns side by side starved the name
+        - "The Claret Mug" came out over three lines with "Mug" on its own -
+        because the sentence on the right would take whatever it wanted.
+      */}
+      <div className={`flex items-center ${big ? "gap-5" : "gap-4"}`}>
         <StarBadge className={big ? "h-14 w-14 sm:h-16 sm:w-16" : "h-11 w-11 sm:h-12 sm:w-12"} />
 
-        <div className="flex-1 basis-56">
+        <div className="min-w-0">
           <p
             className={`font-semibold uppercase tracking-[0.22em] text-amber-300 ${
               big ? "text-xs" : "text-[11px]"
@@ -68,25 +74,23 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           >
             {major.name}
           </h2>
-
-          <div
-            aria-hidden="true"
-            className={`h-0.5 rounded-full bg-gradient-to-r from-amber-400 via-amber-300/60 to-transparent ${
-              big ? "mt-4 w-40" : "mt-3 w-28"
-            }`}
-          />
         </div>
       </div>
 
+      <div
+        aria-hidden="true"
+        className={`h-px rounded-full bg-gradient-to-r from-amber-400/70 via-amber-300/25 to-transparent ${
+          big ? "mt-6" : "mt-5"
+        }`}
+      />
+
       {/*
-        When and where, given their own tier. They used to be a caption under
-        the name and a chip in the corner; now they are the second thing the
-        eye lands on, which is what someone glancing at the banner actually
-        wants to know.
+        Everything else on one line, pushed apart so it reaches both edges of
+        the card rather than huddling at the left.
       */}
       <div
-        className={`flex flex-wrap items-center gap-y-3 ${
-          big ? "mt-5 gap-x-5 sm:mt-6 sm:gap-x-7" : "mt-4 gap-x-4 sm:gap-x-5"
+        className={`flex flex-wrap items-center justify-between gap-y-4 ${
+          big ? "mt-6 gap-x-8" : "mt-5 gap-x-6"
         }`}
       >
         <Fact
@@ -94,38 +98,28 @@ function MajorCard({ major, size }: { major: Major; size: "banner" | "tile" }) {
           value={formatMajorDate(major.major_date)}
           big={big}
         />
+
         {major.course && (
-          <>
-            <span
-              aria-hidden="true"
-              className={`w-px shrink-0 bg-white/20 ${big ? "h-8" : "h-6"}`}
+          <Fact
+            icon={<FlagIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
+            value={major.course}
+            big={big}
+          />
+        )}
+
+        {major.points && (
+          <p
+            className={`flex max-w-full items-start gap-2.5 rounded-xl bg-amber-300/15 px-4 py-3 font-medium text-amber-100 ring-1 ring-amber-300/40 ${
+              big ? "text-base sm:text-lg" : "text-sm sm:text-base"
+            }`}
+          >
+            <TrophyIcon
+              className={`mt-0.5 shrink-0 text-amber-300 ${big ? "h-5 w-5" : "h-4 w-4"}`}
             />
-            <Fact
-              icon={<FlagIcon className={big ? "h-6 w-6" : "h-5 w-5"} />}
-              value={major.course}
-              big={big}
-            />
-          </>
+            <span className="min-w-0">{major.points}</span>
+          </p>
         )}
       </div>
-
-      {/*
-        What is on the line, in the admin's own words. A sentence rather than
-        a number now, so it gets a line of its own to run along rather than a
-        fixed chip to be squeezed into.
-      */}
-      {major.points && (
-        <p
-          // w-fit so it hugs a short line. A bar running the full width with
-          // "150 pts" adrift at the left end reads as unfinished.
-          className={`flex w-fit max-w-full items-start gap-2.5 rounded-xl bg-amber-300/15 px-4 py-3 font-medium text-amber-100 ring-1 ring-amber-300/40 ${
-            big ? "mt-6 text-base sm:text-lg" : "mt-5 text-sm sm:text-base"
-          }`}
-        >
-          <TrophyIcon className={big ? "mt-0.5 h-5 w-5 shrink-0 text-amber-300" : "mt-0.5 h-4 w-4 shrink-0 text-amber-300"} />
-          <span className="min-w-0">{major.points}</span>
-        </p>
-      )}
     </section>
   );
 }
