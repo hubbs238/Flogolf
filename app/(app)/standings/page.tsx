@@ -32,7 +32,8 @@ export default async function FloCupPage() {
           : "Winning a match earns Match Points, and a major pays double. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. The FB18 side game does not move the Cup, since the bonus points already cover it."}
         {" "}Bonus Points go to the lowest front nine
         (10), the lowest back nine (10) and the lowest eighteen (15), and every
-        player on the winning team collects them. One winner each: a front nine
+        player on the winning team collects them. A major doubles all of it,
+        points from matches included. One winner each: a front nine
         tie carries to the back nine, and a tie after eighteen splits the
         points. Rounds counts every finished round a golfer was rostered in.
       </p>

@@ -4,6 +4,7 @@ import {
   resolveSuddenDeath,
   pointsForRound,
   roundPoints,
+  BONUS_POINTS,
   MAJOR_SEGMENTS,
   POINT_MULTIPLIER,
   scoreBonusPoints,
@@ -718,6 +719,19 @@ console.log("\n=== a major pays double, in points only ===");
     major.segments.map((x) => x.each), [20, 20, 30]);
   check("A sweeps 35 normally", normal.pointsByTeam.A, 35);
   check("and 70 on a major", major.pointsByTeam.A, 70);
+
+  // The round page prints the tier values beside the totals the engine paid.
+  // If those two ever disagree the page contradicts itself on one screen, so
+  // pin that they come from the same arithmetic.
+  for (const type of ["season", "major"] as const) {
+    const m = POINT_MULTIPLIER[type];
+    const stated = (["front", "back", "total"] as const).map((seg) => BONUS_POINTS[seg] * m);
+    const paid = scoreBonusPoints(["A", "B"], s, m);
+    check(`what a ${type} round states is what it pays`,
+      stated, paid.segments.map((x) => x.each));
+    check(`and the sweep adds up on a ${type} round`,
+      stated.reduce((a, b) => a + b, 0), paid.pointsByTeam.A);
+  }
 }
 
 console.log("\n=== the double is applied once, not twice ===");

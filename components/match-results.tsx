@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
-import { BONUS_POINTS, formatRelative } from "@/lib/game";
+import { BONUS_POINTS, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
@@ -95,6 +95,13 @@ export function MatchResults({
   const major = roundType === "major";
   const matchCount = segments.length;
   const matchesPhrase = major ? "three six-hole matches" : "six three-hole matches";
+
+  // Derived, never written out. A figure typed into copy beside a figure the
+  // engine computed is a contradiction waiting to be shipped: on a major the
+  // table said +70 while the sentence above it said the three bonuses came to
+  // 35. Both sides multiply the same constants by the same multiplier now.
+  const bonusPts = (segment: "front" | "back" | "total") =>
+    BONUS_POINTS[segment] * POINT_MULTIPLIER[roundType];
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -319,7 +326,7 @@ export function MatchResults({
                 </span>
                 <span className="shrink-0 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
                   {b.winners.length === 0
-                    ? `${BONUS_POINTS[b.segment]} pts`
+                    ? `${bonusPts(b.segment)} pts`
                     : `+${b.each} pts each`}
                 </span>
               </li>
@@ -390,8 +397,9 @@ export function MatchResults({
             {showMoney
               ? `Match Points come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
               : `Match Points come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
-            {" "}Bonus Points are 10 for the lowest front nine, 10 for the
-            lowest back nine and 15 for the lowest eighteen.
+            {` Bonus Points are ${bonusPts("front")} for the lowest front nine, ` +
+              `${bonusPts("back")} for the lowest back nine and ` +
+              `${bonusPts("total")} for the lowest eighteen.`}
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
