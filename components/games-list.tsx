@@ -40,13 +40,14 @@ export function GamesList({
   const [teamCount, setTeamCount] = useState(7);
   const [dollars, setDollars] = useState(5);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
+  const [roundType, setRoundType] = useState<"season" | "major">("season");
 
   function create() {
     setError(null);
     startTransition(async () => {
       const r = await createMatch({
         name, course, teamCount, rosterSize: 4,
-        dollarsPerUnit: dollars, tieDefault,
+        dollarsPerUnit: dollars, tieDefault, roundType,
       });
       if (r && !r.ok) setError(r.error);
       else router.refresh();
@@ -62,7 +63,7 @@ export function GamesList({
             <p className="mt-1 text-sm text-muted">
               {showMoney
                 ? "Live scoring, unit payouts, and who owes who."
-                : "Live scoring, the six matches, and where the Cup points landed."}
+                : "Live scoring, every match, and where the Cup points landed."}
             </p>
           </div>
           {isAdmin && (
@@ -104,11 +105,25 @@ export function GamesList({
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
               </label>
               <label className="sm:col-span-2">
+                <span className="mb-1.5 block text-sm font-medium">Round type</span>
+                <select value={roundType} onChange={(e) => setRoundType(e.target.value as "season" | "major")}
+                  className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
+                  <option value="season">Season round &mdash; six three-hole matches</option>
+                  <option value="major">Major &mdash; three six-hole matches, double points</option>
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  A major plays the same eighteen holes under the same rules,
+                  cut into three longer matches, and every point it pays is
+                  worth double. The money is the same either way.
+                </span>
+              </label>
+
+              <label className="sm:col-span-2">
                 <span className="mb-1.5 block text-sm font-medium">Default tie ruling</span>
                 <select value={tieDefault} onChange={(e) => setTieDefault(e.target.value as "hole" | "set")}
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
                   <option value="hole">Sudden death on the next hole</option>
-                  <option value="set">Roll the units into the next 3 hole match</option>
+                  <option value="set">Roll the units into the next match</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">
                   You can override any individual tie while the round is running.
@@ -141,6 +156,11 @@ export function GamesList({
                       {showMoney && Number(m.dollars_per_unit) > 0
                         ? ` · $${m.dollars_per_unit}/unit`
                         : ""}
+                      {m.round_type === "major" && (
+                        <span className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-400/40 dark:text-amber-200">
+                          Major
+                        </span>
+                      )}
                     </p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS[m.status].className}`}>

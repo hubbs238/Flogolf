@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { defaultPayouts } from "@/lib/game";
-import type { TieChoice } from "@/lib/game";
+import type { RoundType, TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -49,6 +49,7 @@ export async function createMatch(input: {
   rosterSize: number;
   dollarsPerUnit: number;
   tieDefault: TieChoice;
+  roundType?: RoundType;
 }): Promise<ActionResult> {
   const session = await requireAdmin();
   const supabase = await createClient();
@@ -65,6 +66,7 @@ export async function createMatch(input: {
       team_count: input.teamCount,
       roster_size: input.rosterSize,
       dollars_per_unit: input.dollarsPerUnit,
+      round_type: input.roundType ?? "season",
       tie_default: input.tieDefault,
       created_by: session.userId,
     })
@@ -123,6 +125,8 @@ export async function updateMatchSettings(
     fb18BackDollarsPerUnit?: number | null;
     fb18TotalDollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
+    /** Re-segments the round. Locked once scoring opens, like team count. */
+    roundType?: RoundType;
     teamCount?: number;
   },
 ): Promise<ActionResult> {
@@ -160,6 +164,19 @@ export async function updateMatchSettings(
     update[column] = value;
   }
   if (fields.tieDefault !== undefined) update.tie_default = fields.tieDefault;
+
+  if (fields.roundType !== undefined) {
+    // Tie decisions are keyed by segment number, so re-cutting eighteen holes
+    // into different matches would leave rulings pointing at matches that no
+    // longer exist. Same reason team count locks.
+    const { data: m } = await supabase
+      .from("matches").select("status").eq("id", matchId).single();
+    if (!m) return { ok: false, error: "Round not found." };
+    if (m.status !== "setup") {
+      return { ok: false, error: "Round type locks once rosters open." };
+    }
+    update.round_type = fields.roundType;
+  }
 
   if (fields.teamCount !== undefined) {
     const { data: m } = await supabase.from("matches").select("*").eq("id", matchId).single();

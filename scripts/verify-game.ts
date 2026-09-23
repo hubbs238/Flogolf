@@ -2,12 +2,16 @@ import {
   awardMoney,
   fb18DollarsBySegment,
   resolveSuddenDeath,
+  pointsForRound,
   roundPoints,
+  MAJOR_SEGMENTS,
+  POINT_MULTIPLIER,
   scoreBonusPoints,
   scoreFb18,
   scoreMainGame,
   type HoleScores,
   type PayoutTable,
+  segmentsFor,
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
 
@@ -605,6 +609,135 @@ console.log("\n=== points earned in a round ===");
   });
   check("a split bonus keeps its half point", pts[0].bonus, 7.5);
   check("and carries into the total", pts[0].total, 7.5);
+}
+
+console.log("\n=== a major is three six-hole matches ===");
+{
+  check("a season round is six matches of three", segmentsFor("season").length, 6);
+  check("a major is three matches of six", segmentsFor("major").length, 3);
+  check("and covers the same eighteen holes",
+    MAJOR_SEGMENTS.flat(), Array.from({ length: 18 }, (_, i) => i + 1));
+  check("with no hole in two matches at once",
+    new Set(MAJOR_SEGMENTS.flat()).size, 18);
+
+  // Team A wins the first six, B the second, A the last. Same payout table,
+  // three matches instead of six, so the units are over three decisions.
+  const par = Array.from({ length: 18 }, () => 0);
+  const A = [...par]; A[0] = -1; A[12] = -1;
+  const B = [...par]; B[6] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+
+  const major = scoreMainGame({
+    teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
+    decisions: {}, tieDefault: "hole", segments: segmentsFor("major"),
+  });
+  check("three matches are played", major.segments.length, 3);
+  check("the first runs holes 1 to 6", major.segments[0].holes, [1, 2, 3, 4, 5, 6]);
+  check("A takes two of the three", major.unitsByTeam, { A: 1, B: -1 });
+
+  const season = scoreMainGame({
+    teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
+    decisions: {}, tieDefault: "hole",
+  });
+  check("units still balance either way",
+    [major.unitsByTeam.A + major.unitsByTeam.B,
+     season.unitsByTeam.A + season.unitsByTeam.B], [0, 0]);
+}
+{
+  // The segmentation genuinely changes who wins what. A is three under over
+  // the first three holes and B takes one back on the fifth: two matches
+  // split over sixes, one match to A over a six.
+  const par = Array.from({ length: 18 }, () => 0);
+  const A = [...par]; A[0] = -3;
+  const B = [...par]; B[4] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...B) };
+  const opts = {
+    teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
+    decisions: {}, tieDefault: "hole" as const,
+  };
+
+  const season = scoreMainGame(opts);
+  const major = scoreMainGame({ ...opts, segments: segmentsFor("major") });
+
+  const winner = (r: { awards: { teamId: string; units: number }[] }) =>
+    r.awards.find((a) => a.units > 0)?.teamId;
+
+  check("over threes they take one match each",
+    [season.segments[0].holes, winner(season.segments[0]),
+     season.segments[1].holes, winner(season.segments[1])],
+    [[1, 2, 3], "A", [4, 5, 6], "B"]);
+  check("over a six it is one match, and A's best three carries it",
+    [major.segments[0].holes, winner(major.segments[0])],
+    [[1, 2, 3, 4, 5, 6], "A"]);
+}
+
+{
+  // A tie in the LAST match has no following hole to settle it on. A major's
+  // last match ends at 18 exactly as a season round's does, so the two must
+  // behave identically rather than one of them running off the end.
+  const par = Array.from({ length: 18 }, () => 0);
+  const s: HoleScores = { A: card(...par), B: card(...par) };
+  const opts = {
+    teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
+    decisions: {}, tieDefault: "hole" as const,
+  };
+  const major = scoreMainGame({ ...opts, segments: segmentsFor("major") });
+  const season = scoreMainGame(opts);
+
+  const last = (r: { segments: { status: string }[] }) => r.segments[r.segments.length - 1];
+  check("the last match of a major still resolves", last(major).status, "complete");
+  check("and so does a season round's", last(season).status, "complete");
+  check("an all level card pays nobody either way",
+    [major.unitsByTeam, season.unitsByTeam],
+    [{ A: 0, B: 0 }, { A: 0, B: 0 }]);
+}
+
+console.log("\n=== a major pays double, in points only ===");
+{
+  check("the multiplier is one for a season round", POINT_MULTIPLIER.season, 1);
+  check("and two for a major", POINT_MULTIPLIER.major, 2);
+
+  check("a hundred dollars won is a hundred points normally",
+    pointsForRound(100), 100);
+  check("and two hundred on a major", pointsForRound(100, 2), 200);
+  check("a losing round is still worth nothing, doubled or not",
+    [pointsForRound(-100), pointsForRound(-100, 2)], [0, 0]);
+
+  // Bonus points double at source, so what the banner shows is the truth.
+  // A leads the front AND the back, so it sweeps all three outright. Without
+  // a back nine lead that segment ties and splits, which is a different rule
+  // being tested somewhere else.
+  const par = Array.from({ length: 18 }, () => 0);
+  const A = [...par]; A[0] = -1; A[9] = -1;
+  const s: HoleScores = { A: card(...A), B: card(...par) };
+  const normal = scoreBonusPoints(["A", "B"], s);
+  const major = scoreBonusPoints(["A", "B"], s, 2);
+  check("front nine, back nine and eighteen are 10, 10 and 15 normally",
+    normal.segments.map((x) => x.each), [10, 10, 15]);
+  check("and 20, 20 and 30 on a major",
+    major.segments.map((x) => x.each), [20, 20, 30]);
+  check("A sweeps 35 normally", normal.pointsByTeam.A, 35);
+  check("and 70 on a major", major.pointsByTeam.A, 70);
+}
+
+console.log("\n=== the double is applied once, not twice ===");
+{
+  const rosters = { t1: ["p1"], t2: ["p2"] };
+  const money = [pm("p1", "t1", 100), pm("p2", "t2", -100)];
+  const bonus = { t1: 70, t2: 0 };   // already doubled by scoreBonusPoints
+
+  const pts = roundPoints({ money, bonusByTeam: bonus, rosters, multiplier: 2 });
+  const winner = pts.find((p) => p.golferId === "p1")!;
+  check("money doubles: 100 won becomes 200", winner.fromMoney, 200);
+  check("the bonus is taken as given, not doubled again", winner.bonus, 70);
+  check("270 on the round", winner.total, 270);
+
+  const loser = pts.find((p) => p.golferId === "p2")!;
+  check("and a loss still floors at zero on a major", loser.total, 0);
+
+  const plain = roundPoints({ money, bonusByTeam: { t1: 35, t2: 0 }, rosters });
+  check("the same round as a season game is 135",
+    plain.find((p) => p.golferId === "p1")!.total, 135);
 }
 
 console.log("\n=== who is shown money ===");

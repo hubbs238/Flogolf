@@ -48,8 +48,8 @@ export function GolferRoundHistory({
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
         {showMoney
-          ? "Match Money is the six three-hole matches; Bonus Money is F9, B9 and all eighteen. Only Match Money earns points, and a losing round scores 0 rather than going negative, so the money and points columns will often disagree."
-          : "Match Points come from the six three-hole matches, and a losing round scores 0 rather than going negative. Bonus Points are the lowest front nine, back nine and eighteen."}
+          ? "Match Money is the matches themselves; Bonus Money is F9, B9 and all eighteen. Only Match Money earns points, and a losing round scores 0 rather than going negative, so the money and points columns will often disagree."
+          : "Match Points come from the matches themselves, and a losing round scores 0 rather than going negative. Bonus Points are the lowest front nine, back nine and eighteen. A major pays double on both."}
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -78,6 +78,11 @@ export function GolferRoundHistory({
                   >
                     {r.matchName}
                   </Link>
+                  {r.roundType === "major" && (
+                    <span className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-400/40 dark:text-amber-200">
+                      Major
+                    </span>
+                  )}
                   <span className="block text-xs text-muted">
                     {new Date(r.matchDate).toLocaleDateString()}
                     {r.course ? ` · ${r.course}` : ""}

@@ -70,6 +70,36 @@ export function MatchStakes({
 
   return (
     <div className="space-y-6">
+      {/*
+        Setup only, and the action refuses it after that anyway: tie rulings
+        are keyed by match number, so re-cutting eighteen holes into different
+        matches would leave old rulings pointing at matches that no longer
+        exist. A round built from a draft starts as a season round, so this is
+        the only place it can be made a major.
+      */}
+      {match.status === "setup" && (
+        <label className="block">
+          <span className="mb-1.5 block text-sm font-medium">Round type</span>
+          <select
+            defaultValue={match.round_type === "major" ? "major" : "season"}
+            onChange={(e) =>
+              run(() => updateMatchSettings(match.id, {
+                roundType: e.target.value as "season" | "major",
+              }))
+            }
+            className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400 sm:max-w-md"
+          >
+            <option value="season">Season round — six three-hole matches</option>
+            <option value="major">Major — three six-hole matches, double points</option>
+          </select>
+          <span className="mt-1 block text-xs text-muted">
+            A major plays the same eighteen holes under the same rules, cut
+            into three longer matches, and every point it pays is worth
+            double. The money is the same either way. Locked once rosters open.
+          </span>
+        </label>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <label>
           <span className="mb-1.5 block text-sm font-medium">$ per unit</span>
@@ -163,7 +193,8 @@ export function MatchStakes({
               </tr>
             </thead>
             <tbody>
-              {([["main", "Each 3 hole match"], ["front", "FB18 front 9"],
+              {([["main", match.round_type === "major" ? "Each 6 hole match" : "Each 3 hole match"],
+                 ["front", "FB18 front 9"],
                  ["back", "FB18 back 9"], ["total", "FB18 all 18"]] as const).map(([key, label]) => (
                 <tr key={key} className="border-b border-line last:border-0">
                   <td className="p-3 font-medium">{label}</td>

@@ -7,8 +7,11 @@
  * scenario without a server.
  */
 
-/** Six three-hole matches. */
-export const SEGMENTS: readonly (readonly number[])[] = [
+/** What kind of round this is. A major is longer per match and pays double. */
+export type RoundType = "season" | "major";
+
+/** Six three-hole matches. The regular season shape. */
+export const SEASON_SEGMENTS: readonly (readonly number[])[] = [
   [1, 2, 3],
   [4, 5, 6],
   [7, 8, 9],
@@ -16,6 +19,30 @@ export const SEGMENTS: readonly (readonly number[])[] = [
   [13, 14, 15],
   [16, 17, 18],
 ];
+
+/** Three six-hole matches. Same eighteen holes, carved into fewer, longer
+ *  matches, so a single match is worth more and a carry runs further. */
+export const MAJOR_SEGMENTS: readonly (readonly number[])[] = [
+  [1, 2, 3, 4, 5, 6],
+  [7, 8, 9, 10, 11, 12],
+  [13, 14, 15, 16, 17, 18],
+];
+
+export function segmentsFor(type: RoundType): readonly (readonly number[])[] {
+  return type === "major" ? MAJOR_SEGMENTS : SEASON_SEGMENTS;
+}
+
+/**
+ * What a round's points are multiplied by.
+ *
+ * Money is untouched: a major pays the same dollars as any other round. It is
+ * only the FLO Cup that treats it as bigger, so a hundred dollars won becomes
+ * two hundred points and every bonus is worth twice what it usually is.
+ */
+export const POINT_MULTIPLIER: Record<RoundType, number> = {
+  season: 1,
+  major: 2,
+};
 
 export const FRONT_NINE = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 export const BACK_NINE = [10, 11, 12, 13, 14, 15, 16, 17, 18] as const;
@@ -157,7 +184,7 @@ function addInto(target: PayoutTable, positions: number[], from: PayoutTable) {
 }
 
 /**
- * Scores all six three-hole matches, threading carryover through them.
+ * Scores every match in the round, threading carryover through them.
  *
  * Segments are scored in order and stop at the first incomplete one, because
  * a carryover from segment N changes what segment N+1 is worth. Scoring a
@@ -170,8 +197,11 @@ export function scoreMainGame(opts: {
   payouts: PayoutTable;
   decisions: TieDecisions;
   tieDefault: TieChoice;
+  /** Six threes for a season round, three sixes for a major. */
+  segments?: readonly (readonly number[])[];
 }): { segments: SegmentResult[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts, decisions, tieDefault } = opts;
+  const SEGMENTS = opts.segments ?? SEASON_SEGMENTS;
 
   const unitsByTeam: Record<string, number> = {};
   for (const id of teamIds) unitsByTeam[id] = 0;
@@ -544,7 +574,7 @@ export function fb18DollarsBySegment(
 
 /** Where a player's money came from. Each figure is per player. */
 export type MoneyBreakdown = {
-  /** The six three-hole matches. */
+  /** The matches themselves, whatever the round is cut into. */
   main: number;
   front: number;
   back: number;
@@ -722,14 +752,16 @@ export type BonusSegment = {
 export function scoreBonusPoints(
   teamIds: string[],
   scores: HoleScores,
+  /** 2 on a major. Applied here so the figures on screen are the real ones. */
+  multiplier = 1,
 ): { segments: BonusSegment[]; pointsByTeam: Record<string, number> } {
   const { results, unitsByTeam } = scoreFb18({
     teamIds,
     scores,
     payouts: {
-      front: { 1: BONUS_POINTS.front },
-      back: { 1: BONUS_POINTS.back },
-      total: { 1: BONUS_POINTS.total },
+      front: { 1: BONUS_POINTS.front * multiplier },
+      back: { 1: BONUS_POINTS.back * multiplier },
+      total: { 1: BONUS_POINTS.total * multiplier },
     },
   });
 
@@ -760,8 +792,8 @@ export function scoreBonusPoints(
  * losing round flooring to zero it never fired, so keeping it would have
  * been arithmetic nobody could ever observe.
  */
-export function pointsForRound(dollars: number): number {
-  return dollars > 0 ? dollars : 0;
+export function pointsForRound(dollars: number, multiplier = 1): number {
+  return dollars > 0 ? dollars * multiplier : 0;
 }
 
 export type PlayerRoundPoints = {
@@ -777,11 +809,16 @@ export type PlayerRoundPoints = {
 /** Per player points for one round, broken into where they came from. */
 export function roundPoints(opts: {
   money: PlayerMoney[];
-  /** Bonus points won by each team, spread to every player on its roster. */
+  /**
+   * Bonus points won by each team, spread to every player on its roster.
+   * Already multiplied by scoreBonusPoints, so it is not doubled again here.
+   */
   bonusByTeam: Record<string, number>;
   rosters: Record<string, string[]>;
+  /** 2 on a major, which is what turns $100 won into 200 points. */
+  multiplier?: number;
 }): PlayerRoundPoints[] {
-  const { money, bonusByTeam, rosters } = opts;
+  const { money, bonusByTeam, rosters, multiplier = 1 } = opts;
 
   const bonusByGolfer = new Map<string, number>();
   for (const [teamId, points] of Object.entries(bonusByTeam)) {
@@ -793,7 +830,7 @@ export function roundPoints(opts: {
   const round2 = (n: number) => Math.round(n * 100) / 100;
 
   return money.map((m) => {
-    const fromMoney = round2(pointsForRound(m.cupDollars));
+    const fromMoney = round2(pointsForRound(m.cupDollars, multiplier));
     // A split bonus can land on a half point, so this rounds too.
     const bonus = round2(bonusByGolfer.get(m.golferId) ?? 0);
     return {

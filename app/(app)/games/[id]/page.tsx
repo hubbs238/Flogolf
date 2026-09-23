@@ -71,6 +71,11 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             {new Date(match.match_date).toLocaleDateString()}
             {match.course ? ` · ${match.course}` : ""} · {match.team_count} teams of{" "}
             {match.roster_size}
+            {computed.roundType === "major" && (
+              <span className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-400/40 dark:text-amber-200">
+                Major · double points
+              </span>
+            )}
             {view.showMoney && Number(match.dollars_per_unit) > 0
               ? ` · $${match.dollars_per_unit} a unit`
               : ""}
@@ -138,6 +143,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
                 : { front: 0, back: 0, total: 0 }
             }
             golfers={golfers} isAdmin={isAdmin} showMoney={view.showMoney}
+            roundType={computed.roundType}
           />
         </div>
       )}

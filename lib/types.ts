@@ -122,6 +122,8 @@ export type Match = {
   match_date: string;
   team_count: number;
   roster_size: number;
+  /** 'major' plays three six-hole matches and pays double in points. */
+  round_type: "season" | "major";
   dollars_per_unit: number;
   /** Flat charge each player pays to play. Money only, never points. */
   dues_per_player: number;

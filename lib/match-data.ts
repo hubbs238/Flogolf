@@ -2,12 +2,15 @@ import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
   roundPoints,
+  POINT_MULTIPLIER,
   scoreBonusPoints,
   scoreFb18,
   scoreMainGame,
+  segmentsFor,
   awardMoney,
   type Fb18Segment,
   type HoleScores,
+  type RoundType,
   type PayoutTable,
   type TieDecisions,
 } from "./game";
@@ -93,12 +96,18 @@ export function computeMatch(b: MatchBundle) {
   const teamIds = b.teams.map((t) => t.id);
   const fb18TeamIds = b.teams.filter((t) => t.in_fb18).map((t) => t.id);
 
+  // A major is the same eighteen holes in three six-hole matches rather than
+  // six threes, and every point it pays is worth double.
+  const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
+  const multiplier = POINT_MULTIPLIER[roundType];
+
   const main = scoreMainGame({
     teamIds,
     scores: b.scores,
     payouts: b.payouts,
     decisions: b.decisions,
     tieDefault: b.match.tie_default,
+    segments: segmentsFor(roundType),
   });
 
   const fb18 = scoreFb18({
@@ -160,7 +169,7 @@ export function computeMatch(b: MatchBundle) {
 
   const duesPerPlayer = Number(b.match.dues_per_player ?? 0);
   const money = awardMoney({ breakdownByTeam, rosters, duesPerPlayer });
-  const bonus = scoreBonusPoints(teamIds, b.scores);
+  const bonus = scoreBonusPoints(teamIds, b.scores, multiplier);
 
   // Team level winnings, rolled up here rather than in the browser so a page
   // can show the state of the round without shipping a row per player.
@@ -177,19 +186,21 @@ export function computeMatch(b: MatchBundle) {
     dollarsPerPlayerByTeam,
     cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
+    roundType,
+    multiplier,
     duesPerPlayer,
     teamMoney,
     bonus,
     rosters,
     money,
-    points: roundPoints({ money, bonusByTeam: bonus.pointsByTeam, rosters }),
+    points: roundPoints({ money, bonusByTeam: bonus.pointsByTeam, rosters, multiplier }),
   };
 }
 
 export type SeasonRow = {
   golferId: string;
   rounds: number;
-  /** The six three-hole matches. The only money that earns points. */
+  /** The matches themselves. The only money that earns points. */
   matchMoney: number;
   /** FB18 front nine, back nine and all eighteen. Money only. */
   bonusMoney: number;
@@ -210,6 +221,8 @@ export type GolferRoundRow = {
   matchDate: string;
   course: string;
   teamName: string;
+  /** A major pays double, so a row worth 270 needs to say why. */
+  roundType: RoundType;
   matchMoney: number;
   bonusMoney: number;
   dues: number;
@@ -233,7 +246,7 @@ async function scoreCompletedRounds(): Promise<
   const supabase = await createClient();
   const { data: matches } = await supabase
     .from("matches")
-    .select("id, name, match_date, course")
+    .select("id, name, match_date, course, round_type")
     .eq("status", "complete")
     .order("match_date", { ascending: false });
 
@@ -241,6 +254,7 @@ async function scoreCompletedRounds(): Promise<
 
   for (const m of (matches ?? []) as {
     id: string; name: string; match_date: string; course: string;
+    round_type: RoundType;
   }[]) {
     const bundle = await getMatchBundle(m.id);
     if (!bundle) continue;
@@ -263,6 +277,7 @@ async function scoreCompletedRounds(): Promise<
           matchDate: m.match_date,
           course: m.course,
           teamName: teamName.get(row.teamId) ?? "",
+          roundType: (m.round_type === "major" ? "major" : "season") as RoundType,
           matchMoney: row.breakdown.main,
           bonusMoney:
             row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,

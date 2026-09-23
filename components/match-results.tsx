@@ -37,7 +37,7 @@ function Units({ n }: { n: number }) {
 
 export function MatchResults({
   match, teams, segments, fb18, unitsByTeam, money, teamMoney, duesPerPlayer,
-  bonus, points, segmentRates, golfers, isAdmin, showMoney,
+  bonus, points, segmentRates, golfers, isAdmin, showMoney, roundType,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -62,6 +62,8 @@ export function MatchResults({
   isAdmin: boolean;
   /** False for players, and for an admin previewing the player view. */
   showMoney: boolean;
+  /** A major is three six-hole matches and pays double in points. */
+  roundType: "season" | "major";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -87,6 +89,12 @@ export function MatchResults({
   );
 
   const fb18Teams = teams.filter((t) => t.in_fb18);
+
+  // Every line that used to say "six three-hole matches" has to follow the
+  // round, or it lies outright on a major.
+  const major = roundType === "major";
+  const matchCount = segments.length;
+  const matchesPhrase = major ? "three six-hole matches" : "six three-hole matches";
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -153,7 +161,9 @@ export function MatchResults({
       )}
 
       <section>
-        <h3 className="mb-3 font-semibold">The six matches</h3>
+        <h3 className="mb-3 font-semibold">
+          {matchCount === 1 ? "The match" : `The ${matchCount === 3 ? "three" : "six"} matches`}
+        </h3>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {segments.map((s) => {
             const carriedIn = Object.values(s.carriedIn).some((v) => v !== 0);
@@ -323,7 +333,7 @@ export function MatchResults({
         <p className="mb-3 text-sm text-muted">
           {showMoney
             ? "A unit pays its dollar value to every player on the roster, so the team total is the per player figure multiplied by the roster."
-            : "Units won and lost across the six three-hole matches and the side game."}
+            : `Units won and lost across the ${matchesPhrase} and the side game.`}
           {showMoney && anyDues &&
             ` These are winnings before dues: $${dues.toFixed(2)} a player` +
             " comes off what anyone actually collects."}
@@ -378,8 +388,8 @@ export function MatchResults({
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
             {showMoney
-              ? "Match Points come from Match Money, a dollar a point, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here."
-              : "Match Points come from the six three-hole matches, with a losing round scoring 0 rather than going negative."}
+              ? `Match Points come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
+              : `Match Points come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
             {" "}Bonus Points are 10 for the lowest front nine, 10 for the
             lowest back nine and 15 for the lowest eighteen.
           </p>
