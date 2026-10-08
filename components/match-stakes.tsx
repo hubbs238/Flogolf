@@ -71,11 +71,10 @@ export function MatchStakes({
   return (
     <div className="space-y-6">
       {/*
-        Setup only, and the action refuses it after that anyway: tie rulings
-        are keyed by match number, so re-cutting eighteen holes into different
-        matches would leave old rulings pointing at matches that no longer
-        exist. A round built from a draft starts as a season round, so this is
-        the only place it can be made a major.
+        Two separate choices. The type is only what the points are worth, so it
+        changes whenever. The length decides which holes make a match, and it
+        locks once rosters open - the control below swaps to a read-only line
+        at that point rather than offering something the action would refuse.
       */}
       <div className="grid gap-4 sm:grid-cols-2">
         <label>

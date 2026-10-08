@@ -62,7 +62,7 @@ export function MatchResults({
   isAdmin: boolean;
   /** False for players, and for an admin previewing the player view. */
   showMoney: boolean;
-  /** A major is three six-hole matches and pays double in points. */
+  /** A major pays double in points. It says nothing about the shape. */
   roundType: "season" | "major";
 }) {
   const router = useRouter();

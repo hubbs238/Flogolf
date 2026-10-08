@@ -25,15 +25,38 @@
 
 alter table public.matches
   add column if not exists round_type text not null default 'season'
-  check (round_type in ('season', 'major')),
-  add column if not exists set_holes int not null default 3
-  check (set_holes in (3, 6));
+  check (round_type in ('season', 'major'));
 
--- A major is six-hole sets unless someone says otherwise. Only touches rounds
--- still sitting on the default, so a deliberate choice is never overwritten.
-update public.matches
-set set_holes = 6
-where round_type = 'major' and set_holes = 3;
+do $$
+begin
+  if not exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'matches'
+      and column_name = 'set_holes'
+  ) then
+    alter table public.matches
+      add column set_holes int not null default 3
+      check (set_holes in (3, 6));
+
+    -- Inside the same block that creates the column, so it is a one time
+    -- backfill. Every major that existed before this file ran was six-hole
+    -- sets by definition, because the type was the only thing deciding the
+    -- shape.
+    --
+    -- The guard is the column's absence, not the value 3, because 3 cannot
+    -- tell a default from a choice: it is both. Without it, a second run of
+    -- this file would re-cut a major someone had deliberately set to
+    -- three-hole sets, and would do it on finished rounds too, which is the
+    -- exact write the application refuses. Tie rulings are keyed by match
+    -- number, so the rulings would point at matches that no longer exist and
+    -- the round's money and points would quietly restate themselves.
+    update public.matches
+    set set_holes = 6
+    where round_type = 'major';
+  end if;
+end $$;
 
 select
   round_type,
