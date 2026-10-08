@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { defaultPayouts } from "@/lib/game";
-import type { RoundType, TieChoice } from "@/lib/game";
+import type { RoundType, SetLength, TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -50,6 +50,7 @@ export async function createMatch(input: {
   dollarsPerUnit: number;
   tieDefault: TieChoice;
   roundType?: RoundType;
+  setHoles?: SetLength;
 }): Promise<ActionResult> {
   const session = await requireAdmin();
   const supabase = await createClient();
@@ -67,6 +68,7 @@ export async function createMatch(input: {
       roster_size: input.rosterSize,
       dollars_per_unit: input.dollarsPerUnit,
       round_type: input.roundType ?? "season",
+      set_holes: input.setHoles ?? (input.roundType === "major" ? 6 : 3),
       tie_default: input.tieDefault,
       created_by: session.userId,
     })
@@ -125,8 +127,9 @@ export async function updateMatchSettings(
     fb18BackDollarsPerUnit?: number | null;
     fb18TotalDollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
-    /** Re-segments the round. Locked once scoring opens, like team count. */
     roundType?: RoundType;
+    /** Re-segments the round. Locked once scoring opens, like team count. */
+    setHoles?: SetLength;
     teamCount?: number;
   },
 ): Promise<ActionResult> {
@@ -165,17 +168,20 @@ export async function updateMatchSettings(
   }
   if (fields.tieDefault !== undefined) update.tie_default = fields.tieDefault;
 
-  if (fields.roundType !== undefined) {
-    // Tie decisions are keyed by segment number, so re-cutting eighteen holes
-    // into different matches would leave rulings pointing at matches that no
-    // longer exist. Same reason team count locks.
+  // The type is only what the points are worth, so it can change whenever.
+  if (fields.roundType !== undefined) update.round_type = fields.roundType;
+
+  if (fields.setHoles !== undefined) {
+    // Tie decisions are keyed by match number, so re-cutting eighteen holes
+    // into a different number of matches would leave rulings pointing at
+    // matches that no longer exist. Same reason team count locks.
     const { data: m } = await supabase
       .from("matches").select("status").eq("id", matchId).single();
     if (!m) return { ok: false, error: "Round not found." };
     if (m.status !== "setup") {
-      return { ok: false, error: "Round type locks once rosters open." };
+      return { ok: false, error: "Set length locks once rosters open." };
     }
-    update.round_type = fields.roundType;
+    update.set_holes = fields.setHoles;
   }
 
   if (fields.teamCount !== undefined) {

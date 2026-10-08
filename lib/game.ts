@@ -7,11 +7,17 @@
  * scenario without a server.
  */
 
-/** What kind of round this is. A major is longer per match and pays double. */
+/**
+ * What kind of round this is. It decides what the points are worth and
+ * nothing else; how the eighteen holes are cut up is a separate choice.
+ */
 export type RoundType = "season" | "major";
 
-/** Six three-hole matches. The regular season shape. */
-export const SEASON_SEGMENTS: readonly (readonly number[])[] = [
+/** How many holes a match runs over. Any round can use either. */
+export type SetLength = 3 | 6;
+
+/** Six three-hole matches. */
+export const THREE_HOLE_SETS: readonly (readonly number[])[] = [
   [1, 2, 3],
   [4, 5, 6],
   [7, 8, 9],
@@ -20,16 +26,22 @@ export const SEASON_SEGMENTS: readonly (readonly number[])[] = [
   [16, 17, 18],
 ];
 
-/** Three six-hole matches. Same eighteen holes, carved into fewer, longer
+/** Three six-hole matches. The same eighteen holes carved into fewer, longer
  *  matches, so a single match is worth more and a carry runs further. */
-export const MAJOR_SEGMENTS: readonly (readonly number[])[] = [
+export const SIX_HOLE_SETS: readonly (readonly number[])[] = [
   [1, 2, 3, 4, 5, 6],
   [7, 8, 9, 10, 11, 12],
   [13, 14, 15, 16, 17, 18],
 ];
 
-export function segmentsFor(type: RoundType): readonly (readonly number[])[] {
-  return type === "major" ? MAJOR_SEGMENTS : SEASON_SEGMENTS;
+export function segmentsFor(setHoles: SetLength): readonly (readonly number[])[] {
+  return setHoles === 6 ? SIX_HOLE_SETS : THREE_HOLE_SETS;
+}
+
+/** 3 unless the stored value says otherwise. Anything else is not a shape we
+ *  can cut eighteen holes into evenly, so it falls back rather than throwing. */
+export function setLengthOf(value: unknown): SetLength {
+  return Number(value) === 6 ? 6 : 3;
 }
 
 /**
@@ -197,11 +209,11 @@ export function scoreMainGame(opts: {
   payouts: PayoutTable;
   decisions: TieDecisions;
   tieDefault: TieChoice;
-  /** Six threes for a season round, three sixes for a major. */
+  /** Six threes or three sixes. Independent of the round type. */
   segments?: readonly (readonly number[])[];
 }): { segments: SegmentResult[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts, decisions, tieDefault } = opts;
-  const SEGMENTS = opts.segments ?? SEASON_SEGMENTS;
+  const SEGMENTS = opts.segments ?? THREE_HOLE_SETS;
 
   const unitsByTeam: Record<string, number> = {};
   for (const id of teamIds) unitsByTeam[id] = 0;

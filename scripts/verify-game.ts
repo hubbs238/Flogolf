@@ -5,7 +5,7 @@ import {
   pointsForRound,
   roundPoints,
   BONUS_POINTS,
-  MAJOR_SEGMENTS,
+  SIX_HOLE_SETS,
   POINT_MULTIPLIER,
   scoreBonusPoints,
   scoreFb18,
@@ -13,6 +13,7 @@ import {
   type HoleScores,
   type PayoutTable,
   segmentsFor,
+  setLengthOf,
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
 
@@ -612,14 +613,14 @@ console.log("\n=== points earned in a round ===");
   check("and carries into the total", pts[0].total, 7.5);
 }
 
-console.log("\n=== a major is three six-hole matches ===");
+console.log("\n=== three-hole sets and six-hole sets ===");
 {
-  check("a season round is six matches of three", segmentsFor("season").length, 6);
-  check("a major is three matches of six", segmentsFor("major").length, 3);
+  check("threes give six matches", segmentsFor(3).length, 6);
+  check("sixes give three", segmentsFor(6).length, 3);
   check("and covers the same eighteen holes",
-    MAJOR_SEGMENTS.flat(), Array.from({ length: 18 }, (_, i) => i + 1));
+    SIX_HOLE_SETS.flat(), Array.from({ length: 18 }, (_, i) => i + 1));
   check("with no hole in two matches at once",
-    new Set(MAJOR_SEGMENTS.flat()).size, 18);
+    new Set(SIX_HOLE_SETS.flat()).size, 18);
 
   // Team A wins the first six, B the second, A the last. Same payout table,
   // three matches instead of six, so the units are over three decisions.
@@ -630,7 +631,7 @@ console.log("\n=== a major is three six-hole matches ===");
 
   const major = scoreMainGame({
     teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
-    decisions: {}, tieDefault: "hole", segments: segmentsFor("major"),
+    decisions: {}, tieDefault: "hole", segments: segmentsFor(6),
   });
   check("three matches are played", major.segments.length, 3);
   check("the first runs holes 1 to 6", major.segments[0].holes, [1, 2, 3, 4, 5, 6]);
@@ -658,7 +659,7 @@ console.log("\n=== a major is three six-hole matches ===");
   };
 
   const season = scoreMainGame(opts);
-  const major = scoreMainGame({ ...opts, segments: segmentsFor("major") });
+  const major = scoreMainGame({ ...opts, segments: segmentsFor(6) });
 
   const winner = (r: { awards: { teamId: string; units: number }[] }) =>
     r.awards.find((a) => a.units > 0)?.teamId;
@@ -682,7 +683,7 @@ console.log("\n=== a major is three six-hole matches ===");
     teamIds: ["A", "B"], scores: s, payouts: { 1: 1, 2: -1 },
     decisions: {}, tieDefault: "hole" as const,
   };
-  const major = scoreMainGame({ ...opts, segments: segmentsFor("major") });
+  const major = scoreMainGame({ ...opts, segments: segmentsFor(6) });
   const season = scoreMainGame(opts);
 
   const last = (r: { segments: { status: string }[] }) => r.segments[r.segments.length - 1];
@@ -691,6 +692,25 @@ console.log("\n=== a major is three six-hole matches ===");
   check("an all level card pays nobody either way",
     [major.unitsByTeam, season.unitsByTeam],
     [{ A: 0, B: 0 }, { A: 0, B: 0 }]);
+}
+
+{
+  // The shape and the multiplier are independent now: a season round can be
+  // played over six-hole sets without becoming worth double, and a major can
+  // be played over threes without stopping being a major.
+  check("a stored 6 means six-hole sets", setLengthOf(6), 6);
+  check("a stored 3 means threes", setLengthOf(3), 3);
+  check("so does anything that is not a shape we can cut eighteen into",
+    [setLengthOf(null), setLengthOf(undefined), setLengthOf(0), setLengthOf(4), setLengthOf("6")],
+    [3, 3, 3, 3, 6]);
+
+  check("a season round over sixes still pays single",
+    pointsForRound(100, POINT_MULTIPLIER.season), 100);
+  check("and a major over threes still pays double",
+    pointsForRound(100, POINT_MULTIPLIER.major), 200);
+  check("the shape never touches what a point is worth",
+    [segmentsFor(3).length, segmentsFor(6).length, POINT_MULTIPLIER.season],
+    [6, 3, 1]);
 }
 
 console.log("\n=== a major pays double, in points only ===");

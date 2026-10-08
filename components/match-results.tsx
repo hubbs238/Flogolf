@@ -92,9 +92,13 @@ export function MatchResults({
 
   // Every line that used to say "six three-hole matches" has to follow the
   // round, or it lies outright on a major.
+  // Two different things. `major` is what the points are worth; the phrase is
+  // the shape, which comes from the matches that were actually played. A
+  // season round over six-hole sets is not a major and must not read as one.
   const major = roundType === "major";
   const matchCount = segments.length;
-  const matchesPhrase = major ? "three six-hole matches" : "six three-hole matches";
+  const matchesPhrase =
+    matchCount === 3 ? "three six-hole matches" : "six three-hole matches";
 
   // Derived, never written out. A figure typed into copy beside a figure the
   // engine computed is a contradiction waiting to be shipped: on a major the

@@ -41,13 +41,14 @@ export function GamesList({
   const [dollars, setDollars] = useState(5);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
   const [roundType, setRoundType] = useState<"season" | "major">("season");
+  const [setHoles, setSetHoles] = useState<3 | 6>(3);
 
   function create() {
     setError(null);
     startTransition(async () => {
       const r = await createMatch({
         name, course, teamCount, rosterSize: 4,
-        dollarsPerUnit: dollars, tieDefault, roundType,
+        dollarsPerUnit: dollars, tieDefault, roundType, setHoles,
       });
       if (r && !r.ok) setError(r.error);
       else router.refresh();
@@ -104,17 +105,36 @@ export function GamesList({
                   onChange={(e) => setDollars(Number(e.target.value))}
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
               </label>
-              <label className="sm:col-span-2">
+              <label>
                 <span className="mb-1.5 block text-sm font-medium">Round type</span>
-                <select value={roundType} onChange={(e) => setRoundType(e.target.value as "season" | "major")}
+                <select
+                  value={roundType}
+                  onChange={(e) => {
+                    const next = e.target.value as "season" | "major";
+                    setRoundType(next);
+                    // A major is six-hole sets unless you say otherwise. Still
+                    // a suggestion, not a rule: change it back and it stays.
+                    if (next === "major") setSetHoles(6);
+                  }}
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
-                  <option value="season">Season round &mdash; six three-hole matches</option>
-                  <option value="major">Major &mdash; three six-hole matches, double points</option>
+                  <option value="season">Season round</option>
+                  <option value="major">Major &mdash; double points</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">
-                  A major plays the same eighteen holes under the same rules,
-                  cut into three longer matches, and every point it pays is
-                  worth double. The money is the same either way.
+                  A major pays double on every point. The money is the same.
+                </span>
+              </label>
+
+              <label>
+                <span className="mb-1.5 block text-sm font-medium">Match length</span>
+                <select value={setHoles} onChange={(e) => setSetHoles(Number(e.target.value) as 3 | 6)}
+                  className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
+                  <option value={3}>Six three-hole matches</option>
+                  <option value={6}>Three six-hole matches</option>
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  The same eighteen holes either way. Longer matches mean a
+                  carry runs further.
                 </span>
               </label>
 

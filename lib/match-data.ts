@@ -7,6 +7,7 @@ import {
   scoreFb18,
   scoreMainGame,
   segmentsFor,
+  setLengthOf,
   awardMoney,
   type Fb18Segment,
   type HoleScores,
@@ -96,9 +97,10 @@ export function computeMatch(b: MatchBundle) {
   const teamIds = b.teams.map((t) => t.id);
   const fb18TeamIds = b.teams.filter((t) => t.in_fb18).map((t) => t.id);
 
-  // A major is the same eighteen holes in three six-hole matches rather than
-  // six threes, and every point it pays is worth double.
+  // Two independent choices: the type decides what the points are worth, the
+  // set length decides how the eighteen holes are carved up.
   const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
+  const setHoles = setLengthOf(b.match.set_holes);
   const multiplier = POINT_MULTIPLIER[roundType];
 
   const main = scoreMainGame({
@@ -107,7 +109,7 @@ export function computeMatch(b: MatchBundle) {
     payouts: b.payouts,
     decisions: b.decisions,
     tieDefault: b.match.tie_default,
-    segments: segmentsFor(roundType),
+    segments: segmentsFor(setHoles),
   });
 
   const fb18 = scoreFb18({
@@ -187,6 +189,7 @@ export function computeMatch(b: MatchBundle) {
     cupDollarsPerPlayerByTeam,
     rates: { main: mainRate, fb18: fb18Rate, segment: segmentRate },
     roundType,
+    setHoles,
     multiplier,
     duesPerPlayer,
     teamMoney,

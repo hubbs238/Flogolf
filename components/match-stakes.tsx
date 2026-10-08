@@ -77,8 +77,8 @@ export function MatchStakes({
         exist. A round built from a draft starts as a season round, so this is
         the only place it can be made a major.
       */}
-      {match.status === "setup" && (
-        <label className="block">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label>
           <span className="mb-1.5 block text-sm font-medium">Round type</span>
           <select
             defaultValue={match.round_type === "major" ? "major" : "season"}
@@ -87,18 +87,56 @@ export function MatchStakes({
                 roundType: e.target.value as "season" | "major",
               }))
             }
-            className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400 sm:max-w-md"
+            className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400"
           >
-            <option value="season">Season round — six three-hole matches</option>
-            <option value="major">Major — three six-hole matches, double points</option>
+            <option value="season">Season round</option>
+            <option value="major">Major — double points</option>
           </select>
           <span className="mt-1 block text-xs text-muted">
-            A major plays the same eighteen holes under the same rules, cut
-            into three longer matches, and every point it pays is worth
-            double. The money is the same either way. Locked once rosters open.
+            A major pays double on every point. The money is the same either
+            way, and this can be changed at any time.
           </span>
         </label>
-      )}
+
+        {/*
+          Setup only, and the action refuses it after that anyway: tie rulings
+          are keyed by match number, so re-cutting eighteen holes into a
+          different number of matches would leave old rulings pointing at
+          matches that no longer exist.
+        */}
+        {match.status === "setup" ? (
+          <label>
+            <span className="mb-1.5 block text-sm font-medium">Match length</span>
+            <select
+              defaultValue={Number(match.set_holes) === 6 ? 6 : 3}
+              onChange={(e) =>
+                run(() => updateMatchSettings(match.id, {
+                  setHoles: Number(e.target.value) === 6 ? 6 : 3,
+                }))
+              }
+              className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400"
+            >
+              <option value={3}>Six three-hole matches</option>
+              <option value={6}>Three six-hole matches</option>
+            </select>
+            <span className="mt-1 block text-xs text-muted">
+              The same eighteen holes either way. Locked once rosters open.
+            </span>
+          </label>
+        ) : (
+          <div>
+            <span className="mb-1.5 block text-sm font-medium">Match length</span>
+            <p className="rounded-xl border border-line bg-surface/50 px-3 py-2 text-sm text-muted">
+              {Number(match.set_holes) === 6
+                ? "Three six-hole matches"
+                : "Six three-hole matches"}
+            </p>
+            <span className="mt-1 block text-xs text-muted">
+              Locked: tie rulings are keyed to these matches.
+            </span>
+          </div>
+        )}
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <label>
@@ -193,7 +231,7 @@ export function MatchStakes({
               </tr>
             </thead>
             <tbody>
-              {([["main", match.round_type === "major" ? "Each 6 hole match" : "Each 3 hole match"],
+              {([["main", Number(match.set_holes) === 6 ? "Each 6 hole match" : "Each 3 hole match"],
                  ["front", "FB18 front 9"],
                  ["back", "FB18 back 9"], ["total", "FB18 all 18"]] as const).map(([key, label]) => (
                 <tr key={key} className="border-b border-line last:border-0">
