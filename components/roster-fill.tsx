@@ -10,7 +10,7 @@ import {
 import type { Golfer, Match, MatchPlayer, MatchTeam } from "@/lib/types";
 
 export function RosterFill({
-  match, teams, players, golfers, isAdmin, myUserId,
+  match, teams, players, golfers, isAdmin, myUserId, mode = "filling",
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -18,6 +18,13 @@ export function RosterFill({
   golfers: Golfer[];
   isAdmin: boolean;
   myUserId: string;
+  /**
+   * "filling" is the normal flow, on the way to starting the round.
+   * "edit" is the same grid used to correct a roster afterwards: no way to
+   * start a round that is already running, and no count of how full things
+   * are, because by then they are.
+   */
+  mode?: "filling" | "edit";
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -43,21 +50,23 @@ export function RosterFill({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h2 className="font-semibold">Picking teams</h2>
-          <p className="text-sm text-muted">
-            {filled} of {teams.length} rosters full. Captains fill their own,
-            {isAdmin ? " and you can fill any of them." : " an admin can help if you are stuck."}
-          </p>
+      {mode === "filling" && (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-semibold">Picking teams</h2>
+            <p className="text-sm text-muted">
+              {filled} of {teams.length} rosters full. Captains fill their own,
+              {isAdmin ? " and you can fill any of them." : " an admin can help if you are stuck."}
+            </p>
+          </div>
+          {isAdmin && (
+            <button onClick={() => run(() => startRound(match.id))} disabled={pending}
+              className="rounded-xl bg-fairway-600 px-5 py-2.5 font-medium text-white transition hover:bg-fairway-700 disabled:opacity-50">
+              Start the round
+            </button>
+          )}
         </div>
-        {isAdmin && (
-          <button onClick={() => run(() => startRound(match.id))} disabled={pending}
-            className="rounded-xl bg-fairway-600 px-5 py-2.5 font-medium text-white transition hover:bg-fairway-700 disabled:opacity-50">
-            Start the round
-          </button>
-        )}
-      </div>
+      )}
 
       {error && (
         <p className="rounded-lg bg-flag-500/10 px-3 py-2 text-sm text-flag-500">{error}</p>
@@ -94,7 +103,13 @@ export function RosterFill({
                           <span className="ml-1.5 rounded bg-fairway-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">C</span>
                         )}
                       </span>
-                      {mine && p.slot !== 1 && (
+                      {/*
+                        The captain is fixed while teams are being picked, but
+                        correcting a finished round is exactly when a captain
+                        who never played has to come off. The action clears the
+                        team's captain record with them.
+                      */}
+                      {mine && (p.slot !== 1 || mode === "edit") && (
                         <button onClick={() => run(() => removeMatchPlayer(match.id, p.golfer_id))}
                           disabled={pending}
                           className="shrink-0 text-xs text-muted transition hover:text-flag-500">×</button>

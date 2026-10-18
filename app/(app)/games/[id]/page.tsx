@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeMatch, getMatchBundle, getPoolGolfers } from "@/lib/match-data";
 import { MatchSetup } from "@/components/match-setup";
 import { RosterFill } from "@/components/roster-fill";
+import { RosterEditor } from "@/components/roster-editor";
 import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
@@ -105,6 +106,17 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
 
       {(match.status === "in_progress" || match.status === "complete") && (
         <div className="space-y-10">
+          {/*
+            Admin only, and not behind the money gate: a roster is names and
+            teams, not dollars. Same reason round setup stays visible while an
+            admin is previewing the player view.
+          */}
+          {isAdmin && (
+            <RosterEditor
+              match={match} teams={teams} players={players} golfers={golfers}
+              myUserId={session.userId}
+            />
+          )}
           {view.showMoney && (
             <MatchStakesEditor
               match={match} teams={teams}

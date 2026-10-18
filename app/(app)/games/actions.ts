@@ -426,6 +426,18 @@ export async function removeMatchPlayer(
   const { error } = await supabase
     .from("match_players").delete().eq("match_id", matchId).eq("golfer_id", golferId);
   if (error) return { ok: false, error: error.message };
+
+  // A team's captain is recorded separately from its roster, so taking the
+  // captain off leaves that field naming someone who is no longer on the
+  // team. The scorecard prints it beside the team, so it has to go too.
+  // captain_user_id is left alone: that is who may post scores, which is a
+  // different question from who played.
+  await supabase
+    .from("match_teams")
+    .update({ captain_golfer_id: null })
+    .eq("match_id", matchId)
+    .eq("captain_golfer_id", golferId);
+
   revalidateMatch(matchId);
   return { ok: true };
 }
