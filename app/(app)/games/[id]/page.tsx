@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { createClient } from "@/lib/supabase/server";
-import { computeMatch, getMatchBundle, getPoolGolfers } from "@/lib/match-data";
+import { computeMatch, getAllGolfers, getMatchBundle, getPoolGolfers } from "@/lib/match-data";
 import { MatchSetup } from "@/components/match-setup";
 import { RosterFill } from "@/components/roster-fill";
 import { RosterEditor } from "@/components/roster-editor";
@@ -25,9 +25,14 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
   // - including the one a score save triggers on its way back - paid for each
   // round trip end to end before starting the next.
   const isAdmin = session.profile?.is_admin ?? false;
-  const [bundle, golfers, view] = await Promise.all([
+  // Two lists. The pool is who can be picked for a round. Every golfer is
+  // who can be swapped into one afterwards, because a one-off sub is often
+  // taken back out of the rating pool once their round is over, and they
+  // still have to stay correctable on the round they played.
+  const [bundle, golfers, allGolfers, view] = await Promise.all([
     getMatchBundle(id),
     getPoolGolfers(),
+    isAdmin ? getAllGolfers() : Promise.resolve([]),
     getViewMode(isAdmin),
   ]);
   if (!bundle) notFound();
@@ -113,7 +118,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
           */}
           {isAdmin && (
             <RosterEditor
-              match={match} teams={teams} players={players} golfers={golfers}
+              match={match} teams={teams} players={players} golfers={allGolfers}
               myUserId={session.userId}
             />
           )}

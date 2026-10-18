@@ -49,7 +49,7 @@ export function RosterEditor({
           <h3 className="font-semibold">Rosters</h3>
           <p className="text-sm text-muted">
             {open
-              ? "Everything on this round is worked out from who was on which team, so a change here recalculates this round and the season table."
+              ? "Swap keeps the slot and the captain, which is what you want when a sub played under a placeholder and you have their name now, or the wrong person went down on a team. Everything on this round is worked out from who was on which team, so a change here recalculates the round and the season table."
               : short}
           </p>
         </div>

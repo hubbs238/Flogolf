@@ -418,6 +418,50 @@ export async function addMatchPlayer(
   return { ok: true };
 }
 
+/**
+ * Swaps one golfer for another in place, keeping the slot.
+ *
+ * This is the correction the league actually needs: a sub plays under a
+ * placeholder and gets a name a week later, or the wrong person was put on a
+ * team. Taking one off and adding another would do it in two steps, drop the
+ * pair into whatever slot happened to be free, and lose the captain on the
+ * way. One update keeps the slot, keeps the order, and carries the captain
+ * across if that is who moved.
+ *
+ * Admin only. The round is usually over by the time anyone notices.
+ */
+export async function replaceMatchPlayer(
+  matchId: string, outGolferId: string, inGolferId: string,
+): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  if (outGolferId === inGolferId) return { ok: true };
+
+  // The primary key is (match_id, golfer_id), so swapping in someone who is
+  // already playing would collide. Say so rather than hand back a constraint.
+  const { data: already } = await supabase
+    .from("match_players").select("team_id")
+    .eq("match_id", matchId).eq("golfer_id", inGolferId).maybeSingle();
+  if (already) {
+    return { ok: false, error: "That golfer is already playing in this round." };
+  }
+
+  const { error } = await supabase
+    .from("match_players").update({ golfer_id: inGolferId })
+    .eq("match_id", matchId).eq("golfer_id", outGolferId);
+  if (error) return { ok: false, error: error.message };
+
+  // If the golfer who left was the team's captain, the replacement takes it
+  // on rather than the team being left with nobody named.
+  await supabase
+    .from("match_teams").update({ captain_golfer_id: inGolferId })
+    .eq("match_id", matchId).eq("captain_golfer_id", outGolferId);
+
+  revalidateMatch(matchId);
+  return { ok: true };
+}
+
 export async function removeMatchPlayer(
   matchId: string, golferId: string,
 ): Promise<ActionResult> {

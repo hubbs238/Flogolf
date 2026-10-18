@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { GolferAvatar } from "./golfer-avatar";
 import { displayName } from "@/lib/scoring";
 import {
-  addMatchPlayer, removeMatchPlayer, startRound,
+  addMatchPlayer, removeMatchPlayer, replaceMatchPlayer, startRound,
 } from "@/app/(app)/games/actions";
 import type { Golfer, Match, MatchPlayer, MatchTeam } from "@/lib/types";
 
@@ -30,6 +30,8 @@ export function RosterFill({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [openTeam, setOpenTeam] = useState<string | null>(null);
+  // Which roster row is showing its swap list, keyed by the golfer leaving.
+  const [swapping, setSwapping] = useState<string | null>(null);
 
   const byId = new Map(golfers.map((g) => [g.id, g]));
   const taken = new Set(players.map((p) => p.golfer_id));
@@ -104,6 +106,23 @@ export function RosterFill({
                         )}
                       </span>
                       {/*
+                        Swapping is the correction that actually comes up: a
+                        sub who played under a placeholder, or the wrong name
+                        on a team. It keeps the slot and carries the captain
+                        across, which removing and re-adding would not.
+                      */}
+                      {mode === "edit" && (
+                        <button
+                          onClick={() => setSwapping(swapping === p.golfer_id ? null : p.golfer_id)}
+                          disabled={pending}
+                          aria-expanded={swapping === p.golfer_id}
+                          className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-muted transition hover:bg-surface hover:text-ink"
+                        >
+                          {swapping === p.golfer_id ? "Cancel" : "Swap"}
+                        </button>
+                      )}
+
+                      {/*
                         The captain is fixed while teams are being picked, but
                         correcting a finished round is exactly when a captain
                         who never played has to come off. The action clears the
@@ -117,6 +136,39 @@ export function RosterFill({
                     </li>
                   );
                 })}
+
+                {swapping !== null && roster.some((p) => p.golfer_id === swapping) && (
+                  <li>
+                    <p className="px-1 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">
+                      Swap in
+                    </p>
+                    <ul className="max-h-56 space-y-1 overflow-y-auto rounded-lg border border-line p-1.5">
+                      {available.length === 0 && (
+                        <li className="p-2 text-center text-xs text-muted">
+                          Nobody left. Add the golfer in Admin first.
+                        </li>
+                      )}
+                      {available.map((g) => (
+                        <li key={g.id}>
+                          <button
+                            onClick={() =>
+                              run(async () => {
+                                const r = await replaceMatchPlayer(match.id, swapping, g.id);
+                                if (r.ok) setSwapping(null);
+                                return r;
+                              })
+                            }
+                            disabled={pending}
+                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-surface disabled:opacity-50"
+                          >
+                            <GolferAvatar name={displayName(g)} url={null} size="sm" />
+                            <span className="min-w-0 flex-1 truncate">{displayName(g)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                )}
                 {Array.from({ length: Math.max(0, open) }, (_, i) => (
                   <li key={`o${i}`}
                     className="flex h-11 items-center rounded-lg border border-dashed border-line px-3 text-xs text-muted">
