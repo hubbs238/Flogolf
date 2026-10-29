@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
   roundPoints,
+  CUP_ELIGIBLE,
+  cupDollarsOf,
   POINT_MULTIPLIER,
   scoreBonusPoints,
   scoreFb18,
@@ -102,6 +104,7 @@ export function computeMatch(b: MatchBundle) {
   const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
   const setHoles = setLengthOf(b.match.set_holes);
   const multiplier = POINT_MULTIPLIER[roundType];
+  const cupEligible = CUP_ELIGIBLE[roundType];
 
   const main = scoreMainGame({
     teamIds,
@@ -139,9 +142,10 @@ export function computeMatch(b: MatchBundle) {
   // Per player figures, a unit paying its rate to each team member, and kept
   // split by source so settlement can show where the money came from.
   //
-  // Only the main game feeds the Cup. Every FB18 payout is money alone: the
-  // nine and eighteen hole results are already rewarded through the bonus
-  // points, so counting their money too would pay for the same thing twice.
+  // What feeds the Cup follows the round type. On a season round the matches
+  // alone: the nine and eighteen hole results are already rewarded through
+  // the bonus points, so counting their money as well would pay twice for one
+  // performance. A major pays twice on purpose, so every dollar counts there.
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
@@ -158,7 +162,7 @@ export function computeMatch(b: MatchBundle) {
     };
     breakdownByTeam[id] = b18;
     dollarsPerPlayerByTeam[id] = b18.main + b18.front + b18.back + b18.eighteen;
-    cupDollarsPerPlayerByTeam[id] = b18.main;
+    cupDollarsPerPlayerByTeam[id] = cupDollarsOf(b18, cupEligible);
   }
 
   const rosters: Record<string, string[]> = {};
@@ -170,7 +174,7 @@ export function computeMatch(b: MatchBundle) {
   }
 
   const duesPerPlayer = Number(b.match.dues_per_player ?? 0);
-  const money = awardMoney({ breakdownByTeam, rosters, duesPerPlayer });
+  const money = awardMoney({ breakdownByTeam, rosters, duesPerPlayer, cupEligible });
   const bonus = scoreBonusPoints(teamIds, b.scores, multiplier);
 
   // Team level winnings, rolled up here rather than in the browser so a page
@@ -191,6 +195,7 @@ export function computeMatch(b: MatchBundle) {
     roundType,
     setHoles,
     multiplier,
+    cupEligible,
     duesPerPlayer,
     teamMoney,
     bonus,
@@ -203,17 +208,17 @@ export function computeMatch(b: MatchBundle) {
 export type SeasonRow = {
   golferId: string;
   rounds: number;
-  /** The matches themselves. The only money that earns points. */
+  /** The matches themselves. Earns points on every round. */
   matchMoney: number;
-  /** FB18 front nine, back nine and all eighteen. Money only. */
+  /** FB18 front nine, back nine and all eighteen. Earns points on majors. */
   bonusMoney: number;
   /** Flat charges paid to play. Money only, never points. */
   dues: number;
   /** What changed hands: match money plus bonus money, less dues. */
   dollars: number;
-  /** Points from Cup-eligible money. FB18 winnings never count. */
+  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
   pointsFromMoney: number;
-  /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. */
+  /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. Doubled on a major. */
   pointsBonus: number;
   points: number;
 };

@@ -1,5 +1,7 @@
 import {
   awardMoney,
+  CUP_ELIGIBLE,
+  cupDollarsOf,
   fb18DollarsBySegment,
   resolveSuddenDeath,
   pointsForRound,
@@ -288,17 +290,49 @@ console.log("\n=== each FB18 segment converts at its own rate ===");
   check("same units, one flat rate, totals differ", [flat.A, flat.B], [40, 20]);
 }
 
-console.log("\n=== FB18 money does not move the Cup ===");
+console.log("\n=== FB18 money does not move the Cup on a season round ===");
 {
   // $180 from the main game, $120 across the FB18 segments.
-  const money = awardMoney({
+  const card = {
     breakdownByTeam: { t1: bd(180, 40, 30, 50) },
     rosters: { t1: ["p1", "p2", "p3", "p4"] },
-  });
+  };
+  const money = awardMoney(card);
   check("money column reports the full figure", money[0].dollars, 300);
   check("Cup figure excludes FB18 entirely", money[0].cupDollars, 180);
   check("and the breakdown says where it came from",
     money[0].breakdown, { main: 180, front: 40, back: 30, eighteen: 50 });
+
+  // The same card under major rules. Every dollar converts there.
+  const major = awardMoney({ ...card, cupEligible: "all" });
+  check("a major counts every dollar won", major[0].cupDollars, 300);
+  check("which is the winnings figure exactly, gross of dues",
+    major[0].cupDollars, major[0].winnings);
+  check("and the breakdown is untouched either way",
+    major[0].breakdown, money[0].breakdown);
+
+  check("the default is the season rule, so a caller who forgets cannot pay twice",
+    awardMoney(card)[0].cupDollars, 180);
+  check("the round type picks the rule", [CUP_ELIGIBLE.season, CUP_ELIGIBLE.major],
+    ["main", "all"]);
+  check("and the helper agrees with both",
+    [cupDollarsOf(bd(180, 40, 30, 50), "main"), cupDollarsOf(bd(180, 40, 30, 50), "all")],
+    [180, 300]);
+}
+
+console.log("\n=== dues never reach the Cup figure, on either round type ===");
+{
+  const card = {
+    breakdownByTeam: { t1: bd(100, 10, 10, 10) },
+    rosters: { t1: ["p1"] },
+    duesPerPlayer: 35,
+  };
+  const season = awardMoney(card)[0];
+  const major = awardMoney({ ...card, cupEligible: "all" })[0];
+  check("season: Cup figure is the matches, before dues", season.cupDollars, 100);
+  check("major: Cup figure is the winnings, before dues", major.cupDollars, 130);
+  check("dues only come off what changes hands",
+    [season.dollars, major.dollars], [95, 95]);
 }
 
 console.log("\n=== bonus points: 10 front, 10 back, 15 for the eighteen ===");
@@ -402,7 +436,7 @@ console.log("\n=== settlement includes every FB18 segment ===");
   check("settlement is main game plus all three segments",
     [money.find((m) => m.golferId === "a1")!.dollars,
      money.find((m) => m.golferId === "b1")!.dollars], [150, -150]);
-  check("Cup figure still ignores FB18",
+  check("Cup figure still ignores FB18 on a season round",
     money.find((m) => m.golferId === "a1")!.cupDollars, 100);
 }
 
@@ -772,6 +806,52 @@ console.log("\n=== the double is applied once, not twice ===");
   const plain = roundPoints({ money, bonusByTeam: { t1: 35, t2: 0 }, rosters });
   check("the same round as a season game is 135",
     plain.find((p) => p.golferId === "p1")!.total, 135);
+}
+
+console.log("\n=== the major played 10/28, reconciled end to end ===");
+{
+  // The real card: $91.70 of match money and $109.98 across the three FB18
+  // segments, for $201.68 a player. Team 1 swept all three bonuses.
+  //
+  // Under the old season-only rule this paid 183.4 + 70 = 253.4, which read
+  // as a bug: two thirds of the winnings earned nothing. Now every dollar
+  // converts, and the nines are deliberately paid twice over.
+  const breakdown = bd(91.7, 40, 30, 39.98);
+  const rosters = { t1: ["hubbs"], t2: ["other"] };
+  const money = awardMoney({
+    breakdownByTeam: { t1: breakdown, t2: bd(-91.7, 0, 0, 0) },
+    rosters,
+    cupEligible: "all",
+  });
+  const winner = money.find((m) => m.golferId === "hubbs")!;
+  check("winnings are the four parts added up", winner.winnings, 201.68);
+  check("and all of it is Cup eligible on a major", winner.cupDollars, 201.68);
+
+  const pts = roundPoints({
+    money,
+    bonusByTeam: { t1: 70, t2: 0 },   // 20 + 20 + 30, already doubled
+    rosters,
+    multiplier: POINT_MULTIPLIER.major,
+  });
+  const scored = pts.find((p) => p.golferId === "hubbs")!;
+  check("money points are the winnings doubled", scored.fromMoney, 403.36);
+  check("the clean sweep is worth 70", scored.bonus, 70);
+  check("473.36 on the round", scored.total, 473.36);
+
+  // What the same card would have paid before this change, and as a season
+  // round, so the three regimes can be compared in one place.
+  const seasonMoney = awardMoney({
+    breakdownByTeam: { t1: breakdown, t2: bd(-91.7, 0, 0, 0) },
+    rosters,
+  });
+  check("as a season round the same card is 91.7 + 35",
+    roundPoints({ money: seasonMoney, bonusByTeam: { t1: 35, t2: 0 }, rosters })
+      .find((p) => p.golferId === "hubbs")!.total, 126.7);
+  check("the old major rule paid 253.4",
+    roundPoints({
+      money: seasonMoney, bonusByTeam: { t1: 70, t2: 0 }, rosters,
+      multiplier: POINT_MULTIPLIER.major,
+    }).find((p) => p.golferId === "hubbs")!.total, 253.4);
 }
 
 console.log("\n=== who is shown money ===");

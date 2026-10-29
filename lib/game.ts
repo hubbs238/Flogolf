@@ -594,6 +594,34 @@ export type MoneyBreakdown = {
   eighteen: number;
 };
 
+/**
+ * Which of a round's winnings convert to FLO Cup points.
+ *
+ * "main" counts the matches alone. The nine and eighteen hole results are
+ * already rewarded through the bonus points, so counting their money as well
+ * would pay twice for one performance. That is the season rule.
+ *
+ * "all" counts every dollar won, the FB18 side game included. Majors run
+ * this way deliberately: paying twice for the low rounds is the point, and it
+ * is what makes a major worth chasing.
+ */
+export type CupEligible = "main" | "all";
+
+export const CUP_ELIGIBLE: Record<RoundType, CupEligible> = {
+  season: "main",
+  major: "all",
+};
+
+/**
+ * The slice of a breakdown that converts to points, before the multiplier.
+ *
+ * One place to ask the question, so the settlement table, the season
+ * standings and the prose that explains them cannot drift apart.
+ */
+export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
+  return eligible === "all" ? b.main + b.front + b.back + b.eighteen : b.main;
+}
+
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
@@ -607,8 +635,10 @@ export type PlayerMoney = {
   /** What actually changes hands: winnings less dues. */
   dollars: number;
   /**
-   * The portion that counts toward FLO Cup points: the main game alone.
-   * Every FB18 payout is money only, and dues never reach it.
+   * The portion that counts toward FLO Cup points. On a season round that is
+   * the matches alone; on a major it is every dollar won, the FB18 side game
+   * included. Dues never reach it either way, since they leave the group
+   * rather than changing hands.
    */
   cupDollars: number;
   breakdown: MoneyBreakdown;
@@ -638,8 +668,14 @@ export function awardMoney(opts: {
   rosters: Record<string, string[]>;
   /** Flat charge per player. Zero on a round with no dues. */
   duesPerPlayer?: number;
+  /**
+   * Which winnings feed the Cup. Defaults to the matches alone, the season
+   * rule, so a caller that has not thought about it cannot accidentally pay
+   * the FB18 money twice. Majors pass "all".
+   */
+  cupEligible?: CupEligible;
 }): PlayerMoney[] {
-  const { breakdownByTeam, rosters } = opts;
+  const { breakdownByTeam, rosters, cupEligible = "main" } = opts;
   // Math.max(0, NaN) is NaN, so the clamp alone would let a bad figure
   // through and poison every settlement row on the round.
   const raw = opts.duesPerPlayer ?? 0;
@@ -667,7 +703,9 @@ export function awardMoney(opts: {
         winnings,
         dues,
         dollars,
-        cupDollars: breakdown.main,
+        // Rounded like winnings: summing four already-rounded figures can
+        // land on float noise, and this one is read out as a point total.
+        cupDollars: round2(cupDollarsOf(breakdown, cupEligible)),
         breakdown,
       });
     }
@@ -811,7 +849,7 @@ export function pointsForRound(dollars: number, multiplier = 1): number {
 export type PlayerRoundPoints = {
   golferId: string;
   teamId: string;
-  /** Points from Cup-eligible money. FB18 winnings are excluded. */
+  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
   fromMoney: number;
   /** Front nine, back nine and eighteen hole bonuses, otherwise 0. */
   bonus: number;

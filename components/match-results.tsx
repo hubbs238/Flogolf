@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
-import { BONUS_POINTS, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
+import { BONUS_POINTS, CUP_ELIGIBLE, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
@@ -106,6 +106,11 @@ export function MatchResults({
   // 35. Both sides multiply the same constants by the same multiplier now.
   const bonusPts = (segment: "front" | "back" | "total") =>
     BONUS_POINTS[segment] * POINT_MULTIPLIER[roundType];
+
+  // On a major the FB18 winnings convert too, so the column is no longer the
+  // matches alone and must not keep calling itself Match Points.
+  const moneyPointsLabel =
+    CUP_ELIGIBLE[roundType] === "all" ? "Money Points" : "Match Points";
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -247,7 +252,9 @@ export function MatchResults({
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
             {showMoney && " All three pay money."}
-            {" None of it feeds FLO Cup points, since the bonus points already reward the same results."}
+            {major
+              ? " On a major every dollar of it converts to FLO Cup points as well, on top of the bonus points."
+              : " None of it feeds FLO Cup points, since the bonus points already reward the same results."}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -399,11 +406,16 @@ export function MatchResults({
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
             {showMoney
-              ? `Match Points come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
-              : `Match Points come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
+              ? major
+                ? `${moneyPointsLabel} come from every dollar won on the round, Bonus Money included, at two points a dollar on a major. A losing round scores 0 rather than going negative.`
+                : `${moneyPointsLabel} come from Match Money, a dollar a point, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
+              : major
+                ? `${moneyPointsLabel} come from everything won across the ${matchesPhrase} and the FB18 side game, doubled. A losing round scores 0 rather than going negative.`
+                : `${moneyPointsLabel} come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
             {` Bonus Points are ${bonusPts("front")} for the lowest front nine, ` +
               `${bonusPts("back")} for the lowest back nine and ` +
               `${bonusPts("total")} for the lowest eighteen.`}
+            {major && " The nines and the eighteen are paid twice over on a major: their money converts to points, and the bonus points land on top."}
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -411,7 +423,7 @@ export function MatchResults({
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 text-left font-medium">Player</th>
                   <th className="p-3 text-left font-medium">Team</th>
-                  <th className="w-32 p-3 text-right font-medium">Match Points</th>
+                  <th className="w-32 p-3 text-right font-medium">{moneyPointsLabel}</th>
                   <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
                   <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
                 </tr>

@@ -81,7 +81,7 @@ export function StandingsTable({
                 <th className="w-32 p-3 text-right font-medium">Bonus Money</th>
               </>
             )}
-            <th className="w-32 p-3 text-right font-medium">Match Points</th>
+            <th className="w-32 p-3 text-right font-medium">Money Points</th>
             <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
             <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
           </tr>
