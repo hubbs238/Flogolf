@@ -599,18 +599,29 @@ export type MoneyBreakdown = {
  *
  * "main" counts the matches alone. The nine and eighteen hole results are
  * already rewarded through the bonus points, so counting their money as well
- * would pay twice for one performance. That is the season rule.
+ * would pay twice for one performance.
  *
- * "all" counts every dollar won, the FB18 side game included. Majors run
- * this way deliberately: paying twice for the low rounds is the point, and it
- * is what makes a major worth chasing.
+ * "all" counts every dollar won, the FB18 side game included, and the bonus
+ * points are still paid on top. Those three results are deliberately rewarded
+ * twice over.
  */
 export type CupEligible = "main" | "all";
 
-export const CUP_ELIGIBLE: Record<RoundType, CupEligible> = {
-  season: "main",
-  major: "all",
-};
+/**
+ * Cup eligibility, which turns on the round type and the set length together.
+ *
+ * A season round counts the matches alone, whatever it is cut into.
+ *
+ * A major over six three-hole sets counts every dollar won. Six matches pay
+ * out across the eighteen, so there is a full card of match money to double,
+ * and paying the nines twice over on top is what makes it worth chasing.
+ *
+ * A major over three six-hole sets stays on the season rule. It doubles like
+ * any major, but its money is the matches alone.
+ */
+export function cupEligibleFor(roundType: RoundType, setHoles: SetLength): CupEligible {
+  return roundType === "major" && setHoles === 3 ? "all" : "main";
+}
 
 /**
  * The slice of a breakdown that converts to points, before the multiplier.
@@ -635,10 +646,10 @@ export type PlayerMoney = {
   /** What actually changes hands: winnings less dues. */
   dollars: number;
   /**
-   * The portion that counts toward FLO Cup points. On a season round that is
-   * the matches alone; on a major it is every dollar won, the FB18 side game
-   * included. Dues never reach it either way, since they leave the group
-   * rather than changing hands.
+   * The portion that counts toward FLO Cup points: the matches alone, or
+   * every dollar won on a major over three-hole sets. See cupEligibleFor.
+   * Dues never reach it either way, since they leave the group rather than
+   * changing hands.
    */
   cupDollars: number;
   breakdown: MoneyBreakdown;
@@ -669,9 +680,9 @@ export function awardMoney(opts: {
   /** Flat charge per player. Zero on a round with no dues. */
   duesPerPlayer?: number;
   /**
-   * Which winnings feed the Cup. Defaults to the matches alone, the season
-   * rule, so a caller that has not thought about it cannot accidentally pay
-   * the FB18 money twice. Majors pass "all".
+   * Which winnings feed the Cup. Defaults to the matches alone, so a caller
+   * that has not thought about it cannot accidentally pay the FB18 money
+   * twice. Comes from cupEligibleFor.
    */
   cupEligible?: CupEligible;
 }): PlayerMoney[] {
@@ -849,7 +860,7 @@ export function pointsForRound(dollars: number, multiplier = 1): number {
 export type PlayerRoundPoints = {
   golferId: string;
   teamId: string;
-  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
+  /** Points from Cup-eligible money. See cupEligibleFor for what counts. */
   fromMoney: number;
   /** Front nine, back nine and eighteen hole bonuses, otherwise 0. */
   bonus: number;

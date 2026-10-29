@@ -160,7 +160,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
                 : { front: 0, back: 0, total: 0 }
             }
             golfers={golfers} isAdmin={isAdmin} showMoney={view.showMoney}
-            roundType={computed.roundType}
+            roundType={computed.roundType} cupEligible={computed.cupEligible}
           />
         </div>
       )}

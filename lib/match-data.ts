@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
   roundPoints,
-  CUP_ELIGIBLE,
+  cupEligibleFor,
   cupDollarsOf,
   POINT_MULTIPLIER,
   scoreBonusPoints,
@@ -104,7 +104,7 @@ export function computeMatch(b: MatchBundle) {
   const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
   const setHoles = setLengthOf(b.match.set_holes);
   const multiplier = POINT_MULTIPLIER[roundType];
-  const cupEligible = CUP_ELIGIBLE[roundType];
+  const cupEligible = cupEligibleFor(roundType, setHoles);
 
   const main = scoreMainGame({
     teamIds,
@@ -142,10 +142,11 @@ export function computeMatch(b: MatchBundle) {
   // Per player figures, a unit paying its rate to each team member, and kept
   // split by source so settlement can show where the money came from.
   //
-  // What feeds the Cup follows the round type. On a season round the matches
-  // alone: the nine and eighteen hole results are already rewarded through
-  // the bonus points, so counting their money as well would pay twice for one
-  // performance. A major pays twice on purpose, so every dollar counts there.
+  // What feeds the Cup follows the round type and the set length together.
+  // Usually the matches alone: the nine and eighteen hole results are already
+  // rewarded through the bonus points, so counting their money as well would
+  // pay twice for one performance. A major over three-hole sets pays twice on
+  // purpose, so every dollar counts there.
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
@@ -210,13 +211,13 @@ export type SeasonRow = {
   rounds: number;
   /** The matches themselves. Earns points on every round. */
   matchMoney: number;
-  /** FB18 front nine, back nine and all eighteen. Earns points on majors. */
+  /** FB18 front nine, back nine and all eighteen. Earns points on a major over three-hole sets. */
   bonusMoney: number;
   /** Flat charges paid to play. Money only, never points. */
   dues: number;
   /** What changed hands: match money plus bonus money, less dues. */
   dollars: number;
-  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
+  /** Points from Cup-eligible money: the matches, plus FB18 on a major over three-hole sets. */
   pointsFromMoney: number;
   /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. Doubled on a major. */
   pointsBonus: number;

@@ -3,11 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
-import { BONUS_POINTS, CUP_ELIGIBLE, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
+import { BONUS_POINTS, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
-  BonusSegment, Fb18Result, PlayerMoney, PlayerRoundPoints,
+  BonusSegment, CupEligible, Fb18Result, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
 } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
@@ -38,6 +38,7 @@ function Units({ n }: { n: number }) {
 export function MatchResults({
   match, teams, segments, fb18, unitsByTeam, money, teamMoney, duesPerPlayer,
   bonus, points, segmentRates, golfers, isAdmin, showMoney, roundType,
+  cupEligible,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -64,6 +65,11 @@ export function MatchResults({
   showMoney: boolean;
   /** A major pays double in points. It says nothing about the shape. */
   roundType: "season" | "major";
+  /**
+   * Whether the FB18 money converts to points on this round. Passed down
+   * rather than re-derived, so the prose cannot disagree with the engine.
+   */
+  cupEligible: CupEligible;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -107,10 +113,10 @@ export function MatchResults({
   const bonusPts = (segment: "front" | "back" | "total") =>
     BONUS_POINTS[segment] * POINT_MULTIPLIER[roundType];
 
-  // On a major the FB18 winnings convert too, so the column is no longer the
-  // matches alone and must not keep calling itself Match Points.
-  const moneyPointsLabel =
-    CUP_ELIGIBLE[roundType] === "all" ? "Money Points" : "Match Points";
+  // Where the FB18 winnings convert too, the column is no longer the matches
+  // alone and must not keep calling itself Match Points.
+  const allMoney = cupEligible === "all";
+  const moneyPointsLabel = allMoney ? "Money Points" : "Match Points";
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -252,8 +258,8 @@ export function MatchResults({
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
             {showMoney && " All three pay money."}
-            {major
-              ? " On a major every dollar of it converts to FLO Cup points as well, on top of the bonus points."
+            {allMoney
+              ? " Every dollar of it converts to FLO Cup points as well on this round, on top of the bonus points."
               : " None of it feeds FLO Cup points, since the bonus points already reward the same results."}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
@@ -406,16 +412,16 @@ export function MatchResults({
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
             {showMoney
-              ? major
+              ? allMoney
                 ? `${moneyPointsLabel} come from every dollar won on the round, Bonus Money included, at two points a dollar on a major. A losing round scores 0 rather than going negative.`
-                : `${moneyPointsLabel} come from Match Money, a dollar a point, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
-              : major
+                : `${moneyPointsLabel} come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
+              : allMoney
                 ? `${moneyPointsLabel} come from everything won across the ${matchesPhrase} and the FB18 side game, doubled. A losing round scores 0 rather than going negative.`
                 : `${moneyPointsLabel} come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
             {` Bonus Points are ${bonusPts("front")} for the lowest front nine, ` +
               `${bonusPts("back")} for the lowest back nine and ` +
               `${bonusPts("total")} for the lowest eighteen.`}
-            {major && " The nines and the eighteen are paid twice over on a major: their money converts to points, and the bonus points land on top."}
+            {allMoney && " The nines and the eighteen are paid twice over here: their money converts to points, and the bonus points land on top."}
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">

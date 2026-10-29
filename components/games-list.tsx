@@ -121,8 +121,9 @@ export function GamesList({
                   <option value="major">Major &mdash; double points</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">
-                  A major pays double on every point, and every dollar won
-                  converts, FB18 included. The money itself is the same.
+                  A major pays double on every point. Over six three-hole sets
+                  every dollar won converts, FB18 included. The money itself
+                  is the same.
                 </span>
               </label>
 
@@ -139,14 +140,14 @@ export function GamesList({
                 </span>
                 {/*
                   The two settings pull against each other and it is not
-                  obvious: fewer matches means less match money to double. A
-                  major softens that by converting the FB18 money as well.
-                  Said here, where the choice is made, rather than discovered
-                  afterwards.
+                  obvious: fewer matches means less match money to double, and
+                  six-hole sets also give up the FB18 conversion a major over
+                  threes would get. Said here, where the choice is made,
+                  rather than discovered afterwards.
                 */}
                 {roundType === "major" && setHoles === 6 && (
                   <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
-                    Three matches instead of six, so the matches pay out over half as many decisions. That costs less than it looks on a major, since FB18 winnings convert to points here too and take up the slack. Raise the rate above if you want the matches themselves to carry the round.
+                    Three matches instead of six, so the round pays out over half as many decisions, and only that match money converts to points. Doubled points on half the money lands about level with a normal week, so raise the rate above if you want this to feel like a major.
                   </span>
                 )}
               </label>

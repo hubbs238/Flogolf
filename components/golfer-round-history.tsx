@@ -48,8 +48,8 @@ export function GolferRoundHistory({
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
         {showMoney
-          ? "Match Money is the matches themselves; Bonus Money is F9, B9 and all eighteen. On a season round only Match Money earns points; on a major every dollar does. A losing round scores 0 rather than going negative, so the money and points columns will often disagree."
-          : "Money Points come from the matches on a season round, and from everything won on a major. A losing round scores 0 rather than going negative. Bonus Points are the lowest front nine, back nine and eighteen. A major pays double on both."}
+          ? "Match Money is the matches themselves; Bonus Money is F9, B9 and all eighteen. Only Match Money earns points, except on a major over six three-hole sets, where every dollar does. A losing round scores 0 rather than going negative, so the money and points columns will often disagree."
+          : "Money Points come from the matches, and on a major over six three-hole sets from everything won. A losing round scores 0 rather than going negative. Bonus Points are the lowest front nine, back nine and eighteen. A major pays double on both."}
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
