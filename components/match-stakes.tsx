@@ -121,6 +121,11 @@ export function MatchStakes({
             <span className="mt-1 block text-xs text-muted">
               The same eighteen holes either way. Locked once rosters open.
             </span>
+            {match.round_type === "major" && Number(match.set_holes) === 6 && (
+              <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
+                Three matches instead of six, so the round pays out over half as many decisions. Doubled points on half the money lands about level with a normal week, so double the rate above if you want this to feel like a major.
+              </span>
+            )}
           </label>
         ) : (
           <div>

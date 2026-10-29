@@ -136,6 +136,16 @@ export function GamesList({
                   The same eighteen holes either way. Longer matches mean a
                   carry runs further.
                 </span>
+                {/*
+                  The two settings pull against each other and it is not
+                  obvious: fewer matches means less money to double. Said here,
+                  where the choice is made, rather than discovered afterwards.
+                */}
+                {roundType === "major" && setHoles === 6 && (
+                  <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
+                    Three matches instead of six, so the round pays out over half as many decisions. Doubled points on half the money lands about level with a normal week, so double the rate above if you want this to feel like a major.
+                  </span>
+                )}
               </label>
 
               <label className="sm:col-span-2">
