@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
@@ -31,6 +32,11 @@ import type {
 
 export type MatchBundle = {
   match: Match;
+  /**
+   * The earliest major, still scored under the old matches-only rule. Null
+   * before any major has been created.
+   */
+  firstMajorId: string | null;
   teams: MatchTeam[];
   players: MatchPlayer[];
   payouts: PayoutTable;
@@ -54,12 +60,37 @@ function toHoleScores(rows: HoleScore[]): HoleScores {
   return s;
 }
 
+/**
+ * The first major ever played, which keeps the old matches-only scoring.
+ *
+ * Cached per render rather than asked per round: the season standings walk
+ * every finished round and each one needs the same answer.
+ *
+ * Derived rather than stored, so it needs no column and no migration. The one
+ * way to move it is to create a major dated before that round, which would
+ * hand the exemption to the new one.
+ */
+const getFirstMajorId = cache(async (): Promise<string | null> => {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("matches")
+    .select("id")
+    .eq("round_type", "major")
+    .order("match_date", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (data as { id: string } | null)?.id ?? null;
+});
+
 export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
   const supabase = await createClient();
 
   const { data: match } = await supabase
     .from("matches").select("*").eq("id", id).maybeSingle();
   if (!match) return null;
+
+  const firstMajorId = await getFirstMajorId();
 
   const [teams, players, payouts, fb18, scores, decisions] = await Promise.all([
     supabase.from("match_teams").select("*").eq("match_id", id).order("slot"),
@@ -81,6 +112,7 @@ export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
 
   return {
     match: match as Match,
+    firstMajorId,
     teams: (teams.data ?? []) as MatchTeam[],
     players: (players.data ?? []) as MatchPlayer[],
     payouts: toPayoutTable((payouts.data ?? []) as MatchPayout[]),
@@ -104,7 +136,10 @@ export function computeMatch(b: MatchBundle) {
   const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
   const setHoles = setLengthOf(b.match.set_holes);
   const multiplier = POINT_MULTIPLIER[roundType];
-  const cupEligible = cupEligibleFor(roundType, setHoles);
+  // The first major was settled before every dollar started converting, so it
+  // keeps the scoring it was played under. Every major after it converts.
+  const legacyMajor = b.firstMajorId !== null && b.match.id === b.firstMajorId;
+  const cupEligible = cupEligibleFor(roundType, legacyMajor);
 
   const main = scoreMainGame({
     teamIds,
@@ -142,11 +177,10 @@ export function computeMatch(b: MatchBundle) {
   // Per player figures, a unit paying its rate to each team member, and kept
   // split by source so settlement can show where the money came from.
   //
-  // What feeds the Cup follows the round type and the set length together.
-  // Usually the matches alone: the nine and eighteen hole results are already
-  // rewarded through the bonus points, so counting their money as well would
-  // pay twice for one performance. A major over three-hole sets pays twice on
-  // purpose, so every dollar counts there.
+  // What feeds the Cup follows the round. Usually the matches alone: the nine
+  // and eighteen hole results are already rewarded through the bonus points,
+  // so counting their money as well would pay twice for one performance. A
+  // major pays twice on purpose, so every dollar counts there.
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
@@ -211,13 +245,13 @@ export type SeasonRow = {
   rounds: number;
   /** The matches themselves. Earns points on every round. */
   matchMoney: number;
-  /** FB18 front nine, back nine and all eighteen. Earns points on a major over three-hole sets. */
+  /** FB18 front nine, back nine and all eighteen. Earns points on a major. */
   bonusMoney: number;
   /** Flat charges paid to play. Money only, never points. */
   dues: number;
   /** What changed hands: match money plus bonus money, less dues. */
   dollars: number;
-  /** Points from Cup-eligible money: the matches, plus FB18 on a major over three-hole sets. */
+  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
   pointsFromMoney: number;
   /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. Doubled on a major. */
   pointsBonus: number;

@@ -28,8 +28,8 @@ export default async function FloCupPage() {
 
       <p className="mb-4 text-sm text-muted">
         {view.showMoney
-          ? "A dollar won is a point. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. FB18 winnings are money only and do not move the Cup, since the bonus points already cover that. The one exception is a major over six three-hole sets, where every dollar counts, FB18 included."
-          : "Winning a match earns Money Points, and a major pays double. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. The FB18 side game does not move the Cup, since the bonus points already cover it. The one exception is a major over six three-hole sets, where it does, on top of those bonus points."}
+          ? "A dollar won is a point. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. On a season round FB18 winnings are money only and do not move the Cup, since the bonus points already cover that. On a major every dollar counts, FB18 included, taken as the total payout rounded up."
+          : "Winning a match earns Money Points, and a major pays double. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. On a season round the FB18 side game does not move the Cup, since the bonus points already cover it. On a major it does, on top of those bonus points."}
         {" "}Bonus Points go to the lowest front nine
         (10), the lowest back nine (10) and the lowest eighteen (15), and every
         player on the winning team collects them. A major doubles all of it,

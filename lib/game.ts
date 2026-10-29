@@ -608,19 +608,22 @@ export type MoneyBreakdown = {
 export type CupEligible = "main" | "all";
 
 /**
- * Cup eligibility, which turns on the round type and the set length together.
+ * Cup eligibility for a round.
  *
- * A season round counts the matches alone, whatever it is cut into.
+ * A major counts every dollar won, the FB18 side game included, whatever the
+ * eighteen is cut into. The bonus points are still paid on top, so those
+ * three results are deliberately rewarded twice over: that is what makes a
+ * major worth chasing.
  *
- * A major over six three-hole sets counts every dollar won. Six matches pay
- * out across the eighteen, so there is a full card of match money to double,
- * and paying the nines twice over on top is what makes it worth chasing.
+ * Everything else counts the matches alone. There the nines and the eighteen
+ * are already paid through the bonus points, so counting their money as well
+ * would pay twice for one performance.
  *
- * A major over three six-hole sets stays on the season rule. It doubles like
- * any major, but its money is the matches alone.
+ * `legacy` grandfathers the first major, which was played and settled before
+ * this rule existed. Its standings are not reopened.
  */
-export function cupEligibleFor(roundType: RoundType, setHoles: SetLength): CupEligible {
-  return roundType === "major" && setHoles === 3 ? "all" : "main";
+export function cupEligibleFor(roundType: RoundType, legacy = false): CupEligible {
+  return roundType === "major" && !legacy ? "all" : "main";
 }
 
 /**
@@ -628,9 +631,15 @@ export function cupEligibleFor(roundType: RoundType, setHoles: SetLength): CupEl
  *
  * One place to ask the question, so the settlement table, the season
  * standings and the prose that explains them cannot drift apart.
+ *
+ * The every-dollar rule is the round's total payout rounded UP to the dollar,
+ * which is how it was asked for: $201.68 won converts as $202 and doubles to
+ * 404. Only that rule rounds. The matches-alone figure converts at its exact
+ * value, the way it always has, so no season round moves by a cent.
  */
 export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
-  return eligible === "all" ? b.main + b.front + b.back + b.eighteen : b.main;
+  if (eligible !== "all") return b.main;
+  return Math.ceil(b.main + b.front + b.back + b.eighteen);
 }
 
 export type PlayerMoney = {
@@ -646,10 +655,10 @@ export type PlayerMoney = {
   /** What actually changes hands: winnings less dues. */
   dollars: number;
   /**
-   * The portion that counts toward FLO Cup points: the matches alone, or
-   * every dollar won on a major over three-hole sets. See cupEligibleFor.
-   * Dues never reach it either way, since they leave the group rather than
-   * changing hands.
+   * The portion that counts toward FLO Cup points: the matches alone, or on a
+   * major every dollar won, rounded up to the dollar. See cupEligibleFor and
+   * cupDollarsOf. Dues never reach it either way, since they leave the group
+   * rather than changing hands.
    */
   cupDollars: number;
   breakdown: MoneyBreakdown;

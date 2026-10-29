@@ -305,8 +305,7 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
 
   // The same card under major rules. Every dollar converts there.
   const major = awardMoney({ ...card, cupEligible: "all" });
-  check("a major over three-hole sets counts every dollar won",
-    major[0].cupDollars, 300);
+  check("a major counts every dollar won", major[0].cupDollars, 300);
   check("which is the winnings figure exactly, gross of dues",
     major[0].cupDollars, major[0].winnings);
   check("and the breakdown is untouched either way",
@@ -314,10 +313,10 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
 
   check("the default is the season rule, so a caller who forgets cannot pay twice",
     awardMoney(card)[0].cupDollars, 180);
-  check("only a major over three-hole sets counts everything",
-    [cupEligibleFor("season", 3), cupEligibleFor("season", 6),
-     cupEligibleFor("major", 3), cupEligibleFor("major", 6)],
-    ["main", "main", "all", "main"]);
+  check("a major counts everything, anything else the matches alone",
+    [cupEligibleFor("season"), cupEligibleFor("major"),
+     cupEligibleFor("season", true), cupEligibleFor("major", true)],
+    ["main", "all", "main", "main"]);
   check("and the helper agrees with both",
     [cupDollarsOf(bd(180, 40, 30, 50), "main"), cupDollarsOf(bd(180, 40, 30, 50), "all")],
     [180, 300]);
@@ -811,25 +810,27 @@ console.log("\n=== the double is applied once, not twice ===");
     plain.find((p) => p.golferId === "p1")!.total, 135);
 }
 
-console.log("\n=== one major card, scored under each set length ===");
+console.log("\n=== one major card, under the old rule and the new ===");
 {
   // The card from the 10/28 major: $91.70 of match money and $109.98 across
   // the three FB18 segments, $201.68 a player, and a clean sweep of all three
-  // bonuses. That round was played over three six-hole sets.
+  // bonuses.
   //
-  // Scored both ways here, because the two formats answer differently and the
-  // only thing separating them is the set length.
+  // That round was the first major, so it keeps the scoring it was settled
+  // under. Every major after it converts the lot. Both answers are pinned
+  // here so the two cannot quietly converge later.
   const breakdown = bd(91.7, 40, 30, 39.98);
   const rosters = { t1: ["hubbs"], t2: ["other"] };
   const card = {
     breakdownByTeam: { t1: breakdown, t2: bd(-91.7, 0, 0, 0) },
     rosters,
   };
-  const score = (setHoles: 3 | 6) => {
+  const score = (legacy: boolean) => {
     const money = awardMoney({
       ...card,
-      cupEligible: cupEligibleFor("major", setHoles),
+      cupEligible: cupEligibleFor("major", legacy),
     });
+    const mine = money.find((m) => m.golferId === "hubbs")!;
     const pts = roundPoints({
       money,
       bonusByTeam: { t1: 70, t2: 0 },   // 20 + 20 + 30, already doubled
@@ -837,34 +838,53 @@ console.log("\n=== one major card, scored under each set length ===");
       multiplier: POINT_MULTIPLIER.major,
     });
     return {
-      winnings: money.find((m) => m.golferId === "hubbs")!.winnings,
-      cupDollars: money.find((m) => m.golferId === "hubbs")!.cupDollars,
+      winnings: mine.winnings,
+      cupDollars: mine.cupDollars,
       ...pts.find((p) => p.golferId === "hubbs")!,
     };
   };
 
-  const sixes = score(6);
-  check("winnings are the four parts added up", sixes.winnings, 201.68);
-  check("over six-hole sets only the matches are Cup eligible",
-    sixes.cupDollars, 91.7);
-  check("so money points are 183.4", sixes.fromMoney, 183.4);
-  check("the clean sweep is worth 70 either way", sixes.bonus, 70);
-  check("253.4 on the round, which is what the first major scored",
-    sixes.total, 253.4);
+  const first = score(true);
+  check("winnings are the four parts added up", first.winnings, 201.68);
+  check("the first major counts the matches alone", first.cupDollars, 91.7);
+  check("so money points are 183.4", first.fromMoney, 183.4);
+  check("the clean sweep is worth 70 either way", first.bonus, 70);
+  check("253.4 on the round, which is what it was settled at",
+    first.total, 253.4);
 
-  const threes = score(3);
-  check("over three-hole sets every dollar is Cup eligible",
-    threes.cupDollars, 201.68);
-  check("the same winnings figure exactly", threes.cupDollars, threes.winnings);
-  check("so money points are the winnings doubled", threes.fromMoney, 403.36);
-  check("473.36 on the round", threes.total, 473.36);
+  const later = score(false);
+  check("every major after it counts the total, rounded up",
+    later.cupDollars, 202);
+  check("rounded up rather than truncated or nearest",
+    later.cupDollars, Math.ceil(201.68));
+  check("so money points are 404", later.fromMoney, 404);
+  check("474 on the round", later.total, 474);
 
   // And the same card as a plain season round, for the third point of
   // comparison: single points, matches only, undoubled bonus.
-  const season = awardMoney({ ...card, cupEligible: cupEligibleFor("season", 3) });
+  const season = awardMoney({ ...card, cupEligible: cupEligibleFor("season") });
   check("as a season round it is 91.7 + 35",
     roundPoints({ money: season, bonusByTeam: { t1: 35, t2: 0 }, rosters })
       .find((p) => p.golferId === "hubbs")!.total, 126.7);
+}
+
+console.log("\n=== rounding up belongs to the major rule alone ===");
+{
+  check("a major rounds the total up to the dollar",
+    cupDollarsOf(bd(91.7, 40, 30, 39.98), "all"), 202);
+  check("a single cent over still takes the whole dollar",
+    cupDollarsOf(bd(0.01, 0, 0, 0), "all"), 1);
+  check("a figure already whole is left alone",
+    cupDollarsOf(bd(100, 50, 0, 0), "all"), 150);
+  check("the matches-alone figure keeps its cents",
+    cupDollarsOf(bd(91.7, 40, 30, 39.98), "main"), 91.7);
+  check("and a losing total is still floored at zero, not rounded into points",
+    roundPoints({
+      money: [{ golferId: "p1", teamId: "t1", winnings: -150.3, dues: 0,
+                dollars: -150.3, cupDollars: cupDollarsOf(bd(-100, -20, -20, -10.3), "all"),
+                breakdown: bd(-100, -20, -20, -10.3) }],
+      bonusByTeam: {}, rosters: { t1: ["p1"] }, multiplier: POINT_MULTIPLIER.major,
+    })[0].total, 0);
 }
 
 console.log("\n=== who is shown money ===");

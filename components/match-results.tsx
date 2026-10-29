@@ -413,7 +413,7 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             {showMoney
               ? allMoney
-                ? `${moneyPointsLabel} come from every dollar won on the round, Bonus Money included, at two points a dollar on a major. A losing round scores 0 rather than going negative.`
+                ? `${moneyPointsLabel} come from every dollar won on the round, Bonus Money included, taken as the total rounded up to the dollar and then doubled. A losing round scores 0 rather than going negative.`
                 : `${moneyPointsLabel} come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
               : allMoney
                 ? `${moneyPointsLabel} come from everything won across the ${matchesPhrase} and the FB18 side game, doubled. A losing round scores 0 rather than going negative.`
