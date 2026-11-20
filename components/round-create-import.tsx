@@ -138,6 +138,12 @@ export function RoundCreateImport() {
         if (r.matchId) router.push(`/games/${r.matchId}`);
         return;
       }
+      // A round built from a sheet is taken straight to scoring. When it
+      // cannot be, the round still exists and the reason belongs on its own
+      // page rather than on a form that is about to be navigated away from.
+      if (!r.started && r.startError) {
+        setError(`The round was built but is not scoring yet: ${r.startError}`);
+      }
       router.push(`/games/${r.matchId}`);
     });
   }
@@ -238,13 +244,20 @@ export function RoundCreateImport() {
             <div className="rounded-lg bg-flag-500/10 px-3 py-2 text-sm text-flag-500">
               <p className="font-medium">Fix these first</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                {blockers.map((b) => <li key={b}>{b}</li>)}
+                {/* Indexed: two bays can produce the same sentence. */}
+                {blockers.map((b, i) => <li key={`${i}-${b}`}>{b}</li>)}
               </ul>
             </div>
           )}
           {read.flags.length > 0 && (
             <p className="text-xs text-flag-500">
               Worth a second look: {read.flags.join("; ")}. These save as read.
+            </p>
+          )}
+          {read.dropped.length > 0 && (
+            <p className="text-xs text-muted">
+              Left out of the reading: {read.dropped.join("; ")}. Type anything
+              you still need in by hand once the round exists.
             </p>
           )}
           {newNames.length > 0 && (

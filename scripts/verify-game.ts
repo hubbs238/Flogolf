@@ -22,6 +22,7 @@ import {
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
 import { isoFromLooseDate } from "../lib/dates";
+import { convertReading, type RawReading } from "../lib/round-reading";
 
 /** Shorthand for a money breakdown in fixtures. */
 function bd(main: number, front = 0, back = 0, eighteen = 0) {
@@ -959,15 +960,230 @@ console.log("\n=== reading a loose date off a sheet ===");
   check("and a two digit year means this century",
     on("9/30/25", nov), "2025-09-30");
 
-  check("a real date in words parses", on("2026-09-30", nov), "2026-09-30");
+  check("a full ISO date parses", on("2026-09-30", nov), "2026-09-30");
+
+  // Spelled months are what the schema asks the model for, so they have to
+  // work. Handing them to new Date does not: a year-less "Oct 7" resolves to
+  // the year 2001, and a parsed local midnight shifts back a day on any
+  // server east of Greenwich. Both file a night in the wrong week.
+  check("a spelled month with no year infers like a numeric one",
+    on("Oct 7", nov), "2026-10-07");
+  check("the long form reads the same", on("October 7", nov), "2026-10-07");
+  check("so does the abbreviation the sheet actually uses",
+    on("Sept 30", nov), "2026-09-30");
+  check("day first reads the same", on("7 Oct", nov), "2026-10-07");
+  check("a spelled month with a year is taken at its word",
+    on("Oct 7 2027", nov), "2027-10-07");
+  check("a comma does not matter", on("October 7, 2026", nov), "2026-10-07");
+  check("and a spelled month ahead of us comes back a year too",
+    on("Dec 20", nov), "2025-12-20");
+  check("a month that is not a month is nothing", on("Smarch 7", nov), null);
 
   check("an impossible day is refused rather than rolled over",
     on("2/30", nov), null);
+  check("including the spelled form", on("Feb 30", nov), null);
+  check("and a thirty first of September", on("9/31", nov), null);
   check("so is a thirteenth month", on("13/1", nov), null);
   check("and nonsense", on("not a date", nov), null);
   check("an empty string is nothing", on("   ", nov), null);
   check("so is nothing at all",
     [isoFromLooseDate(null, nov), isoFromLooseDate(undefined, nov)], [null, null]);
+
+  // Everything is assembled in UTC, so the answer cannot depend on where the
+  // server is. This is the regression that would otherwise only appear after
+  // somebody changed a deployment region.
+  check("the reading does not move with the server's timezone",
+    ["9/30", "Oct 7", "2026-09-30"].map((s) => on(s, nov)),
+    ["2026-09-30", "2026-10-07", "2026-09-30"]);
+  check("and nothing lands in 2001, which is what new Date would have done",
+    ["Oct 7", "October 7", "Sept 30"].every((s) => !String(on(s, nov)).startsWith("2001")),
+    true);
+}
+
+
+console.log("\n=== turning a read image into storable scores ===");
+{
+  const card = (over: Partial<RawReading> = {}): RawReading => ({
+    score_kind: "relative",
+    teams: [],
+    par: [],
+    details: { date: "", title: "", course: "", set_length: 0, rake_per_player: 0 },
+    confidence: "high",
+    notes: "",
+    ...over,
+  });
+  const bay = (label: string, values: number[], players: string[] = ["a", "b"]) => ({
+    label, number: Number(label.replace(/\D/g, "")) || null, players,
+    holes: values.map((value, i) => ({ hole: i + 1, value })),
+  });
+  const ok = (r: ReturnType<typeof convertReading>) => (r.ok ? r : null);
+
+  // --- the defect that mattered ---------------------------------------
+  //
+  // A par row misread writes gross strokes into a column that means relative
+  // to par, and the flag band provably cannot catch it: every gross value a
+  // golfer posts falls inside the range a relative score is allowed to take.
+  // Both misreads are real. A blank par cell comes back as 0, and a model
+  // that locks onto the hole-number header returns par = hole number.
+  {
+    const strokes = [4, 4, 4, 4, 4, 4, 4, 4, 4];
+    const zeroPar = convertReading(card({
+      score_kind: "gross",
+      teams: [bay("Bay 1", strokes)],
+      par: strokes.map((_, i) => ({ hole: i + 1, par: 0 })),
+    }));
+    check("a par row of zeroes is refused, not subtracted", zeroPar.ok, false);
+
+    const headerPar = convertReading(card({
+      score_kind: "gross",
+      teams: [bay("Bay 1", strokes)],
+      par: strokes.map((_, i) => ({ hole: i + 1, par: i + 1 })),
+    }));
+    check("so is a par row that is really the hole numbers", headerPar.ok, false);
+
+    const realPar = ok(convertReading(card({
+      score_kind: "gross",
+      teams: [bay("Bay 1", [4, 5, 3, 4, 4, 6, 3, 4, 5])],
+      par: [4, 4, 3, 4, 5, 4, 3, 4, 4].map((par, i) => ({ hole: i + 1, par })),
+    })));
+    check("a real par row converts",
+      realPar?.teams[0].holes.map((h) => h.relative), [0, 1, 0, 0, -1, 2, 0, 0, 1]);
+    check("and keeps the gross figure for the review screen",
+      realPar?.teams[0].holes[1].raw, 5);
+
+    // A par of 7 is not a par on any hole anyone plays. One of those on an
+    // otherwise good row costs that hole and nothing else; it is only when
+    // most of the row is not pars that the row itself stops being believable.
+    const oddPar = ok(convertReading(card({
+      score_kind: "gross",
+      teams: [bay("Bay 1", [4, 4, 4, 4, 4, 4, 4, 4, 4])],
+      par: [4, 7, 3, 4, 5, 4, 3, 4, 4].map((par, i) => ({ hole: i + 1, par })),
+    })));
+    check("one bad par drops its own hole, not the card",
+      oddPar?.teams[0].holes.map((h) => h.hole), [1, 3, 4, 5, 6, 7, 8, 9]);
+    check("and says so rather than going quiet",
+      oddPar?.dropped.some((d) => d.includes("not a par")), true);
+
+    // The threshold itself: a row where the rejects outnumber the keeps is
+    // not a par row, however many pars happen to be in range.
+    const mostlyBad = convertReading(card({
+      score_kind: "gross",
+      teams: [bay("Bay 1", [4, 4, 4, 4])],
+      par: [{ hole: 1, par: 4 }, { hole: 2, par: 9 }, { hole: 3, par: 0 }, { hole: 4, par: 12 }],
+    }));
+    check("a row that is mostly not pars is refused outright", mostlyBad.ok, false);
+  }
+
+  // --- the other way gross reaches the column --------------------------
+  //
+  // The model says it cannot tell, the admin's dropdown is on its default,
+  // and a card of gross strokes passes straight through as relative.
+  {
+    const grossAsRelative = convertReading(card({
+      score_kind: "unclear",
+      teams: [bay("Bay 1", [4, 5, 4, 6, 3, 4]), bay("Bay 2", [5, 4, 4, 4, 5, 3])],
+    }), "relative");
+    check("a card with no zero and nothing under it is refused as relative",
+      grossAsRelative.ok, false);
+
+    const realCard = ok(convertReading(card({
+      score_kind: "unclear",
+      teams: [bay("Bay 1", [0, -1, 0, 1, -1, 0])],
+    }), "relative"));
+    check("while a real card of scores against par goes through",
+      realCard?.teams[0].holes.map((h) => h.relative), [0, -1, 0, 1, -1, 0]);
+    check("and says the kind was assumed, since the model could not tell",
+      realCard?.scoreKindAssumed, true);
+
+    const toldSo = ok(convertReading(card({
+      score_kind: "relative",
+      teams: [bay("Bay 1", [0, -1, -2])],
+    })));
+    check("a kind the model was sure of is not marked assumed",
+      toldSo?.scoreKindAssumed, false);
+  }
+
+  // --- rows that are not bays -------------------------------------------
+  {
+    const withTotals = ok(convertReading(card({
+      teams: [
+        bay("Bay 1", [0, -1]),
+        bay("Bay 2", [-1, 0]),
+        { label: "Audit", number: null, players: [], holes: [{ hole: 1, value: 0 }] },
+        { label: "TOTAL", number: null, players: [], holes: [{ hole: 1, value: -1 }] },
+      ],
+    })));
+    check("a totals row is not handed a team's slot",
+      withTotals?.teams.map((t) => t.label), ["Bay 1", "Bay 2"]);
+    check("and the admin is told it was dropped",
+      withTotals?.dropped.filter((d) => d.includes("total")).length, 2);
+
+    const realName = ok(convertReading(card({
+      teams: [bay("Total Carnage", [0, -1])],
+    })));
+    check("but a bay whose name merely starts that way is safe",
+      realName?.teams.length, 1);
+  }
+
+  // --- a misaligned column looks like a repeated hole --------------------
+  {
+    const dupes = ok(convertReading(card({
+      teams: [{
+        label: "Bay 1", number: 1, players: ["a", "b"],
+        holes: [{ hole: 1, value: 0 }, { hole: 1, value: -2 }, { hole: 2, value: -1 }],
+      }],
+    })));
+    check("the first reading of a hole wins",
+      dupes?.teams[0].holes.map((h) => [h.hole, h.relative]), [[1, 0], [2, -1]]);
+    check("and the repeat is reported rather than swallowed",
+      dupes?.dropped.some((d) => d.includes("twice")), true);
+  }
+
+  // --- flags and drops are different messages ----------------------------
+  {
+    const odd = ok(convertReading(card({
+      teams: [bay("Bay 1", [0, 11, -1])],
+    })));
+    check("an unusual score is flagged but still saved",
+      odd?.teams[0].holes.map((h) => h.relative), [0, 11, -1]);
+    check("under flags, which say they save",
+      odd?.flags.length, 1);
+    check("and not under dropped, which says they did not",
+      odd?.dropped.length, 0);
+  }
+
+  // --- details -----------------------------------------------------------
+  {
+    const details = ok(convertReading(card({
+      teams: [bay("Bay 1", [0, -1])],
+      details: { date: " 9/30 ", title: "Wednesday Degent", course: "", set_length: 6, rake_per_player: 35 },
+    })));
+    check("the date comes back as written, for the admin to see",
+      details?.details.date, "9/30");
+    check("a blank course is nothing rather than an empty string",
+      details?.details.course, null);
+    check("the set length is read", details?.details.setHoles, 6);
+    check("so is the rake", details?.details.rakePerPlayer, 35);
+
+    const noRake = ok(convertReading(card({
+      teams: [bay("Bay 1", [0, -1])],
+      details: { date: "", title: "", course: "", set_length: 0, rake_per_player: 0 },
+    })));
+    check("a zero rake means the image did not show one, not a free round",
+      noRake?.details.rakePerPlayer, null);
+    check("and a set length of zero is the same", noRake?.details.setHoles, null);
+  }
+
+  // --- nothing legible ----------------------------------------------------
+  check("a card with no bays at all is refused",
+    convertReading(card({ teams: [] })).ok, false);
+  check("holes outside the eighteen are dropped",
+    ok(convertReading(card({
+      teams: [{
+        label: "Bay 1", number: 1, players: ["a", "b"],
+        holes: [{ hole: 0, value: 0 }, { hole: 19, value: -1 }, { hole: 5, value: 0 }],
+      }],
+    })))?.teams[0].holes.map((h) => h.hole), [5]);
 }
 
 console.log("\n=== who is shown money ===");

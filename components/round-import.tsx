@@ -34,6 +34,11 @@ export function RoundImport({
   const [preview, setPreview] = useState<string | null>(null);
   const [read, setRead] = useState<Read | null>(null);
   const [assign, setAssign] = useState<Record<number, string>>({});
+  // Rows the admin has struck off: a summary line the reader took for a bay,
+  // or a bay that simply is not part of this round. Without this the only
+  // ways past a spurious row were to point it at a real team or abandon the
+  // whole import.
+  const [ignored, setIgnored] = useState<Record<number, boolean>>({});
   const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -42,6 +47,7 @@ export function RoundImport({
     setRead(null);
     setPreview(null);
     setAssign({});
+    setIgnored({});
     setError(null);
   };
 
@@ -50,6 +56,7 @@ export function RoundImport({
     setSummary(null);
     setRead(null);
     setAssign({});
+    setIgnored({});
     setBusy(true);
 
     let dataUrl: string;
@@ -72,6 +79,7 @@ export function RoundImport({
       setAssign(
         Object.fromEntries(result.teams.map((t, i) => [i, t.teamId ?? ""])),
       );
+      setIgnored({});
     } catch (e) {
       setError(
         e instanceof Error
@@ -86,15 +94,18 @@ export function RoundImport({
   // Re-derived from the live assignment rather than taken from the read, so
   // correcting a bay on screen clears its objection immediately.
   const assignedFor = (i: number) => assign[i] ?? "";
+  const isIgnored = (i: number) => ignored[i] === true;
+  const live = read ? read.teams.map((t, i) => ({ t, i })).filter(({ i }) => !isIgnored(i)) : [];
+
   const clashes = (() => {
     const out: string[] = [];
     if (!read) return out;
     const used = new Map<string, number>();
-    read.teams.forEach((t, i) => {
+    for (const { t, i } of live) {
       const id = assignedFor(i);
       if (!id) {
         out.push(`${t.label} is not pointed at a team yet.`);
-        return;
+        continue;
       }
       const first = used.get(id);
       if (first !== undefined) {
@@ -102,16 +113,22 @@ export function RoundImport({
       } else {
         used.set(id, i);
       }
-    });
+    }
     return out;
   })();
 
+  // The server's objections are keyed to bays by label. Anything about a bay
+  // the admin has struck off no longer applies, and the ones about team
+  // assignment are replaced wholesale by the live check above.
   const nameBlockers = read
-    ? read.blockers.filter((b) => !/does not line up with a team/.test(b))
+    ? read.blockers.filter((b) => {
+        if (/does not line up with a team|which this round does not have/.test(b)) return false;
+        return !read.teams.some((t, i) => isIgnored(i) && b.includes(t.label));
+      })
     : [];
   const blockers = [...nameBlockers, ...clashes];
   const newNames = read
-    ? [...new Set(read.teams.flatMap((t) => t.players.filter((p) => p.isNew).map((p) => p.read)))]
+    ? [...new Set(live.flatMap(({ t }) => t.players.filter((p) => p.isNew).map((p) => p.read)))]
     : [];
 
   function commit() {
@@ -120,7 +137,7 @@ export function RoundImport({
     startTransition(async () => {
       const r = await applyRoundImport(
         matchId,
-        read.teams.map((t, i) => ({
+        live.map(({ t, i }) => ({
           teamId: assignedFor(i),
           players: t.players.map((p) => ({ read: p.read, golferId: p.golferId })),
           holes: t.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
@@ -235,7 +252,8 @@ export function RoundImport({
             <div className="rounded-lg bg-flag-500/10 px-3 py-2 text-sm text-flag-500">
               <p className="font-medium">Fix these first</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                {blockers.map((b) => <li key={b}>{b}</li>)}
+                {/* Indexed: two bays can produce the same sentence. */}
+                {blockers.map((b, i) => <li key={`${i}-${b}`}>{b}</li>)}
               </ul>
             </div>
           )}
@@ -243,6 +261,12 @@ export function RoundImport({
           {read.flags.length > 0 && (
             <p className="text-xs text-flag-500">
               Worth a second look: {read.flags.join("; ")}. These save as read.
+            </p>
+          )}
+          {read.dropped.length > 0 && (
+            <p className="text-xs text-muted">
+              Left out of the reading: {read.dropped.join("; ")}. Type anything
+              you still need in by hand afterwards.
             </p>
           )}
 
@@ -263,6 +287,16 @@ export function RoundImport({
               value={assignedFor(i)}
               onChange={(id) => setAssign((prev) => ({ ...prev, [i]: id }))}
               mode={mode}
+              ignored={isIgnored(i)}
+              onIgnoredChange={(v) => setIgnored((prev) => ({ ...prev, [i]: v }))}
+              /*
+                The filled set has to come from the team this bay is pointed at
+                RIGHT NOW, not the one it was auto-assigned to when the image
+                was read. Re-pointing a bay is the whole reason the dropdown
+                exists, and the strike-through described the wrong team's card
+                the moment anyone used it.
+              */
+              filled={read.filledByTeam[assignedFor(i)] ?? []}
             />
           ))}
 
@@ -280,26 +314,32 @@ export function RoundImport({
 }
 
 function BayCard({
-  bay, teams, value, onChange, mode,
+  bay, teams, value, onChange, mode, filled, ignored, onIgnoredChange,
 }: {
   bay: RoundImportTeam;
   teams: MatchTeam[];
   value: string;
   onChange: (id: string) => void;
   mode: "fill" | "replace";
+  /** Holes already scored on the team this bay is pointed at right now. */
+  filled: number[];
+  ignored: boolean;
+  onIgnoredChange: (v: boolean) => void;
 }) {
   const byHole = new Map(bay.holes.map((h) => [h.hole, h]));
   const missing = HOLES.filter((h) => !byHole.has(h));
+  const filledHere = bay.holes.map((h) => h.hole).filter((h) => filled.includes(h));
 
   return (
-    <div className="rounded-xl border border-line p-4">
+    <div className={`rounded-xl border border-line p-4 ${ignored ? "opacity-50" : ""}`}>
       <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
         <span className="font-medium">{bay.label}</span>
         <span className="text-xs text-muted">goes to</span>
         <select
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-fairway-400"
+          disabled={ignored}
+          className="rounded-lg border border-line bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-fairway-400 disabled:opacity-50"
         >
           <option value="">Pick a team</option>
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -308,6 +348,11 @@ function BayCard({
           {bay.players.length} player{bay.players.length === 1 ? "" : "s"}
           {bay.players.length > MAX_TEAM_SIZE && ` (over the ${MAX_TEAM_SIZE} a team holds)`}
         </span>
+        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted">
+          <input type="checkbox" checked={ignored}
+            onChange={(e) => onIgnoredChange(e.target.checked)} />
+          Not a bay, skip it
+        </label>
       </div>
 
       {bay.players.length === 0 ? (
@@ -317,9 +362,9 @@ function BayCard({
         </p>
       ) : (
         <div className="mb-3 flex flex-wrap gap-1.5">
-          {bay.players.map((p) => (
+                {bay.players.map((p, i) => (
             <span
-              key={p.read}
+              key={`${i}-${p.read}`}
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${
                 p.isNew
                   ? "bg-amber-300/15 text-amber-700 ring-amber-400/40 dark:text-amber-200"
@@ -348,7 +393,7 @@ function BayCard({
               <td className="p-2 font-medium">Saves as</td>
               {HOLES.map((h) => {
                 const cell = byHole.get(h);
-                const taken = bay.alreadyFilled.includes(h);
+                const taken = filled.includes(h);
                 const struck = taken && mode === "fill";
                 return (
                   <td
@@ -372,11 +417,11 @@ function BayCard({
           Type {missing.length === 1 ? "it" : "those"} in by hand after importing.
         </p>
       )}
-      {bay.alreadyFilled.length > 0 && (
+      {filledHere.length > 0 && (
         <p className="mt-1 text-xs text-muted">
           {mode === "fill"
-            ? `Struck through holes already have a score and will be left alone.`
-            : `${bay.alreadyFilled.length} hole${bay.alreadyFilled.length === 1 ? "" : "s"} already on the board will be overwritten.`}
+            ? `Struck through holes already have a score on that team and will be left alone.`
+            : `${filledHere.length} hole${filledHere.length === 1 ? "" : "s"} already on that team will be overwritten.`}
         </p>
       )}
     </div>

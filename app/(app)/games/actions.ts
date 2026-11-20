@@ -662,7 +662,13 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
     .insert({
       name: draft.name,
       team_count: draftTeams.length,
-      roster_size: draft.roster_size,
+      // Drafts run 2 to 20 on their own rules; a round's teams hold 6. Clamped
+      // rather than copied, or a draft of eight makes a round whose own cap is
+      // a number its teams can never reach.
+      roster_size: Math.min(
+        Math.max(Number(draft.roster_size) || MIN_TEAM_SIZE, MIN_TEAM_SIZE),
+        MAX_TEAM_SIZE,
+      ),
       created_by: session.userId,
     })
     .select("id")
@@ -731,6 +737,15 @@ export type ReadResult =
   | { ok: false; error: string };
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/**
+ * A sheet is uploaded at a bigger edge than a phone photo of one row, so this
+ * is the path that actually meets the limit. Saying what to do beats handing
+ * back whatever the API said about request size.
+ */
+const TOO_LARGE =
+  "That image is too large to read. Crop it to just the grid, or screenshot " +
+  "it rather than photographing the screen.";
 
 async function assertCanScore(matchId: string, teamId: string) {
   const supabase = await createClient();
@@ -847,8 +862,16 @@ export type ResolvedName = {
   matched: string | null;
   /** True when committing would create a golfer under the name as read. */
   isNew: boolean;
-  /** Set when the same name turns up on two bays. */
+  /**
+   * The other bay this same person was read on, when that happened. Null for
+   * a repeat within one bay, which the commit path simply dedupes.
+   */
   duplicateOf: string | null;
+  /**
+   * The golfers this spelling could mean, when more than one answers to it.
+   * Set means nothing was resolved and the commit is blocked.
+   */
+  sharedBy: string[] | null;
 };
 
 export type RoundImportTeam = {
@@ -859,8 +882,6 @@ export type RoundImportTeam = {
   teamName: string | null;
   players: ResolvedName[];
   holes: { hole: number; relative: number; raw: number }[];
-  /** Holes on that team that already carry a score. */
-  alreadyFilled: number[];
 };
 
 export type RoundImportRead =
@@ -871,7 +892,12 @@ export type RoundImportRead =
       scoreKindAssumed: boolean;
       confidence: "high" | "medium" | "low";
       notes: string;
+      /** Odd readings that will still be written. */
       flags: string[];
+      /** Readings thrown away before they got here, and why. */
+      dropped: string[];
+      /** Every team's already-scored holes, keyed by team id. */
+      filledByTeam: Record<string, number[]>;
       /** Problems that would stop a commit, in the admin's words. */
       blockers: string[];
     }
@@ -897,6 +923,10 @@ export async function readRoundPhoto(
   }
   const [, mediaType, base64] = match;
 
+  if (Math.ceil((base64.length * 3) / 4) > MAX_IMAGE_BYTES) {
+    return { ok: false, error: TOO_LARGE };
+  }
+
   const { extractRound } = await import("@/lib/round-import");
   const read = await extractRound(
     base64,
@@ -906,11 +936,13 @@ export async function readRoundPhoto(
   if (!read.ok) return read;
 
   const supabase = await createClient();
-  const [{ data: teams }, pool, { data: scores }] = await Promise.all([
+  const [{ data: round }, { data: teams }, pool, { data: scores }] = await Promise.all([
+    supabase.from("matches").select("roster_size").eq("id", matchId).maybeSingle(),
     supabase.from("match_teams").select("id, slot, name").eq("match_id", matchId).order("slot"),
     golferPool(),
     supabase.from("hole_scores").select("team_id, hole").eq("match_id", matchId),
   ]);
+  if (!round) return { ok: false, error: "Round not found." };
 
   const filledByTeam = new Map<string, Set<number>>();
   for (const s of (scores ?? []) as { team_id: string; hole: number }[]) {
@@ -922,17 +954,22 @@ export async function readRoundPhoto(
   const bySlot = new Map(roundTeams.map((t) => [t.slot, t]));
   const taken = new Set<string>();
   const blockers: string[] = [];
+  const cap = Math.min(Number(round.roster_size) || MAX_TEAM_SIZE, MAX_TEAM_SIZE);
 
-  // A name landing on two bays is the one misread that silently costs someone
-  // money, so it is called out rather than resolved.
+  // One entry per person across the whole card, so the same man under two
+  // spellings is caught rather than seated twice.
   const seenNames = new Map<string, string>();
 
   const out: RoundImportTeam[] = read.teams.map((t, index) => {
-    // Bay 3 means team slot 3. Falling back to running order covers a sheet
-    // that labels its rows by name instead of number.
-    const wanted = t.number ?? index + 1;
+    // Bay 3 means team slot 3. Running order is the fallback ONLY for a row
+    // the sheet gave no number for: a number that was read and does not
+    // match a slot is the moment to stop and ask, not to guess. A night
+    // labelled by simulator bay (11 to 15) sorted by score would otherwise
+    // pre-point every row at the wrong team and look fine doing it.
     let team: { id: string; slot: number; name: string } | null =
-      bySlot.get(wanted) ?? roundTeams[index] ?? null;
+      t.number === null
+        ? roundTeams[index] ?? null
+        : bySlot.get(t.number) ?? null;
     if (team && taken.has(team.id)) team = null;
     if (team) taken.add(team.id);
 
@@ -945,24 +982,40 @@ export async function readRoundPhoto(
       teamName: team?.name ?? null,
       players,
       holes: t.holes,
-      alreadyFilled: team
-        ? t.holes.map((h) => h.hole).filter((h) => filledByTeam.get(team!.id)?.has(h))
-        : [],
     };
   });
 
   for (const t of out) {
     if (!t.teamId) {
-      blockers.push(`${t.label} does not line up with a team in this round.`);
-    }
-    if (t.players.length > MAX_TEAM_SIZE) {
       blockers.push(
-        `${t.label} read ${t.players.length} players, more than the ${MAX_TEAM_SIZE} a team holds.`,
+        t.number === null
+          ? `${t.label} does not line up with a team in this round.`
+          : `${t.label} wants team ${t.number}, which this round does not have. Point it at one.`,
+      );
+    }
+    if (t.players.length > cap) {
+      blockers.push(
+        `${t.label} read ${t.players.length} players, more than the ${cap} this round's teams hold.`,
+      );
+    }
+    // One legible name on a bay means the name block was cut off, not that a
+    // man played alone. Importing it would replace a full roster with one
+    // player, who would then collect the whole bay's winnings.
+    if (t.players.length === 1) {
+      blockers.push(
+        `${t.label} read only one player, so its name block was probably cut off. ` +
+        `A team needs at least ${MIN_TEAM_SIZE}.`,
       );
     }
     for (const p of t.players) {
       if (p.duplicateOf) {
         blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${t.label}.`);
+      }
+      if (p.sharedBy) {
+        blockers.push(
+          `${p.read} on ${t.label} could be ${p.sharedBy.join(" or ")}. ` +
+          `Give one of them a nickname, or fix the sheet.`,
+        );
       }
     }
   }
@@ -975,11 +1028,20 @@ export async function readRoundPhoto(
   return {
     ok: true,
     teams: out,
+    /**
+     * Every team's filled holes, not just the auto-assigned one's. The review
+     * screen lets an admin re-point a bay, and the strike-through has to
+     * follow the dropdown or it describes a team that is no longer the target.
+     */
+    filledByTeam: Object.fromEntries(
+      roundTeams.map((t) => [t.id, [...(filledByTeam.get(t.id) ?? [])].sort((a, b) => a - b)]),
+    ),
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,
     confidence: read.confidence,
     notes: read.notes,
     flags: read.flags,
+    dropped: read.dropped,
     blockers,
   };
 }
@@ -1032,6 +1094,7 @@ export async function applyRoundImport(
   // player against a team belonging to another round. Checking membership up
   // front is cheaper than reasoning about what that would do to the money.
   const allowed = new Set(((ownTeams ?? []) as { id: string }[]).map((t) => t.id));
+  const cap = Math.min(Number(match.roster_size) || MAX_TEAM_SIZE, MAX_TEAM_SIZE);
   const seenTeams = new Set<string>();
   for (const t of teams) {
     if (!allowed.has(t.teamId)) {
@@ -1041,92 +1104,149 @@ export async function applyRoundImport(
       return { ok: false, error: "Two bays point at the same team." };
     }
     seenTeams.add(t.teamId);
-    if (t.players.length > MAX_TEAM_SIZE) {
-      return { ok: false, error: `A team cannot hold more than ${MAX_TEAM_SIZE} players.` };
-    }
   }
 
-  // --- golfers the sheet knows and the pool does not ---------------------
+  // --- resolve every name first, before anything is written --------------
+  //
+  // Nothing below touches a row until the whole card resolves, because the
+  // writes are not transactional: PostgREST takes them a statement at a
+  // time, so an objection discovered half way through leaves the round in
+  // pieces. Everything that can be checked is checked here.
+  const pool = await golferPool();
+
   const wanted = new Map<string, string>();
   for (const t of teams) {
     for (const p of t.players) {
       if (p.golferId) continue;
       const key = nameKey(p.read);
-      if (key && !wanted.has(key)) wanted.set(key, p.read.trim());
+      if (!key) continue;
+      if (pool.ambiguous.has(key)) {
+        return {
+          ok: false,
+          error:
+            `${p.read} could be ${pool.ambiguous.get(key)!.join(" or ")}. ` +
+            `Give one of them a nickname before importing.`,
+        };
+      }
+      if (!pool.byKey.has(key) && !wanted.has(key)) wanted.set(key, p.read.trim());
     }
   }
 
   const created: string[] = [];
-  const idByKey = new Map<string, string>();
+  const idByKey = new Map(pool.byKey);
 
   if (wanted.size > 0) {
-    // Re-check the pool rather than trusting the review screen: someone may
-    // have added one of these by hand while the image was being looked at.
-    const { data: fresh } = await supabase.from("golfers").select("id, name, nickname");
-    for (const g of (fresh ?? []) as { id: string; name: string; nickname: string | null }[]) {
-      idByKey.set(nameKey(g.name), g.id);
-      if (g.nickname && !idByKey.has(nameKey(g.nickname))) {
-        idByKey.set(nameKey(g.nickname), g.id);
-      }
+    const { data: inserted, error } = await supabase
+      .from("golfers")
+      .insert([...wanted.values()].map((name) => ({ name })))
+      .select("id, name");
+    if (error) {
+      return { ok: false, error: `Could not add the new golfers: ${error.message}` };
     }
-
-    const missing = [...wanted.entries()].filter(([key]) => !idByKey.has(key));
-    if (missing.length > 0) {
-      const { data: inserted, error } = await supabase
-        .from("golfers")
-        .insert(missing.map(([, name]) => ({ name })))
-        .select("id, name");
-      if (error) {
-        return { ok: false, error: `Could not add the new golfers: ${error.message}` };
-      }
-      for (const g of (inserted ?? []) as { id: string; name: string }[]) {
-        idByKey.set(nameKey(g.name), g.id);
-        created.push(g.name);
-      }
+    for (const g of (inserted ?? []) as { id: string; name: string }[]) {
+      idByKey.set(nameKey(g.name), { id: g.id, name: g.name });
+      created.push(g.name);
     }
   }
 
   const resolve = (p: { read: string; golferId: string | null }) =>
-    p.golferId ?? idByKey.get(nameKey(p.read)) ?? null;
+    p.golferId ?? idByKey.get(nameKey(p.read))?.id ?? null;
 
-  // --- rosters -----------------------------------------------------------
-  let rostered = 0;
+  // Resolve every bay up front, and refuse a card that would seat one person
+  // on two teams. match_players is keyed on (match_id, golfer_id), so that
+  // card cannot be written at all; catching it here means the attempt never
+  // starts rather than failing part way with a bay already emptied.
+  const seating: { teamId: string; ids: string[] }[] = [];
+  const owner = new Map<string, string>();
+
   for (const t of teams) {
     const ids: string[] = [];
     for (const p of t.players) {
       const id = resolve(p);
       if (!id) return { ok: false, error: `Could not resolve ${p.read} to a golfer.` };
-      if (!ids.includes(id)) ids.push(id);
+      if (ids.includes(id)) continue;
+      const elsewhere = owner.get(id);
+      if (elsewhere && elsewhere !== t.teamId) {
+        return {
+          ok: false,
+          error:
+            `${p.read} was read on two different bays. One player cannot play ` +
+            `for two teams, so fix the sheet and import again.`,
+        };
+      }
+      owner.set(id, t.teamId);
+      ids.push(id);
     }
-    if (ids.length === 0) continue;
+    if (ids.length > cap) {
+      return {
+        ok: false,
+        error: `A bay read ${ids.length} players, more than the ${cap} this round's teams hold.`,
+      };
+    }
+    if (ids.length === 1) {
+      return {
+        ok: false,
+        error:
+          `A bay read only one player, so its name block was probably cut off. ` +
+          `A team needs at least ${MIN_TEAM_SIZE}.`,
+      };
+    }
+    seating.push({ teamId: t.teamId, ids });
+  }
 
-    // Replace the bay's roster outright. An import is the authoritative
-    // reading of who played, and merging it with a half entered guess is how
-    // you end up with six names on a bay of four.
-    //
-    // There is no transaction to lean on here: these go through PostgREST a
-    // statement at a time. So a failure on a later bay leaves earlier bays
-    // seated and this one empty, which is why the error says what to do about
-    // it and why running the same import again is safe.
-    await supabase.from("match_players").delete().eq("match_id", matchId).eq("team_id", t.teamId);
+  // --- rosters -----------------------------------------------------------
+  //
+  // Every target bay is cleared before any of them is filled. One bay at a
+  // time looked tidier and was wrong: moving a player from a later bay into
+  // an earlier one collided with the row that had not been cleared yet,
+  // which emptied the earlier bay and then failed the same way on every
+  // retry, so the importer could never undo its own damage.
+  const filling = seating.filter((s) => s.ids.length > 0);
+  if (filling.length > 0) {
+    const { error: cleared } = await supabase
+      .from("match_players").delete()
+      .eq("match_id", matchId)
+      .in("team_id", filling.map((s) => s.teamId));
+    if (cleared) {
+      return { ok: false, error: `Could not clear the old rosters: ${cleared.message}` };
+    }
+  }
+
+  let rostered = 0;
+  for (const s of filling) {
     const { error } = await supabase.from("match_players").insert(
-      ids.map((golfer_id, i) => ({
-        match_id: matchId, team_id: t.teamId, golfer_id, slot: i + 1,
+      s.ids.map((golfer_id, i) => ({
+        match_id: matchId, team_id: s.teamId, golfer_id, slot: i + 1,
       })),
     );
     if (error) {
       return {
         ok: false,
         error: error.code === "23505"
-          ? "One of those golfers is already on another team in this round. " +
-            "Fix the names on the review screen and import again."
+          ? "One of those golfers is already on a team in this round that the " +
+            "image did not mention. Take them off it and import again."
           : `Could not seat that bay: ${error.message}`,
       };
     }
-    rostered += ids.length;
+    rostered += s.ids.length;
+
+    // The sheet's roster block leads with the captain, so slot 1 is it. This
+    // also keeps captain_golfer_id pointing at someone who is actually on the
+    // bay: the live scorecard prints it beside the team, and replacing a
+    // roster without it left teams labelled with a man who never played.
+    await supabase
+      .from("match_teams")
+      .update({ captain_golfer_id: s.ids[0] })
+      .eq("match_id", matchId)
+      .eq("id", s.teamId);
   }
 
   // --- scores ------------------------------------------------------------
+  //
+  // hole_scores is keyed on (match_id, team_id, hole), so overwriting is an
+  // upsert rather than a delete followed by an insert. That matters: the old
+  // pair had a window where a rejected insert left holes that had been
+  // correct simply blank, with every retry failing the same way.
   let holesWritten = 0;
   let holesLeft = 0;
 
@@ -1135,27 +1255,24 @@ export async function applyRoundImport(
       .from("hole_scores").select("hole").eq("match_id", matchId).eq("team_id", t.teamId);
     const filled = new Set((existing ?? []).map((r: { hole: number }) => r.hole));
 
-    const valid = t.holes.filter(
-      (h) => h.hole >= 1 && h.hole <= 18 && Number.isInteger(h.relative),
-    );
-
-    if (mode === "replace") {
-      const holes = valid.map((h) => h.hole);
-      if (holes.length > 0) {
-        await supabase
-          .from("hole_scores").delete()
-          .eq("match_id", matchId).eq("team_id", t.teamId).in("hole", holes);
-      }
+    // Last reading of a hole wins, and only one row per hole goes up: two
+    // rows for one hole in a single upsert is an error, not a correction.
+    const byHole = new Map<number, number>();
+    for (const h of t.holes) {
+      if (h.hole < 1 || h.hole > 18 || !Number.isInteger(h.relative)) continue;
+      byHole.set(h.hole, h.relative);
     }
 
+    const valid = [...byHole.entries()].map(([hole, relative]) => ({ hole, relative }));
     const toWrite = mode === "replace" ? valid : valid.filter((h) => !filled.has(h.hole));
     holesLeft += valid.length - toWrite.length;
 
     if (toWrite.length > 0) {
-      const { error } = await supabase.from("hole_scores").insert(
+      const { error } = await supabase.from("hole_scores").upsert(
         toWrite.map((h) => ({
           match_id: matchId, team_id: t.teamId, hole: h.hole, strokes: h.relative,
         })),
+        { onConflict: "match_id,team_id,hole" },
       );
       if (error) return { ok: false, error: describeScoreWriteError(error.message) };
       holesWritten += toWrite.length;
@@ -1171,46 +1288,97 @@ export async function applyRoundImport(
 //  Creating a round from an image, before the round exists
 // ------------------------------------------------------------
 
+type Pool = {
+  byKey: Map<string, { id: string; name: string }>;
+  /** Folds that more than one golfer answers to, so none of them is picked. */
+  ambiguous: Map<string, string[]>;
+};
+
 /**
  * The golfer pool, keyed by the fold two spellings of one person share.
  *
  * Nicknames are in here too, because the sheet writes whichever the room
- * actually calls someone. A real name wins a collision: if one golfer's
- * nickname is another golfer's name, the name is the safer match.
+ * actually calls someone. A real name beats a nickname on a collision, since
+ * if one golfer's nickname is another golfer's name the name is the safer
+ * match.
+ *
+ * A fold that two DIFFERENT golfers answer to is recorded and deliberately
+ * left unresolved. golfers.name carries no unique constraint and the bulk
+ * importer keys on name plus nickname precisely because two people really do
+ * share a first name; picking whichever row came back last would seat the
+ * wrong man and pay him the bay's money for the night.
  */
-async function golferPool(): Promise<Map<string, { id: string; name: string }>> {
+async function golferPool(): Promise<Pool> {
   const supabase = await createClient();
   const { data } = await supabase.from("golfers").select("id, name, nickname");
-  const pool = new Map<string, { id: string; name: string }>();
-  for (const g of (data ?? []) as { id: string; name: string; nickname: string | null }[]) {
-    pool.set(nameKey(g.name), { id: g.id, name: g.name });
+  const rows = (data ?? []) as { id: string; name: string; nickname: string | null }[];
+
+  const byKey = new Map<string, { id: string; name: string }>();
+  const claims = new Map<string, Map<string, string>>();
+
+  const claim = (key: string, g: { id: string; name: string }) => {
+    if (!claims.has(key)) claims.set(key, new Map());
+    claims.get(key)!.set(g.id, g.name);
+  };
+
+  for (const g of rows) {
+    const key = nameKey(g.name);
+    if (!key) continue;
+    byKey.set(key, { id: g.id, name: g.name });
+    claim(key, g);
   }
-  for (const g of (data ?? []) as { id: string; name: string; nickname: string | null }[]) {
+  for (const g of rows) {
     if (!g.nickname) continue;
     const key = nameKey(g.nickname);
-    if (!pool.has(key)) pool.set(key, { id: g.id, name: g.name });
+    if (!key) continue;
+    if (!byKey.has(key)) byKey.set(key, { id: g.id, name: g.name });
+    claim(key, g);
   }
-  return pool;
+
+  const ambiguous = new Map<string, string[]>();
+  for (const [key, who] of claims) {
+    if (who.size > 1) {
+      ambiguous.set(key, [...who.values()]);
+      byKey.delete(key);
+    }
+  }
+  return { byKey, ambiguous };
 }
 
-/** Resolves one bay's names and flags anyone read twice across the card. */
+/**
+ * Resolves one bay's names against the pool.
+ *
+ * `seen` is shared across every bay on the card and keyed by the RESOLVED
+ * golfer, falling back to the fold for a name the pool does not know. Keying
+ * it on the spelling alone missed the case that matters: a man written by his
+ * real name on one bay and his nickname on another is two spellings, one
+ * golfer, and one golfer cannot play for two teams.
+ */
 function resolveNames(
   names: string[],
   label: string,
-  pool: Map<string, { id: string; name: string }>,
+  pool: Pool,
   seen: Map<string, string>,
 ): ResolvedName[] {
   return names.map((read) => {
     const key = nameKey(read);
-    const hit = pool.get(key) ?? null;
-    const duplicateOf = seen.get(key) ?? null;
-    if (!duplicateOf) seen.set(key, label);
+    const shared = pool.ambiguous.get(key) ?? null;
+    const hit = shared ? null : pool.byKey.get(key) ?? null;
+
+    // One identity per person, so the same man under two spellings collides.
+    const identity = hit ? `id:${hit.id}` : `name:${key}`;
+    const already = seen.get(identity) ?? null;
+    if (!already) seen.set(identity, label);
+
     return {
       read,
       golferId: hit?.id ?? null,
       matched: hit?.name ?? null,
-      isNew: !hit,
-      duplicateOf,
+      // An ambiguous name is not new. Creating another golfer under a name
+      // two people already share would make it worse.
+      isNew: !hit && !shared,
+      duplicateOf: already === label ? null : already,
+      sharedBy: shared,
     };
   });
 }
@@ -1241,6 +1409,7 @@ export type ReadRoundDetails =
       confidence: "high" | "medium" | "low";
       notes: string;
       flags: string[];
+      dropped: string[];
       blockers: string[];
     }
   | { ok: false; error: string };
@@ -1264,6 +1433,10 @@ export async function readRoundDetails(
     return { ok: false, error: "That file is not a JPEG, PNG or WebP image." };
   }
   const [, mediaType, base64] = match;
+
+  if (Math.ceil((base64.length * 3) / 4) > MAX_IMAGE_BYTES) {
+    return { ok: false, error: TOO_LARGE };
+  }
 
   const { extractRound } = await import("@/lib/round-import");
   const read = await extractRound(
@@ -1295,9 +1468,21 @@ export async function readRoundDetails(
         `${b.label} read ${b.players.length} players, more than the ${MAX_TEAM_SIZE} a team holds.`,
       );
     }
+    if (b.players.length === 1) {
+      blockers.push(
+        `${b.label} read only one player, so its name block was probably cut off. ` +
+        `A team needs at least ${MIN_TEAM_SIZE}.`,
+      );
+    }
     for (const p of b.players) {
       if (p.duplicateOf) {
         blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${b.label}.`);
+      }
+      if (p.sharedBy) {
+        blockers.push(
+          `${p.read} on ${b.label} could be ${p.sharedBy.join(" or ")}. ` +
+          `Give one of them a nickname, or fix the sheet.`,
+        );
       }
     }
   }
@@ -1326,12 +1511,22 @@ export async function readRoundDetails(
     confidence: read.confidence,
     notes: read.notes,
     flags: read.flags,
+    dropped: read.dropped,
     blockers,
   };
 }
 
 export type CreatedFromImport =
-  | { ok: true; matchId: string; created: string[]; rostered: number; holesWritten: number }
+  | {
+      ok: true;
+      matchId: string;
+      created: string[];
+      rostered: number;
+      holesWritten: number;
+      /** False when the round was built but could not be taken to scoring. */
+      started: boolean;
+      startError: string | null;
+    }
   | { ok: false; error: string; matchId?: string };
 
 /**
@@ -1395,6 +1590,16 @@ export async function createRoundFromImport(input: {
 
   if (!applied.ok) return { ok: false, error: applied.error, matchId: made.id };
 
+  // A round built from a sheet is a night that already happened, so it is
+  // taken straight to scoring. Left in setup it would sit behind the captain
+  // picks and the roster stage, which an import has just done, and its card
+  // would not count toward anything until someone clicked through all of it.
+  //
+  // startRound does the checking: it refuses a round where a bay came in
+  // under the minimum, in which case this stays where it is and says so,
+  // rather than advancing a round that cannot be scored.
+  const started = await startRound(made.id);
+
   revalidateMoney(made.id);
   return {
     ok: true,
@@ -1402,5 +1607,7 @@ export async function createRoundFromImport(input: {
     created: applied.created,
     rostered: applied.rostered,
     holesWritten: applied.holesWritten,
+    started: started.ok,
+    startError: started.ok ? null : started.error,
   };
 }

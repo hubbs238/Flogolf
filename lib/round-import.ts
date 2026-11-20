@@ -2,7 +2,8 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
-import { isUnusualScore } from "./game";
+import { convertReading } from "./round-reading";
+import type { RoundExtractionResult } from "./round-reading";
 
 /**
  * Reads a whole round off one image: every bay, who played in it, and what
@@ -111,8 +112,11 @@ Report:
 0. Round level details, each one optional and an empty string or 0 when the
    image does not show it: the date this night was played, a heading naming
    the night, the course or venue, how the eighteen was divided into matches,
-   and the flat per player charge if one is written anywhere. A block headed
-   3, 6, 9, 12, 15, 18 means three-hole matches. One headed F6, M6, B6 means
+   and the flat per player charge if one is written anywhere.
+
+   For the match length, look at the SUMMARY blocks rather than the hole
+   grid. A summary headed 3, 6, 9, 12, 15, 18 means the eighteen was played
+   as six three-hole matches. One headed F6, M6, B6 or similar means three
    six-hole matches. The charge is often labelled rake, dues or buy in.
 
 1. score_kind. Look at the hole cells and decide what they are. Scores
@@ -135,9 +139,11 @@ Report:
 Rules:
 - Omit any hole whose cell is blank, crossed out, smudged, or that you are
   not confident about. Do not guess and do not interpolate from a total.
-- Ignore running totals and summary columns: TOTAL, OUT, IN, F9, B9, F6, M6,
-  B6, 18, RAKE, BALANCE, and any money or points columns. Only the numbered
-  hole cells 1 to 18.
+- For the hole cells, read ONLY the grid whose columns are numbered 1 to 18.
+  Ignore summary and money columns that sit beside or below it: TOTAL, OUT,
+  IN, F9, B9, F6, M6, B6, L6, W18, RAKE, BALANCE, and anything in dollars or
+  points. Those other blocks are still worth looking at for item 0 above, but
+  never for a hole score.
 - If the image holds several nights, use the one block that is clearly the
   subject. Say which in notes.
 - A row that is a total, an average or an audit line is not a bay. Skip it.
@@ -145,41 +151,20 @@ Rules:
 Set confidence low if the image is blurry, angled, partly cut off, or if the
 hole columns do not line up cleanly with their headers.`;
 
-export type ImportedTeam = {
-  label: string;
-  number: number | null;
-  players: string[];
-  /** Hole number to score against par, after any conversion. */
-  holes: { hole: number; relative: number; raw: number }[];
-};
-
-export type RoundDetails = {
-  /** Exactly as written, so the admin can see what it read. */
-  date: string | null;
-  title: string | null;
-  course: string | null;
-  setHoles: 3 | 6 | null;
-  rakePerPlayer: number | null;
-};
-
-export type RoundExtraction = {
-  details: RoundDetails;
-  teams: ImportedTeam[];
-  /** What the numbers in the image turned out to be. */
-  scoreKind: "relative" | "gross";
-  /** True when the model could not tell and the caller's choice was used. */
-  scoreKindAssumed: boolean;
-  confidence: "high" | "medium" | "low";
-  notes: string;
-  /** Readings odd enough to deserve a second look. They are still returned. */
-  flags: string[];
-};
-
-export type RoundExtractionResult =
-  | ({ ok: true } & RoundExtraction)
-  | { ok: false; error: string };
+export type {
+  ImportedTeam,
+  RoundDetails,
+  RoundExtraction,
+  RoundExtractionResult,
+} from "./round-reading";
 
 /**
+ * Reads a whole round off one image.
+ *
+ * Everything this does beyond calling the API lives in lib/round-reading.ts,
+ * where it can be tested without a network. This half is the prompt, the
+ * schema and the failure messages.
+ *
  * @param expect What the admin says the numbers are, used when the model
  *   cannot tell on its own. Their sheet holds scores against par, so that is
  *   the default rather than gross strokes.
@@ -220,105 +205,13 @@ export async function extractRound(
 
   const parsed = response.parsed_output;
   if (!parsed) {
-    return { ok: false, error: "Could not make sense of that image. Try a straighter, closer shot." };
-  }
-
-  // Narrowed off parsed.score_kind directly rather than through the boolean,
-  // so "unclear" cannot leak into the returned kind.
-  const scoreKindAssumed = parsed.score_kind === "unclear";
-  const scoreKind: "relative" | "gross" =
-    parsed.score_kind === "unclear" ? expect : parsed.score_kind;
-
-  const parByHole = new Map<number, number>();
-  for (const p of parsed.par) {
-    if (Number.isInteger(p.hole) && Number.isInteger(p.par) && p.hole >= 1 && p.hole <= 18) {
-      parByHole.set(p.hole, p.par);
-    }
-  }
-
-  // Gross strokes are meaningless without a par to subtract. Rather than
-  // writing nonsense, say what is missing and let the admin fix the shot or
-  // tell us the numbers were already relative.
-  if (scoreKind === "gross" && parByHole.size === 0) {
     return {
       ok: false,
-      error:
-        "Those look like gross strokes but the image has no par row, so they " +
-        "cannot be converted. Include the par row, or say the numbers are " +
-        "already scores against par.",
+      error: "Could not make sense of that image. Try a straighter, closer shot.",
     };
   }
 
-  const flags: string[] = [];
-  const teams: ImportedTeam[] = [];
-
-  for (const t of parsed.teams) {
-    const seen = new Set<number>();
-    const holes: ImportedTeam["holes"] = [];
-
-    for (const h of t.holes) {
-      if (!Number.isInteger(h.hole) || !Number.isFinite(h.value)) continue;
-      if (h.hole < 1 || h.hole > 18 || seen.has(h.hole)) continue;
-      seen.add(h.hole);
-
-      let relative: number;
-      if (scoreKind === "relative") {
-        relative = h.value;
-      } else {
-        const par = parByHole.get(h.hole);
-        if (par === undefined) {
-          flags.push(`${t.label} hole ${h.hole} has no par to subtract, so it was left out`);
-          continue;
-        }
-        relative = h.value - par;
-      }
-      if (!Number.isInteger(relative)) {
-        flags.push(`${t.label} hole ${h.hole} read as ${h.value}, which is not a whole number`);
-        continue;
-      }
-      if (isUnusualScore(relative)) {
-        flags.push(`${t.label} hole ${h.hole} reads ${relative > 0 ? "+" : ""}${relative}`);
-      }
-      holes.push({ hole: h.hole, relative, raw: h.value });
-    }
-
-    holes.sort((a, b) => a.hole - b.hole);
-    teams.push({
-      label: (t.label || "").trim() || "Unlabelled",
-      number: Number.isInteger(t.number) ? t.number : null,
-      players: t.players.map((p) => p.trim()).filter(Boolean),
-      holes,
-    });
-  }
-
-  if (teams.length === 0) {
-    return {
-      ok: false,
-      error: "No bay rows were legible in that image. Try a closer shot of the grid.",
-    };
-  }
-
-  const d = parsed.details;
-  const rake = Number(d.rake_per_player);
-  const details: RoundDetails = {
-    date: d.date.trim() || null,
-    title: d.title.trim() || null,
-    course: d.course.trim() || null,
-    setHoles: d.set_length === 3 || d.set_length === 6 ? d.set_length : null,
-    // Zero is how the model says "not shown", so it is not a rake of nothing.
-    rakePerPlayer: Number.isFinite(rake) && rake > 0 ? Math.round(rake * 100) / 100 : null,
-  };
-
-  return {
-    ok: true,
-    details,
-    teams,
-    scoreKind,
-    scoreKindAssumed,
-    confidence: parsed.confidence,
-    notes: parsed.notes,
-    flags,
-  };
+  return convertReading(parsed, expect);
 }
 
 /** The same failure handling the single-row reader uses, kept in one voice. */
