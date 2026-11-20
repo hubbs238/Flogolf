@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createMatch } from "@/app/(app)/games/actions";
+import { MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import { RoundCreateImport } from "@/components/round-create-import";
 import type { Match } from "@/lib/types";
 
 const STATUS: Record<Match["status"], { label: string; className: string }> = {
@@ -38,6 +40,7 @@ export function GamesList({
   const [name, setName] = useState("");
   const [course, setCourse] = useState("");
   const [teamCount, setTeamCount] = useState(7);
+  const [rosterSize, setRosterSize] = useState(4);
   const [dollars, setDollars] = useState(5);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
   const [roundType, setRoundType] = useState<"season" | "major">("season");
@@ -47,7 +50,7 @@ export function GamesList({
     setError(null);
     startTransition(async () => {
       const r = await createMatch({
-        name, course, teamCount, rosterSize: 4,
+        name, course, teamCount, rosterSize,
         dollarsPerUnit: dollars, tieDefault, roundType, setHoles,
       });
       if (r && !r.ok) setError(r.error);
@@ -68,12 +71,22 @@ export function GamesList({
             </p>
           </div>
           {isAdmin && (
-            <button
-              onClick={() => setOpen((v) => !v)}
-              className="rounded-xl bg-fairway-600 px-5 py-2.5 font-medium text-white transition hover:bg-fairway-700"
-            >
-              {open ? "Cancel" : "New round"}
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/*
+                Two ways in, and the upload comes first because it is the one
+                that saves the evening: it reads the bays, the names and the
+                card off the sheet rather than asking for all of it twice.
+                Setting a round up by hand stays for the nights nobody
+                photographed.
+              */}
+              {!open && <RoundCreateImport />}
+              <button
+                onClick={() => setOpen((v) => !v)}
+                className="rounded-xl bg-fairway-600 px-5 py-2.5 font-medium text-white transition hover:bg-fairway-700"
+              >
+                {open ? "Cancel" : "Set one up by hand"}
+              </button>
+            </div>
           )}
         </div>
 
@@ -97,7 +110,22 @@ export function GamesList({
                 <input type="number" min={2} max={12} value={teamCount}
                   onChange={(e) => setTeamCount(Number(e.target.value))}
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-                <span className="mt-1 block text-xs text-muted">4 players each, captain included</span>
+                <span className="mt-1 block text-xs text-muted">Bays playing tonight</span>
+              </label>
+              <label>
+                <span className="mb-1.5 block text-sm font-medium">Players per team</span>
+                <input type="number" min={MIN_TEAM_SIZE} max={MAX_TEAM_SIZE} value={rosterSize}
+                  onChange={(e) => setRosterSize(Number(e.target.value))}
+                  className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
+                {/*
+                  A cap rather than a quota, and worth saying so here: weeks
+                  come in uneven and a round that waits for a full bay never
+                  starts. The minimum to play is two.
+                */}
+                <span className="mt-1 block text-xs text-muted">
+                  The most a bay can hold, captain included. Teams can start
+                  with as few as {MIN_TEAM_SIZE} and need not match each other.
+                </span>
               </label>
               <label>
                 <span className="mb-1.5 block text-sm font-medium">Dollars per unit</span>

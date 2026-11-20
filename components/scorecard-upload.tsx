@@ -5,92 +5,9 @@ import { useRouter } from "next/navigation";
 import { applyScorecardPhoto, readScorecardPhoto } from "@/app/(app)/games/actions";
 import { formatRelative } from "@/lib/game";
 import type { MatchTeam } from "@/lib/types";
+import { describeDecodeFailure, downscale } from "@/lib/image-file";
 
 type Read = Awaited<ReturnType<typeof readScorecardPhoto>>;
-
-/**
- * Decodes a picked file into something drawable.
- *
- * createImageBitmap is the fast path but throws on HEIC, which is what an
- * iPhone shoots by default. Safari can often still decode those through an
- * <img> element, so that is the fallback rather than an immediate failure.
- */
-async function decode(file: File): Promise<{
-  draw: CanvasImageSource;
-  width: number;
-  height: number;
-  release: () => void;
-}> {
-  try {
-    const bitmap = await createImageBitmap(file);
-    return {
-      draw: bitmap,
-      width: bitmap.width,
-      height: bitmap.height,
-      release: () => bitmap.close(),
-    };
-  } catch {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("the browser could not decode it"));
-        img.src = url;
-      });
-    } catch (e) {
-      URL.revokeObjectURL(url);
-      throw e;
-    }
-    return {
-      draw: img,
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      release: () => URL.revokeObjectURL(url),
-    };
-  }
-}
-
-/**
- * Shrinks the photo before it leaves the phone. A modern camera shot is
- * 4MB+, which is slow on a course with one bar of signal and costs more to
- * read than it needs to. A 2000px long edge keeps handwritten digits legible.
- *
- * Capping the LONG edge, not the width: scaling on width alone left a tall
- * image tall, and the API rejects anything over 8000px on either side.
- */
-const MAX_EDGE = 2000;
-
-async function downscale(file: File): Promise<string> {
-  const { draw, width, height, release } = await decode(file);
-  try {
-    if (!width || !height) throw new Error("the image had no dimensions");
-    const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(width * scale);
-    canvas.height = Math.round(height * scale);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("this browser blocked canvas rendering");
-    ctx.drawImage(draw, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.85);
-  } finally {
-    release();
-  }
-}
-
-/** Says what actually went wrong instead of a catch-all. */
-function describeDecodeFailure(file: File, error: unknown): string {
-  const name = file.name.toLowerCase();
-  if (/\.(heic|heif)$/.test(name) || /heic|heif/i.test(file.type)) {
-    return (
-      "That is a HEIC photo, which browsers cannot read. On iPhone either set " +
-      "Settings > Camera > Formats > Most Compatible, or take a screenshot of " +
-      "the photo and upload the screenshot."
-    );
-  }
-  const detail = error instanceof Error ? error.message : "";
-  return `Could not read that image file${detail ? `: ${detail}` : "."}`;
-}
 
 export function ScorecardUpload({
   matchId, teams,

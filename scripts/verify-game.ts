@@ -1,5 +1,8 @@
 import {
   awardMoney,
+  nameKey,
+  MIN_TEAM_SIZE,
+  MAX_TEAM_SIZE,
   cupEligibleFor,
   cupDollarsOf,
   fb18DollarsBySegment,
@@ -18,6 +21,7 @@ import {
   setLengthOf,
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
+import { isoFromLooseDate } from "../lib/dates";
 
 /** Shorthand for a money breakdown in fixtures. */
 function bd(main: number, front = 0, back = 0, eighteen = 0) {
@@ -885,6 +889,85 @@ console.log("\n=== rounding up belongs to the major rule alone ===");
                 breakdown: bd(-100, -20, -20, -10.3) }],
       bonusByTeam: {}, rosters: { t1: ["p1"] }, multiplier: POINT_MULTIPLIER.major,
     })[0].total, 0);
+}
+
+
+console.log("\n=== matching a name off the sheet to a golfer ===");
+{
+  // The whole point of the fold is that it absorbs the noise a hand-kept
+  // sheet carries week to week, and NOTHING else. A fold that reached any
+  // further would start merging people, and merging two players is how one
+  // of them silently collects the other's money.
+  const same = (a: string, b: string) => nameKey(a) === nameKey(b);
+
+  check("case does not make a new player", same("Tb", "TB"), true);
+  check("nor does shouting", same("HUBBS", "Hubbs"), true);
+  check("nor stray whitespace", same("  Kong  ", "Kong"), true);
+  check("nor a doubled space", same("Cali  Dan", "Cali Dan"), true);
+  check("nor a trailing comma a column split left behind", same("Khino,", "Khino"), true);
+  check("nor a trailing period", same("Tb.", "Tb"), true);
+
+  check("a first name is not a longer name", same("Dan", "Cali Dan"), false);
+  check("two different people stay two people", same("Kevin", "Kirk"), false);
+  check("an initial is not a name", same("K", "Kevin"), false);
+  check("a nickname is not derived, it has to be recorded", same("Hubbs", "Andrew"), false);
+
+  // An empty cell must not fold to the same key as another empty cell and
+  // get treated as a player, so callers drop blanks. This just pins the
+  // shape they test for.
+  check("a blank folds to a blank", nameKey("   "), "");
+
+  // Spelled exactly as read is the contract: the pool and the league's book
+  // have to agree, and the book is the sheet.
+  check("the fold is only for comparing, never for storing",
+    nameKey("  cALi  dAN "), "cali dan");
+}
+
+console.log("\n=== how many players a bay holds ===");
+{
+  check("two to six", [MIN_TEAM_SIZE, MAX_TEAM_SIZE], [2, 6]);
+  check("a bay of one is not a team", MIN_TEAM_SIZE > 1, true);
+  check("and six is the ceiling the importer enforces", MAX_TEAM_SIZE, 6);
+}
+
+
+console.log("\n=== reading a loose date off a sheet ===");
+{
+  // The clock is passed in so the year guessing is testable rather than
+  // something that only misbehaves in January.
+  const nov = new Date("2026-11-20T12:00:00Z");
+  const jan = new Date("2027-01-05T12:00:00Z");
+  const on = (raw: string, now: Date) => isoFromLooseDate(raw, now);
+
+  check("a bare month and day in the past takes this year",
+    on("9/30", nov), "2026-09-30");
+  check("and a dash reads the same as a slash",
+    on("9-30", nov), "2026-09-30");
+  check("whitespace around it does not matter",
+    on("  10 / 7 ", nov), "2026-10-07");
+
+  // The one that matters. A season crossing new year means a bare 9/30
+  // entered in January is last autumn, not next.
+  check("a bare date that would land in the future comes back a year",
+    on("9/30", jan), "2026-09-30");
+  check("while one already behind us stays put",
+    on("1/2", jan), "2027-01-02");
+  check("today itself is not pushed back", on("11/20", nov), "2026-11-20");
+
+  check("a written year is taken at its word, even ahead of us",
+    on("9/30/2027", nov), "2027-09-30");
+  check("and a two digit year means this century",
+    on("9/30/25", nov), "2025-09-30");
+
+  check("a real date in words parses", on("2026-09-30", nov), "2026-09-30");
+
+  check("an impossible day is refused rather than rolled over",
+    on("2/30", nov), null);
+  check("so is a thirteenth month", on("13/1", nov), null);
+  check("and nonsense", on("not a date", nov), null);
+  check("an empty string is nothing", on("   ", nov), null);
+  check("so is nothing at all",
+    [isoFromLooseDate(null, nov), isoFromLooseDate(undefined, nov)], [null, null]);
 }
 
 console.log("\n=== who is shown money ===");

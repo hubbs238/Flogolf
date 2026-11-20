@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { defaultPayouts } from "@/lib/game";
+import { defaultPayouts, MAX_TEAM_SIZE, MIN_TEAM_SIZE, nameKey } from "@/lib/game";
+import { isoFromLooseDate } from "@/lib/dates";
 import type { RoundType, SetLength, TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -42,7 +43,7 @@ function revalidateScore(matchId: string) {
   revalidatePath(`/games/${matchId}`);
 }
 
-export async function createMatch(input: {
+export type NewRound = {
   name: string;
   course: string;
   teamCount: number;
@@ -51,29 +52,57 @@ export async function createMatch(input: {
   tieDefault: TieChoice;
   roundType?: RoundType;
   setHoles?: SetLength;
-}): Promise<ActionResult> {
+  /** ISO date. Omitted means today, which is the column default. */
+  matchDate?: string;
+  /** Per player charge. Omitted leaves the column default. */
+  rakePerPlayer?: number;
+};
+
+/**
+ * Lays down a round and the scaffolding every round needs: its teams, its
+ * payout table, and the same table again for each FB18 segment.
+ *
+ * Factored out because a round now gets created two ways, by hand and off an
+ * uploaded image, and the two must produce identical scaffolding. A round
+ * built by the importer that quietly lacked its FB18 payouts would score as
+ * though the side game paid nothing.
+ */
+async function insertRound(
+  input: NewRound,
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const session = await requireAdmin();
   const supabase = await createClient();
 
   if (input.teamCount < 2 || input.teamCount > 12) {
     return { ok: false, error: "Pick between 2 and 12 teams." };
   }
+  // The size is a cap, not a quota. Bays can come in uneven and still
+  // start, so this only has to be a number a bay could actually hold.
+  if (input.rosterSize < MIN_TEAM_SIZE || input.rosterSize > MAX_TEAM_SIZE) {
+    return {
+      ok: false,
+      error: `A team holds between ${MIN_TEAM_SIZE} and ${MAX_TEAM_SIZE} players.`,
+    };
+  }
+
+  const row: Record<string, unknown> = {
+    name: input.name.trim() || `Round ${new Date().toLocaleDateString()}`,
+    course: input.course.trim(),
+    team_count: input.teamCount,
+    roster_size: input.rosterSize,
+    dollars_per_unit: input.dollarsPerUnit,
+    round_type: input.roundType ?? "season",
+    set_holes: input.setHoles ?? (input.roundType === "major" ? 6 : 3),
+    tie_default: input.tieDefault,
+    created_by: session.userId,
+  };
+  if (input.matchDate) row.match_date = input.matchDate;
+  if (input.rakePerPlayer !== undefined && input.rakePerPlayer >= 0) {
+    row.dues_per_player = input.rakePerPlayer;
+  }
 
   const { data: match, error } = await supabase
-    .from("matches")
-    .insert({
-      name: input.name.trim() || `Round ${new Date().toLocaleDateString()}`,
-      course: input.course.trim(),
-      team_count: input.teamCount,
-      roster_size: input.rosterSize,
-      dollars_per_unit: input.dollarsPerUnit,
-      round_type: input.roundType ?? "season",
-      set_holes: input.setHoles ?? (input.roundType === "major" ? 6 : 3),
-      tie_default: input.tieDefault,
-      created_by: session.userId,
-    })
-    .select("id")
-    .single();
+    .from("matches").insert(row).select("id").single();
 
   if (error || !match) {
     return { ok: false, error: error?.message ?? "Could not create the round." };
@@ -108,8 +137,15 @@ export async function createMatch(input: {
     ),
   );
 
+  return { ok: true, id: match.id };
+}
+
+export async function createMatch(input: NewRound): Promise<ActionResult> {
+  const made = await insertRound(input);
+  if (!made.ok) return made;
+
   revalidateMoney();
-  redirect(`/games/${match.id}`);
+  redirect(`/games/${made.id}`);
 }
 
 export async function updateMatchSettings(
@@ -398,8 +434,9 @@ export async function addMatchPlayer(
   const taken = new Set((existing ?? []).map((r) => r.slot));
   let slot = 1;
   while (taken.has(slot)) slot++;
-  if (slot > match.roster_size) {
-    return { ok: false, error: `That team already has ${match.roster_size} players.` };
+  const cap = Math.min(match.roster_size, MAX_TEAM_SIZE);
+  if (slot > cap) {
+    return { ok: false, error: `That team is full at ${cap} players.` };
   }
 
   const { error } = await supabase.from("match_players").insert({
@@ -500,11 +537,16 @@ export async function startRound(matchId: string): Promise<ActionResult> {
   const counts = new Map<string, number>();
   for (const p of players ?? []) counts.set(p.team_id, (counts.get(p.team_id) ?? 0) + 1);
 
-  const short = (teams ?? []).filter((t) => (counts.get(t.id) ?? 0) < match.roster_size);
+  // A bay needs two to be a team. It does not need to be full: weeks come
+  // in uneven and waiting for a fifth man who is not coming is how a round
+  // never starts.
+  const short = (teams ?? []).filter((t) => (counts.get(t.id) ?? 0) < MIN_TEAM_SIZE);
   if (short.length) {
     return {
       ok: false,
-      error: `Still short: ${short.map((t) => t.name).join(", ")}. Each team needs ${match.roster_size}.`,
+      error:
+        `Still short: ${short.map((t) => t.name).join(", ")}. ` +
+        `Every team needs at least ${MIN_TEAM_SIZE}.`,
     };
   }
   return setStatus(matchId, "in_progress");
@@ -789,4 +831,576 @@ export async function applyScorecardPhoto(
 
   revalidateMatch(matchId);
   return { ok: true, written: toWrite.map((h) => h.hole), skipped };
+}
+
+
+// ------------------------------------------------------------
+//  Reading a whole round off one image
+// ------------------------------------------------------------
+
+export type ResolvedName = {
+  /** Exactly as the image spelled it. */
+  read: string;
+  /** The golfer already in the pool this matches, if any. */
+  golferId: string | null;
+  /** That golfer's stored name, for showing what it matched. */
+  matched: string | null;
+  /** True when committing would create a golfer under the name as read. */
+  isNew: boolean;
+  /** Set when the same name turns up on two bays. */
+  duplicateOf: string | null;
+};
+
+export type RoundImportTeam = {
+  label: string;
+  number: number | null;
+  /** The team this bay will be written to, decided here, editable on review. */
+  teamId: string | null;
+  teamName: string | null;
+  players: ResolvedName[];
+  holes: { hole: number; relative: number; raw: number }[];
+  /** Holes on that team that already carry a score. */
+  alreadyFilled: number[];
+};
+
+export type RoundImportRead =
+  | {
+      ok: true;
+      teams: RoundImportTeam[];
+      scoreKind: "relative" | "gross";
+      scoreKindAssumed: boolean;
+      confidence: "high" | "medium" | "low";
+      notes: string;
+      flags: string[];
+      /** Problems that would stop a commit, in the admin's words. */
+      blockers: string[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Reads an image of a night's results and lines it up against this round.
+ *
+ * Nothing is written. The point of this step is to put the reading, the name
+ * matching and every objection on one screen while it can still be corrected,
+ * because committing it writes a whole round rather than a single hole.
+ */
+export async function readRoundPhoto(
+  matchId: string,
+  dataUrl: string,
+  expect: "relative" | "gross" = "relative",
+): Promise<RoundImportRead> {
+  await requireAdmin();
+
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!match) {
+    return { ok: false, error: "That file is not a JPEG, PNG or WebP image." };
+  }
+  const [, mediaType, base64] = match;
+
+  const { extractRound } = await import("@/lib/round-import");
+  const read = await extractRound(
+    base64,
+    mediaType as "image/jpeg" | "image/png" | "image/webp",
+    expect,
+  );
+  if (!read.ok) return read;
+
+  const supabase = await createClient();
+  const [{ data: teams }, pool, { data: scores }] = await Promise.all([
+    supabase.from("match_teams").select("id, slot, name").eq("match_id", matchId).order("slot"),
+    golferPool(),
+    supabase.from("hole_scores").select("team_id, hole").eq("match_id", matchId),
+  ]);
+
+  const filledByTeam = new Map<string, Set<number>>();
+  for (const s of (scores ?? []) as { team_id: string; hole: number }[]) {
+    if (!filledByTeam.has(s.team_id)) filledByTeam.set(s.team_id, new Set());
+    filledByTeam.get(s.team_id)!.add(s.hole);
+  }
+
+  const roundTeams = (teams ?? []) as { id: string; slot: number; name: string }[];
+  const bySlot = new Map(roundTeams.map((t) => [t.slot, t]));
+  const taken = new Set<string>();
+  const blockers: string[] = [];
+
+  // A name landing on two bays is the one misread that silently costs someone
+  // money, so it is called out rather than resolved.
+  const seenNames = new Map<string, string>();
+
+  const out: RoundImportTeam[] = read.teams.map((t, index) => {
+    // Bay 3 means team slot 3. Falling back to running order covers a sheet
+    // that labels its rows by name instead of number.
+    const wanted = t.number ?? index + 1;
+    let team: { id: string; slot: number; name: string } | null =
+      bySlot.get(wanted) ?? roundTeams[index] ?? null;
+    if (team && taken.has(team.id)) team = null;
+    if (team) taken.add(team.id);
+
+    const players = resolveNames(t.players, t.label, pool, seenNames);
+
+    return {
+      label: t.label,
+      number: t.number,
+      teamId: team?.id ?? null,
+      teamName: team?.name ?? null,
+      players,
+      holes: t.holes,
+      alreadyFilled: team
+        ? t.holes.map((h) => h.hole).filter((h) => filledByTeam.get(team!.id)?.has(h))
+        : [],
+    };
+  });
+
+  for (const t of out) {
+    if (!t.teamId) {
+      blockers.push(`${t.label} does not line up with a team in this round.`);
+    }
+    if (t.players.length > MAX_TEAM_SIZE) {
+      blockers.push(
+        `${t.label} read ${t.players.length} players, more than the ${MAX_TEAM_SIZE} a team holds.`,
+      );
+    }
+    for (const p of t.players) {
+      if (p.duplicateOf) {
+        blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${t.label}.`);
+      }
+    }
+  }
+  if (out.length > roundTeams.length) {
+    blockers.push(
+      `The image has ${out.length} bays but this round has ${roundTeams.length} teams.`,
+    );
+  }
+
+  return {
+    ok: true,
+    teams: out,
+    scoreKind: read.scoreKind,
+    scoreKindAssumed: read.scoreKindAssumed,
+    confidence: read.confidence,
+    notes: read.notes,
+    flags: read.flags,
+    blockers,
+  };
+}
+
+export type RoundImportApplied =
+  | {
+      ok: true;
+      created: string[];
+      rostered: number;
+      holesWritten: number;
+      holesLeft: number;
+    }
+  | { ok: false; error: string };
+
+/**
+ * Commits a reviewed reading: creates the golfers, seats them, writes the card.
+ *
+ * Order matters. Golfers come first because a roster row needs one, rosters
+ * next, scores last, so a failure part way through leaves a round that is
+ * short rather than one with scores against nobody.
+ *
+ * Names are created exactly as the sheet spelled them. Tidying them here
+ * would mean the pool and the book of record disagree, and the sheet is the
+ * book of record.
+ */
+export async function applyRoundImport(
+  matchId: string,
+  teams: {
+    teamId: string;
+    players: { read: string; golferId: string | null }[];
+    holes: { hole: number; relative: number }[];
+  }[],
+  mode: "fill" | "replace" = "fill",
+): Promise<RoundImportApplied> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const [{ data: match }, { data: ownTeams }] = await Promise.all([
+    supabase.from("matches").select("id, roster_size, status").eq("id", matchId).single(),
+    supabase.from("match_teams").select("id").eq("match_id", matchId),
+  ]);
+  if (!match) return { ok: false, error: "Round not found." };
+  if (match.status === "complete") {
+    return { ok: false, error: "That round is marked final. Reopen it before importing." };
+  }
+
+  // Every team id arrives from the review screen, so none of them is trusted.
+  // A foreign id would delete nothing on the way in, since the delete is
+  // scoped to this match, but the insert that follows would happily seat a
+  // player against a team belonging to another round. Checking membership up
+  // front is cheaper than reasoning about what that would do to the money.
+  const allowed = new Set(((ownTeams ?? []) as { id: string }[]).map((t) => t.id));
+  const seenTeams = new Set<string>();
+  for (const t of teams) {
+    if (!allowed.has(t.teamId)) {
+      return { ok: false, error: "One of those bays points at a team from another round." };
+    }
+    if (seenTeams.has(t.teamId)) {
+      return { ok: false, error: "Two bays point at the same team." };
+    }
+    seenTeams.add(t.teamId);
+    if (t.players.length > MAX_TEAM_SIZE) {
+      return { ok: false, error: `A team cannot hold more than ${MAX_TEAM_SIZE} players.` };
+    }
+  }
+
+  // --- golfers the sheet knows and the pool does not ---------------------
+  const wanted = new Map<string, string>();
+  for (const t of teams) {
+    for (const p of t.players) {
+      if (p.golferId) continue;
+      const key = nameKey(p.read);
+      if (key && !wanted.has(key)) wanted.set(key, p.read.trim());
+    }
+  }
+
+  const created: string[] = [];
+  const idByKey = new Map<string, string>();
+
+  if (wanted.size > 0) {
+    // Re-check the pool rather than trusting the review screen: someone may
+    // have added one of these by hand while the image was being looked at.
+    const { data: fresh } = await supabase.from("golfers").select("id, name, nickname");
+    for (const g of (fresh ?? []) as { id: string; name: string; nickname: string | null }[]) {
+      idByKey.set(nameKey(g.name), g.id);
+      if (g.nickname && !idByKey.has(nameKey(g.nickname))) {
+        idByKey.set(nameKey(g.nickname), g.id);
+      }
+    }
+
+    const missing = [...wanted.entries()].filter(([key]) => !idByKey.has(key));
+    if (missing.length > 0) {
+      const { data: inserted, error } = await supabase
+        .from("golfers")
+        .insert(missing.map(([, name]) => ({ name })))
+        .select("id, name");
+      if (error) {
+        return { ok: false, error: `Could not add the new golfers: ${error.message}` };
+      }
+      for (const g of (inserted ?? []) as { id: string; name: string }[]) {
+        idByKey.set(nameKey(g.name), g.id);
+        created.push(g.name);
+      }
+    }
+  }
+
+  const resolve = (p: { read: string; golferId: string | null }) =>
+    p.golferId ?? idByKey.get(nameKey(p.read)) ?? null;
+
+  // --- rosters -----------------------------------------------------------
+  let rostered = 0;
+  for (const t of teams) {
+    const ids: string[] = [];
+    for (const p of t.players) {
+      const id = resolve(p);
+      if (!id) return { ok: false, error: `Could not resolve ${p.read} to a golfer.` };
+      if (!ids.includes(id)) ids.push(id);
+    }
+    if (ids.length === 0) continue;
+
+    // Replace the bay's roster outright. An import is the authoritative
+    // reading of who played, and merging it with a half entered guess is how
+    // you end up with six names on a bay of four.
+    //
+    // There is no transaction to lean on here: these go through PostgREST a
+    // statement at a time. So a failure on a later bay leaves earlier bays
+    // seated and this one empty, which is why the error says what to do about
+    // it and why running the same import again is safe.
+    await supabase.from("match_players").delete().eq("match_id", matchId).eq("team_id", t.teamId);
+    const { error } = await supabase.from("match_players").insert(
+      ids.map((golfer_id, i) => ({
+        match_id: matchId, team_id: t.teamId, golfer_id, slot: i + 1,
+      })),
+    );
+    if (error) {
+      return {
+        ok: false,
+        error: error.code === "23505"
+          ? "One of those golfers is already on another team in this round. " +
+            "Fix the names on the review screen and import again."
+          : `Could not seat that bay: ${error.message}`,
+      };
+    }
+    rostered += ids.length;
+  }
+
+  // --- scores ------------------------------------------------------------
+  let holesWritten = 0;
+  let holesLeft = 0;
+
+  for (const t of teams) {
+    const { data: existing } = await supabase
+      .from("hole_scores").select("hole").eq("match_id", matchId).eq("team_id", t.teamId);
+    const filled = new Set((existing ?? []).map((r: { hole: number }) => r.hole));
+
+    const valid = t.holes.filter(
+      (h) => h.hole >= 1 && h.hole <= 18 && Number.isInteger(h.relative),
+    );
+
+    if (mode === "replace") {
+      const holes = valid.map((h) => h.hole);
+      if (holes.length > 0) {
+        await supabase
+          .from("hole_scores").delete()
+          .eq("match_id", matchId).eq("team_id", t.teamId).in("hole", holes);
+      }
+    }
+
+    const toWrite = mode === "replace" ? valid : valid.filter((h) => !filled.has(h.hole));
+    holesLeft += valid.length - toWrite.length;
+
+    if (toWrite.length > 0) {
+      const { error } = await supabase.from("hole_scores").insert(
+        toWrite.map((h) => ({
+          match_id: matchId, team_id: t.teamId, hole: h.hole, strokes: h.relative,
+        })),
+      );
+      if (error) return { ok: false, error: describeScoreWriteError(error.message) };
+      holesWritten += toWrite.length;
+    }
+  }
+
+  revalidateMoney(matchId);
+  return { ok: true, created, rostered, holesWritten, holesLeft };
+}
+
+
+// ------------------------------------------------------------
+//  Creating a round from an image, before the round exists
+// ------------------------------------------------------------
+
+/**
+ * The golfer pool, keyed by the fold two spellings of one person share.
+ *
+ * Nicknames are in here too, because the sheet writes whichever the room
+ * actually calls someone. A real name wins a collision: if one golfer's
+ * nickname is another golfer's name, the name is the safer match.
+ */
+async function golferPool(): Promise<Map<string, { id: string; name: string }>> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("golfers").select("id, name, nickname");
+  const pool = new Map<string, { id: string; name: string }>();
+  for (const g of (data ?? []) as { id: string; name: string; nickname: string | null }[]) {
+    pool.set(nameKey(g.name), { id: g.id, name: g.name });
+  }
+  for (const g of (data ?? []) as { id: string; name: string; nickname: string | null }[]) {
+    if (!g.nickname) continue;
+    const key = nameKey(g.nickname);
+    if (!pool.has(key)) pool.set(key, { id: g.id, name: g.name });
+  }
+  return pool;
+}
+
+/** Resolves one bay's names and flags anyone read twice across the card. */
+function resolveNames(
+  names: string[],
+  label: string,
+  pool: Map<string, { id: string; name: string }>,
+  seen: Map<string, string>,
+): ResolvedName[] {
+  return names.map((read) => {
+    const key = nameKey(read);
+    const hit = pool.get(key) ?? null;
+    const duplicateOf = seen.get(key) ?? null;
+    if (!duplicateOf) seen.set(key, label);
+    return {
+      read,
+      golferId: hit?.id ?? null,
+      matched: hit?.name ?? null,
+      isNew: !hit,
+      duplicateOf,
+    };
+  });
+}
+
+export type ReadRoundDetails =
+  | {
+      ok: true;
+      /** What the image says about the round itself. All of it editable. */
+      details: {
+        date: string | null;
+        isoDate: string | null;
+        title: string | null;
+        course: string | null;
+        setHoles: 3 | 6 | null;
+        rakePerPlayer: number | null;
+      };
+      /** Bays in the order they appear. Position decides the team. */
+      bays: {
+        label: string;
+        number: number | null;
+        players: ResolvedName[];
+        holes: { hole: number; relative: number; raw: number }[];
+      }[];
+      /** What the round would be created with, before any edit. */
+      suggested: { teamCount: number; rosterSize: number };
+      scoreKind: "relative" | "gross";
+      scoreKindAssumed: boolean;
+      confidence: "high" | "medium" | "low";
+      notes: string;
+      flags: string[];
+      blockers: string[];
+    }
+  | { ok: false; error: string };
+
+/**
+ * Reads an image before any round exists, so the upload can drive setup.
+ *
+ * The in-round importer needs a round to pour into. This one is for the top
+ * of the workflow: it reads the night, says how many bays it found and how
+ * big the largest one is, and hands all of it back for the admin to confirm
+ * or correct. Nothing is created.
+ */
+export async function readRoundDetails(
+  dataUrl: string,
+  expect: "relative" | "gross" = "relative",
+): Promise<ReadRoundDetails> {
+  await requireAdmin();
+
+  const match = dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,(.+)$/);
+  if (!match) {
+    return { ok: false, error: "That file is not a JPEG, PNG or WebP image." };
+  }
+  const [, mediaType, base64] = match;
+
+  const { extractRound } = await import("@/lib/round-import");
+  const read = await extractRound(
+    base64,
+    mediaType as "image/jpeg" | "image/png" | "image/webp",
+    expect,
+  );
+  if (!read.ok) return read;
+
+  const pool = await golferPool();
+  const seen = new Map<string, string>();
+  const bays = read.teams.map((t) => ({
+    label: t.label,
+    number: t.number,
+    players: resolveNames(t.players, t.label, pool, seen),
+    holes: t.holes,
+  }));
+
+  const blockers: string[] = [];
+  if (bays.length < 2) {
+    blockers.push(`Only ${bays.length} bay was legible, and a round needs at least two.`);
+  }
+  if (bays.length > 12) {
+    blockers.push(`${bays.length} bays were read, more than the 12 a round holds.`);
+  }
+  for (const b of bays) {
+    if (b.players.length > MAX_TEAM_SIZE) {
+      blockers.push(
+        `${b.label} read ${b.players.length} players, more than the ${MAX_TEAM_SIZE} a team holds.`,
+      );
+    }
+    for (const p of b.players) {
+      if (p.duplicateOf) {
+        blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${b.label}.`);
+      }
+    }
+  }
+
+  const biggest = bays.reduce((n, b) => Math.max(n, b.players.length), 0);
+
+  return {
+    ok: true,
+    details: {
+      date: read.details.date,
+      isoDate: isoFromLooseDate(read.details.date),
+      title: read.details.title,
+      course: read.details.course,
+      setHoles: read.details.setHoles,
+      rakePerPlayer: read.details.rakePerPlayer,
+    },
+    bays,
+    suggested: {
+      teamCount: Math.min(Math.max(bays.length, 2), 12),
+      // The cap has to hold the fullest bay that was read, and never less
+      // than the minimum a team can field.
+      rosterSize: Math.min(Math.max(biggest, MIN_TEAM_SIZE), MAX_TEAM_SIZE),
+    },
+    scoreKind: read.scoreKind,
+    scoreKindAssumed: read.scoreKindAssumed,
+    confidence: read.confidence,
+    notes: read.notes,
+    flags: read.flags,
+    blockers,
+  };
+}
+
+export type CreatedFromImport =
+  | { ok: true; matchId: string; created: string[]; rostered: number; holesWritten: number }
+  | { ok: false; error: string; matchId?: string };
+
+/**
+ * Creates the round and fills it from one reviewed image in a single step.
+ *
+ * Order is deliberate. The round and its scaffolding go down first, then the
+ * bays are matched to the teams that scaffolding just made, then the existing
+ * import path does the rest. That path already validates team membership,
+ * creates missing golfers and refuses to double seat anyone, so none of that
+ * is repeated here.
+ *
+ * If the fill fails the round is left standing and its id comes back with the
+ * error, because a half built round an admin can finish by hand is worth more
+ * than a deleted one and a wasted upload.
+ */
+export async function createRoundFromImport(input: {
+  round: NewRound;
+  bays: {
+    players: { read: string; golferId: string | null }[];
+    holes: { hole: number; relative: number }[];
+  }[];
+}): Promise<CreatedFromImport> {
+  await requireAdmin();
+
+  if (input.bays.length !== input.round.teamCount) {
+    return {
+      ok: false,
+      error: `The image has ${input.bays.length} bays but the round is set to ${input.round.teamCount} teams.`,
+    };
+  }
+
+  const made = await insertRound(input.round);
+  if (!made.ok) return made;
+
+  const supabase = await createClient();
+  const { data: teams } = await supabase
+    .from("match_teams").select("id, slot").eq("match_id", made.id).order("slot");
+
+  const slots = (teams ?? []) as { id: string; slot: number }[];
+  if (slots.length !== input.bays.length) {
+    return {
+      ok: false,
+      error: "The round was created but its teams did not come back. Fill it in by hand.",
+      matchId: made.id,
+    };
+  }
+
+  // Bays go to teams in the order they were read, which is the order the
+  // review screen showed them in. Bay numbers are not used here: a night
+  // labelled Bay 1, Bay 2, Bay 4, Bay 7 would otherwise want a seven team
+  // round to hold four bays.
+  const applied = await applyRoundImport(
+    made.id,
+    input.bays.map((b, i) => ({
+      teamId: slots[i].id,
+      players: b.players,
+      holes: b.holes,
+    })),
+    "fill",
+  );
+
+  if (!applied.ok) return { ok: false, error: applied.error, matchId: made.id };
+
+  revalidateMoney(made.id);
+  return {
+    ok: true,
+    matchId: made.id,
+    created: applied.created,
+    rostered: applied.rostered,
+    holesWritten: applied.holesWritten,
+  };
 }

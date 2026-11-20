@@ -13,6 +13,36 @@
  */
 export type RoundType = "season" | "major";
 
+/**
+ * How many players a bay can hold.
+ *
+ * Teams are not all the same size on a given night. The league's own book
+ * has weeks of five, four and four, and someone always drops out late. So a
+ * round carries a cap rather than a quota: every bay needs at least two to be
+ * a team at all, and no bay takes more than six.
+ *
+ * Worth knowing what uneven bays do to the money. A unit pays its full
+ * dollar value to each player on the roster, so a bay of five collects more
+ * between them than a bay of three hands over, and the round does not net to
+ * zero. That is a real consequence of the rule, not a rounding artifact.
+ */
+export const MIN_TEAM_SIZE = 2;
+export const MAX_TEAM_SIZE = 6;
+
+/**
+ * Folds a name down to something two spellings of the same person share.
+ *
+ * Case, extra spaces and trailing punctuation all vary between weeks on a
+ * hand-kept sheet, and none of them mean a different player. Anything beyond
+ * that is left alone on purpose: "Tb" and "TB" are the same man, "Dan" and
+ * "Cali Dan" are not, and guessing otherwise would quietly merge two
+ * people's money.
+ */
+export function nameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ").replace(/[.,]+$/, "");
+}
+
+
 /** How many holes a match runs over. Any round can use either. */
 export type SetLength = 3 | 6;
 

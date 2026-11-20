@@ -13,6 +13,7 @@ import { MatchAdminBar } from "@/components/match-admin-bar";
 import { MatchStakesEditor } from "@/components/match-stakes-editor";
 import { EditableTitle } from "@/components/editable-title";
 import { ScorecardUpload } from "@/components/scorecard-upload";
+import { RoundImport } from "@/components/round-import";
 import { ViewAsToggle } from "@/components/view-as-toggle";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
@@ -75,8 +76,8 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
           <EditableTitle kind="match" id={match.id} name={match.name} canEdit={isAdmin} />
           <p className="mt-1 text-sm text-muted">
             {new Date(match.match_date).toLocaleDateString()}
-            {match.course ? ` · ${match.course}` : ""} · {match.team_count} teams of{" "}
-            {match.roster_size}
+            {match.course ? ` · ${match.course}` : ""} · {match.team_count} teams of up
+            to {match.roster_size}
             {computed.roundType === "major" && (
               <span className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-400/40 dark:text-amber-200">
                 Major · double points
@@ -103,10 +104,21 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
         ))}
 
       {match.status === "filling" && (
-        <RosterFill
-          match={match} teams={teams} players={players} golfers={golfers}
-          isAdmin={isAdmin} myUserId={session.userId}
-        />
+        <div className="space-y-10">
+          {/*
+            Above the roster, because reading the sheet is the fast way to
+            fill one and picking names by hand is the fallback. Admin only and
+            outside the money gate, same as the roster itself: this is names
+            and scores, not dollars.
+          */}
+          {isAdmin && (
+            <RoundImport matchId={match.id} teams={teams} status={match.status} />
+          )}
+          <RosterFill
+            match={match} teams={teams} players={players} golfers={golfers}
+            isAdmin={isAdmin} myUserId={session.userId}
+          />
+        </div>
       )}
 
       {(match.status === "in_progress" || match.status === "complete") && (
@@ -127,6 +139,9 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
               match={match} teams={teams}
               payouts={bundle.payouts} fb18Payouts={bundle.fb18Payouts}
             />
+          )}
+          {isAdmin && match.status === "in_progress" && (
+            <RoundImport matchId={match.id} teams={teams} status={match.status} />
           )}
           {match.status === "in_progress" && scorableTeams.length > 0 && (
             <ScorecardUpload matchId={match.id} teams={scorableTeams} />
