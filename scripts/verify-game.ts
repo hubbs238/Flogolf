@@ -22,7 +22,7 @@ import {
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
 import { isoFromLooseDate } from "../lib/dates";
-import { convertReading, type RawReading } from "../lib/round-reading";
+import { convertReading, deriveStakes, type RawReading } from "../lib/round-reading";
 
 /** Shorthand for a money breakdown in fixtures. */
 function bd(main: number, front = 0, back = 0, eighteen = 0) {
@@ -1007,6 +1007,7 @@ console.log("\n=== turning a read image into storable scores ===");
     score_kind: "relative",
     teams: [],
     par: [],
+    money: { shown: false, rate: 0, rows: [] },
     details: { date: "", title: "", course: "", set_length: 0, rake_per_player: 0 },
     confidence: "high",
     notes: "",
@@ -1184,6 +1185,121 @@ console.log("\n=== turning a read image into storable scores ===");
         holes: [{ hole: 0, value: 0 }, { hole: 19, value: -1 }, { hole: 5, value: 0 }],
       }],
     })))?.teams[0].holes.map((h) => h.hole), [5]);
+}
+
+
+console.log("\n=== working the stakes back out of a money block ===");
+{
+  // The real 9/30 card, hole by hole, with the money block beside it. These
+  // are the same figures npm run audit-sheet checks the engine against, so
+  // the units derived here have to come back as the ones that reproduce the
+  // sheet: one unit at $200 on the matches, two to the winner at $40 on each
+  // nine, and the eighteen's two prizes together at $20.
+  const holes = (row: number[]) => row.map((value, i) => ({ hole: i + 1, value }));
+  const teams = [
+    { label: "Bay 1", number: 1, players: ["a", "b"],
+      holes: holes([ 0, 0,-1, 0,-1, 0,-1, 0,-1,  -1, 0, 0, 0, 0, 0, 0, 0, 0]) },
+    { label: "Bay 2", number: 2, players: ["c", "d"],
+      holes: holes([-1,-1,-1, 0, 0, 0,-1,-1,-1,  -1, 0,-1,-1, 0, 0,-1,-1,-1]) },
+    { label: "Bay 3", number: 3, players: ["e", "f"],
+      holes: holes([-1,-1,-1, 0,-1,-1,-1, 0,-1,  -1,-1,-1, 0,-1,-2, 0,-1,-1]) },
+  ].map((t) => ({ ...t, holes: t.holes.map((h) => ({ ...h, relative: h.value, raw: h.value })) }));
+
+  const money = {
+    shown: true,
+    rate: 0,
+    rows: [
+      { label: "Bay 1", sets: [-200, -200, -200], front: -40, back: -40, eighteen: -60 },
+      { label: "Bay 2", sets: [0, 200, 0], front: -40, back: -40, eighteen: 20 },
+      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40 },
+    ],
+  };
+
+  const got = deriveStakes(teams, money, 6);
+  check("the matches come back as one unit, first to last",
+    got.main, { 1: 1, 2: 0, 3: -1 });
+  check("at two hundred dollars a unit", got.rates.main, 200);
+  check("three columns of match money means six-hole matches", got.setHoles, 6);
+
+  check("the front nine pays the winner two and charges the rest one",
+    got.front, { 1: 2, 2: -1, 3: -1 });
+  check("at forty a unit", got.rates.front, 40);
+  check("the back nine reads the same", [got.back, got.rates.back],
+    [{ 1: 2, 2: -1, 3: -1 }, 40]);
+
+  // The sheet splits the eighteen into a lowest and a second lowest prize.
+  // Added together they are one pot, which is how the app stores it.
+  check("the eighteen's two prizes come back as one table",
+    got.total, { 1: 2, 2: 1, 3: -3 });
+  check("at twenty a unit", got.rates.total, 20);
+  check("the tied middle six is skipped, and the note says what was used",
+    got.notes, ["2 of 3 matches were readable, and they agreed"]);
+
+  // --- what it refuses ----------------------------------------------------
+
+  // A tie means the tied bays split the pot of the places they share, so the
+  // dollars stop saying what any one position was worth.
+  const tied = deriveStakes(
+    teams.map((t) => ({ ...t, holes: t.holes.map((h) => ({ ...h, relative: 0 })) })),
+    money, 6,
+  );
+  check("a segment every bay tied on is refused rather than inverted",
+    [tied.main, tied.front], [null, null]);
+
+  // Money that does not net to zero is a misread, not a payout table.
+  const unbalanced = deriveStakes(teams, {
+    ...money,
+    rows: money.rows.map((r, i) => (i === 0 ? { ...r, front: -10 } : r)),
+  }, 6);
+  check("a pot that does not balance is refused", unbalanced.front, null);
+  check("and says so", unbalanced.notes.some((n) => n.includes("front nine")), true);
+
+  // Matches that disagree about what a position pays mean a column was
+  // misread, and a majority vote would bury that.
+  // Planted on the front six, which is readable. The back six still says one
+  // unit at $200 paying 1 / 0 / -1, while the front six now says two units at
+  // $100 paying 2 / -1 / -1. Same card, two different tables.
+  const inconsistent = deriveStakes(teams, {
+    ...money,
+    rows: [
+      { label: "Bay 1", sets: [-100, -200, -200], front: -40, back: -40, eighteen: -60 },
+      { label: "Bay 2", sets: [-100, 200, 0], front: -40, back: -40, eighteen: 20 },
+      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40 },
+    ],
+  }, 6);
+  check("matches that disagree leave the main game alone", inconsistent.main, null);
+  check("and say they disagreed",
+    inconsistent.notes.some((n) => n.includes("did not agree")), true);
+
+  // No money block at all is the common case, and it is not an error.
+  const none = deriveStakes(teams, { shown: false, rate: 0, rows: [] }, null);
+  check("no money block leaves every pot at its default",
+    [none.main, none.front, none.back, none.total], [null, null, null, null]);
+  check("and says why once", none.notes.length, 1);
+
+  // Labels are the only thing the two blocks share.
+  const mismatched = deriveStakes(teams, {
+    ...money,
+    rows: money.rows.map((r) => ({ ...r, label: r.label.replace("Bay", "Lane") })),
+  }, 6);
+  check("a money block that lines up with no bay is refused", mismatched.main, null);
+
+  // Six columns of match money is six three-hole matches, and the derived
+  // length is reported so the form can follow it.
+  // Three-hole sets on the same card. Holes 1-3 and 7-9 are tied and get
+  // skipped; the other four pay whichever bay actually won them, two units to
+  // the winner at $25 and one off everybody else.
+  const threes = deriveStakes(teams, {
+    shown: true, rate: 0,
+    rows: [
+      { label: "Bay 1", sets: [0, -25, 0, -25, -25, -25], front: 0, back: 0, eighteen: 0 },
+      { label: "Bay 2", sets: [0, -25, 0, -25, -25,  50], front: 0, back: 0, eighteen: 0 },
+      { label: "Bay 3", sets: [0,  50, 0,  50,  50, -25], front: 0, back: 0, eighteen: 0 },
+    ],
+  }, null);
+  check("six columns of match money means three-hole matches", threes.setHoles, 3);
+  check("and the units follow from the order they finished in",
+    [threes.main, threes.rates.main], [{ 1: 2, 2: -1, 3: -1 }, 25]);
 }
 
 console.log("\n=== who is shown money ===");

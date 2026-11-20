@@ -6,7 +6,7 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { defaultPayouts, MAX_TEAM_SIZE, MIN_TEAM_SIZE, nameKey } from "@/lib/game";
 import { isoFromLooseDate } from "@/lib/dates";
-import type { RoundType, SetLength, TieChoice } from "@/lib/game";
+import type { Fb18Segment, RoundType, SetLength, TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -56,6 +56,15 @@ export type NewRound = {
   matchDate?: string;
   /** Per player charge. Omitted leaves the column default. */
   rakePerPlayer?: number;
+  /**
+   * What a finishing position pays, when something better than the default
+   * is known. Omitted falls back to defaultPayouts, which is the right
+   * answer for a round nobody has told us anything about.
+   */
+  payouts?: Record<number, number>;
+  fb18Payouts?: Partial<Record<Fb18Segment, Record<number, number>>>;
+  /** Per segment dollar rates. Null or omitted means follow the main rate. */
+  fb18Rates?: Partial<Record<Fb18Segment, number | null>>;
 };
 
 /**
@@ -100,6 +109,16 @@ async function insertRound(
   if (input.rakePerPlayer !== undefined && input.rakePerPlayer >= 0) {
     row.dues_per_player = input.rakePerPlayer;
   }
+  // A segment rate of null means "follow the side game rate", which itself
+  // falls back to the main rate, so only a real number is worth writing.
+  for (const [segment, column] of [
+    ["front", "fb18_front_dollars_per_unit"],
+    ["back", "fb18_back_dollars_per_unit"],
+    ["total", "fb18_total_dollars_per_unit"],
+  ] as const) {
+    const rate = input.fb18Rates?.[segment];
+    if (typeof rate === "number" && rate > 0) row[column] = rate;
+  }
 
   const { data: match, error } = await supabase
     .from("matches").insert(row).select("id").single();
@@ -115,7 +134,14 @@ async function insertRound(
   }));
   await supabase.from("match_teams").insert(teams);
 
-  const table = defaultPayouts(input.teamCount);
+  // Only positions this round actually has: a table read off a five bay
+  // sheet must not leave a fourth and fifth place on a three team round.
+  const trim = (t: Record<number, number>) =>
+    Object.fromEntries(
+      Object.entries(t).filter(([position]) => Number(position) <= input.teamCount),
+    );
+
+  const table = input.payouts ? trim(input.payouts) : defaultPayouts(input.teamCount);
   await supabase.from("match_payouts").insert(
     Object.entries(table).map(([position, units]) => ({
       match_id: match.id,
@@ -124,17 +150,20 @@ async function insertRound(
     })),
   );
 
-  // FB18 pays the same shape by default across all three segments.
-  const fb = defaultPayouts(input.teamCount);
+  // Each segment takes its own table where one is known, and otherwise the
+  // same default shape as the main game.
+  const fallback = defaultPayouts(input.teamCount);
   await supabase.from("fb18_payouts").insert(
-    (["front", "back", "total"] as const).flatMap((segment) =>
-      Object.entries(fb).map(([position, units]) => ({
+    (["front", "back", "total"] as const).flatMap((segment) => {
+      const given = input.fb18Payouts?.[segment];
+      const fb = given ? trim(given) : fallback;
+      return Object.entries(fb).map(([position, units]) => ({
         match_id: match.id,
         segment,
         position: Number(position),
         units,
-      })),
-    ),
+      }));
+    }),
   );
 
   return { ok: true, id: match.id };
@@ -898,6 +927,11 @@ export type RoundImportRead =
       dropped: string[];
       /** Every team's already-scored holes, keyed by team id. */
       filledByTeam: Record<string, number[]>;
+      /**
+       * The pool, so a name read as new can be swapped for somebody already
+       * in it without leaving this screen.
+       */
+      pool: { id: string; name: string }[];
       /** Problems that would stop a commit, in the admin's words. */
       blockers: string[];
     }
@@ -1036,6 +1070,9 @@ export async function readRoundPhoto(
     filledByTeam: Object.fromEntries(
       roundTeams.map((t) => [t.id, [...(filledByTeam.get(t.id) ?? [])].sort((a, b) => a - b)]),
     ),
+    pool: [...pool.byKey.values()]
+      .filter((g, i, all) => all.findIndex((x) => x.id === g.id) === i)
+      .sort((a, b) => a.name.localeCompare(b.name)),
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,
     confidence: read.confidence,
@@ -1402,8 +1439,33 @@ export type ReadRoundDetails =
         players: ResolvedName[];
         holes: { hole: number; relative: number; raw: number }[];
       }[];
-      /** What the round would be created with, before any edit. */
-      suggested: { teamCount: number; rosterSize: number };
+      /**
+       * Every setting the round would be created with, before any edit. The
+       * form shows all of it: an admin should be reading the sheet back,
+       * not filling a page in beside it.
+       */
+      suggested: {
+        teamCount: number;
+        rosterSize: number;
+        name: string;
+        course: string;
+        isoDate: string | null;
+        roundType: RoundType;
+        setHoles: SetLength;
+        dollarsPerUnit: number;
+        rakePerPlayer: number;
+        /** position -> units, for the main game and each side pot. */
+        payouts: Record<number, number> | null;
+        fb18Payouts: Partial<Record<Fb18Segment, Record<number, number>>>;
+        fb18Rates: Partial<Record<Fb18Segment, number>>;
+      };
+      /** What the money block did and did not give up. */
+      stakeNotes: string[];
+      /**
+       * The pool, so a name read as new can be swapped for somebody who is
+       * already in it without leaving this screen.
+       */
+      pool: { id: string; name: string }[];
       scoreKind: "relative" | "gross";
       scoreKindAssumed: boolean;
       confidence: "high" | "medium" | "low";
@@ -1488,6 +1550,37 @@ export async function readRoundDetails(
   }
 
   const biggest = bays.reduce((n, b) => Math.max(n, b.players.length), 0);
+  const teamCount = Math.min(Math.max(bays.length, 2), 12);
+
+  // A sheet that calls the night a major is calling it a major. Nothing else
+  // in the image says so, and reading it off the title beats making an admin
+  // remember on a form they are otherwise just confirming.
+  const title = read.details.title ?? "";
+  const roundType: RoundType = /\bmajors?\b/i.test(title) ? "major" : "season";
+
+  // The main rate is what the matches paid. Where the money block did not
+  // give one up, the side pots are the next best witness, and failing that
+  // the old default stands rather than a zero that silently pays nobody.
+  const stakeRate =
+    read.stakes.rates.main ??
+    read.stakes.rates.front ??
+    read.stakes.rates.back ??
+    read.stakes.rates.total ??
+    null;
+
+  const fb18Rates: Partial<Record<Fb18Segment, number>> = {};
+  for (const segment of ["front", "back", "total"] as const) {
+    const rate = read.stakes.rates[segment];
+    // Only worth recording where it differs from the main rate; otherwise it
+    // inherits, which is what the column's null already means.
+    if (rate && rate !== stakeRate) fb18Rates[segment] = rate;
+  }
+
+  const fb18Payouts: Partial<Record<Fb18Segment, Record<number, number>>> = {};
+  for (const segment of ["front", "back", "total"] as const) {
+    const table = read.stakes[segment];
+    if (table) fb18Payouts[segment] = table;
+  }
 
   return {
     ok: true,
@@ -1501,11 +1594,25 @@ export async function readRoundDetails(
     },
     bays,
     suggested: {
-      teamCount: Math.min(Math.max(bays.length, 2), 12),
+      teamCount,
       // The cap has to hold the fullest bay that was read, and never less
       // than the minimum a team can field.
       rosterSize: Math.min(Math.max(biggest, MIN_TEAM_SIZE), MAX_TEAM_SIZE),
+      name: title || read.details.date || "",
+      course: read.details.course ?? "",
+      isoDate: isoFromLooseDate(read.details.date),
+      roundType,
+      setHoles: read.details.setHoles ?? (roundType === "major" ? 6 : 3),
+      dollarsPerUnit: stakeRate ?? 5,
+      rakePerPlayer: read.details.rakePerPlayer ?? 0,
+      payouts: read.stakes.main,
+      fb18Payouts,
+      fb18Rates,
     },
+    stakeNotes: read.stakes.notes,
+    pool: [...pool.byKey.values()]
+      .filter((g, i, all) => all.findIndex((x) => x.id === g.id) === i)
+      .sort((a, b) => a.name.localeCompare(b.name)),
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,
     confidence: read.confidence,

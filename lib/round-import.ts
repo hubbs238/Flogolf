@@ -55,6 +55,44 @@ const RoundSchema = z.object({
         ),
     })
     .describe("Round level facts, each one optional"),
+  money: z
+    .object({
+      shown: z
+        .boolean()
+        .describe("Whether the image has a money block at all"),
+      rate: z
+        .number()
+        .describe(
+          "A unit rate written on the image, such as '$200/unit' or '$25 a " +
+            "man'. Use 0 if none is written.",
+        ),
+      rows: z
+        .array(
+          z.object({
+            label: z
+              .string()
+              .describe("The bay this row belongs to, exactly as written"),
+            sets: z
+              .array(z.number())
+              .describe(
+                "What this bay won or lost on each main-game match, in order " +
+                  "across the eighteen. Columns headed 3, 6, 9, 12, 15, 18 or " +
+                  "F6, M6, B6 or similar. Empty if the image does not show them.",
+              ),
+            front: z.number().describe("What this bay won or lost on the front nine, or 0"),
+            back: z.number().describe("What this bay won or lost on the back nine, or 0"),
+            eighteen: z
+              .number()
+              .describe(
+                "What this bay won or lost on the eighteen hole result. If the " +
+                  "image splits it into a lowest and a second lowest prize, add " +
+                  "the two together. 0 if not shown.",
+              ),
+          }),
+        )
+        .describe("One row per bay, from the money block. Empty if there is none."),
+    })
+    .describe("The money block, which is what the stakes are read from"),
   score_kind: z
     .enum(["relative", "gross", "unclear"])
     .describe(
@@ -124,7 +162,18 @@ Report:
    strokes are the number of shots taken, typically 3 to 6, and are never
    zero or negative. Say "unclear" rather than guessing.
 
-2. One entry per bay row, with:
+2. The money block, if the image has one. This is a second grid, usually
+   under or beside the scores, holding what each bay won or lost. Report one
+   row per bay with: what it won on each main-game match in order (the
+   columns headed 3, 6, 9, 12, 15, 18, or F6, M6, B6, or similar), and what
+   it won on the front nine, the back nine and the eighteen hole result.
+
+   Add the two eighteen-hole prizes together if the sheet splits them into a
+   lowest and a second lowest. Use negative numbers for a bay that paid out.
+   Report a unit rate only if one is actually written, such as "$200/unit".
+   Set shown to false and leave rows empty if there is no money block.
+
+3. One entry per bay row, with:
    - its label exactly as written, and the number in that label
    - the player names on that bay, spelled exactly as they appear, even if
      they look like nicknames or are misspelled. Do not correct, expand or
@@ -133,7 +182,7 @@ Report:
      cannot find names for a bay, return an empty list for it.
    - every hole where the cell holds a legible number
 
-3. A par row, if the image has one. Many simulator and spreadsheet layouts
+4. A par row, if the image has one. Many simulator and spreadsheet layouts
    have none; return an empty list then.
 
 Rules:

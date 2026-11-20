@@ -39,6 +39,10 @@ export function RoundImport({
   // ways past a spurious row were to point it at a real team or abandon the
   // whole import.
   const [ignored, setIgnored] = useState<Record<number, boolean>>({});
+  // Who a name read as new actually is. Keyed "bay:player"; blank means add
+  // them. Asked rather than inferred, because getting it wrong pays one
+  // player's money to another.
+  const [swap, setSwap] = useState<Record<string, string>>({});
   const [summary, setSummary] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -48,6 +52,7 @@ export function RoundImport({
     setPreview(null);
     setAssign({});
     setIgnored({});
+    setSwap({});
     setError(null);
   };
 
@@ -57,6 +62,7 @@ export function RoundImport({
     setRead(null);
     setAssign({});
     setIgnored({});
+    setSwap({});
     setBusy(true);
 
     let dataUrl: string;
@@ -80,6 +86,7 @@ export function RoundImport({
         Object.fromEntries(result.teams.map((t, i) => [i, t.teamId ?? ""])),
       );
       setIgnored({});
+      setSwap({});
     } catch (e) {
       setError(
         e instanceof Error
@@ -95,6 +102,11 @@ export function RoundImport({
   // correcting a bay on screen clears its objection immediately.
   const assignedFor = (i: number) => assign[i] ?? "";
   const isIgnored = (i: number) => ignored[i] === true;
+  /** The golfer a read name will end up as, after any swap. */
+  const resolvedId = (bay: number, player: number, fallback: string | null) => {
+    const key = `${bay}:${player}`;
+    return key in swap ? swap[key] || null : fallback;
+  };
   const live = read ? read.teams.map((t, i) => ({ t, i })).filter(({ i }) => !isIgnored(i)) : [];
 
   const clashes = (() => {
@@ -123,12 +135,49 @@ export function RoundImport({
   const nameBlockers = read
     ? read.blockers.filter((b) => {
         if (/does not line up with a team|which this round does not have/.test(b)) return false;
+        // An ambiguous name stops being a problem once somebody says who it
+        // is, so that objection is re-derived below rather than carried.
+        if (/could be /.test(b)) return false;
         return !read.teams.some((t, i) => isIgnored(i) && b.includes(t.label));
       })
     : [];
-  const blockers = [...nameBlockers, ...clashes];
+
+  const swapBlockers = (() => {
+    const out: string[] = [];
+    if (!read) return out;
+    for (const { t, i } of live) {
+      for (const [pi, p] of t.players.entries()) {
+        if (p.sharedBy && !resolvedId(i, pi, p.golferId)) {
+          out.push(`${p.read} on ${t.label} could be ${p.sharedBy.join(" or ")}. Pick one.`);
+        }
+      }
+    }
+    // A swap can seat one man on two bays, which no round can hold.
+    const seen = new Map<string, string>();
+    for (const { t, i } of live) {
+      for (const [pi, p] of t.players.entries()) {
+        const id = resolvedId(i, pi, p.golferId);
+        if (!id) continue;
+        const where = seen.get(id);
+        if (where && where !== t.label) {
+          out.push(`${p.read} is now the same golfer on both ${where} and ${t.label}.`);
+        } else {
+          seen.set(id, t.label);
+        }
+      }
+    }
+    return out;
+  })();
+
+  const blockers = [...nameBlockers, ...clashes, ...swapBlockers];
   const newNames = read
-    ? [...new Set(live.flatMap(({ t }) => t.players.filter((p) => p.isNew).map((p) => p.read)))]
+    ? [...new Set(
+        live.flatMap(({ t, i }) =>
+          t.players
+            .filter((p, pi) => (p.isNew || p.sharedBy) && !resolvedId(i, pi, p.golferId))
+            .map((p) => p.read),
+        ),
+      )]
     : [];
 
   function commit() {
@@ -139,7 +188,10 @@ export function RoundImport({
         matchId,
         live.map(({ t, i }) => ({
           teamId: assignedFor(i),
-          players: t.players.map((p) => ({ read: p.read, golferId: p.golferId })),
+          players: t.players.map((p, pi) => ({
+            read: p.read,
+            golferId: resolvedId(i, pi, p.golferId),
+          })),
           holes: t.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
         })),
         mode,
@@ -289,6 +341,12 @@ export function RoundImport({
               mode={mode}
               ignored={isIgnored(i)}
               onIgnoredChange={(v) => setIgnored((prev) => ({ ...prev, [i]: v }))}
+              pool={read.pool}
+              chosenFor={(pi, fallback) => {
+                const key = `${i}:${pi}`;
+                return key in swap ? swap[key] : fallback ?? "";
+              }}
+              onSwap={(pi, id) => setSwap((prev) => ({ ...prev, [`${i}:${pi}`]: id }))}
               /*
                 The filled set has to come from the team this bay is pointed at
                 RIGHT NOW, not the one it was auto-assigned to when the image
@@ -315,6 +373,7 @@ export function RoundImport({
 
 function BayCard({
   bay, teams, value, onChange, mode, filled, ignored, onIgnoredChange,
+  pool, chosenFor, onSwap,
 }: {
   bay: RoundImportTeam;
   teams: MatchTeam[];
@@ -325,6 +384,9 @@ function BayCard({
   filled: number[];
   ignored: boolean;
   onIgnoredChange: (v: boolean) => void;
+  pool: { id: string; name: string }[];
+  chosenFor: (player: number, fallback: string | null) => string;
+  onSwap: (player: number, id: string) => void;
 }) {
   const byHole = new Map(bay.holes.map((h) => [h.hole, h]));
   const missing = HOLES.filter((h) => !byHole.has(h));
@@ -361,23 +423,51 @@ function BayCard({
           and only the scores get written.
         </p>
       ) : (
-        <div className="mb-3 flex flex-wrap gap-1.5">
-                {bay.players.map((p, i) => (
-            <span
-              key={`${i}-${p.read}`}
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${
-                p.isNew
-                  ? "bg-amber-300/15 text-amber-700 ring-amber-400/40 dark:text-amber-200"
-                  : "bg-fairway-50 text-fairway-700 ring-fairway-300/50 dark:bg-fairway-900/40 dark:text-fairway-200"
-              }`}
-            >
-              {p.read}
-              {p.isNew
-                ? <span className="font-semibold uppercase tracking-wide">new</span>
-                : p.matched && p.matched !== p.read && <span className="opacity-70">= {p.matched}</span>}
-            </span>
-          ))}
-        </div>
+        <ul className="mb-3 space-y-1.5">
+          {bay.players.map((p, i) => {
+            // A name the pool has not seen, or one two golfers answer to,
+            // gets asked about rather than decided. The first name is the
+            // captain, which is what the sheet's roster block puts first.
+            const needsAnswer = p.isNew || Boolean(p.sharedBy);
+            const chosen = chosenFor(i, p.golferId);
+            return (
+              <li key={`${i}-${p.read}`} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="w-6 text-xs text-muted">{i === 0 ? "C" : i + 1}</span>
+                <span className="font-medium">{p.read}</span>
+
+                {!needsAnswer && p.matched && (
+                  <span className="text-xs text-muted">
+                    {p.matched === p.read ? "already in the pool" : `= ${p.matched}`}
+                  </span>
+                )}
+
+                {needsAnswer && (
+                  <>
+                    <select
+                      value={chosen}
+                      onChange={(e) => onSwap(i, e.target.value)}
+                      disabled={ignored}
+                      className="rounded-lg border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-fairway-400 disabled:opacity-50"
+                    >
+                      <option value="">
+                        {p.sharedBy ? "Pick who this is" : `Add ${p.read} as new`}
+                      </option>
+                      {pool.map((g) => (
+                        <option key={g.id} value={g.id}>{g.name}</option>
+                      ))}
+                    </select>
+                    {!chosen && (
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${
+                        p.sharedBy ? "text-flag-500" : "text-amber-700 dark:text-amber-200"}`}>
+                        {p.sharedBy ? "ambiguous" : "new"}
+                      </span>
+                    )}
+                  </>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
 
       <div className="overflow-x-auto rounded-lg border border-line">

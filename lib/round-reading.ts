@@ -25,6 +25,17 @@ export type RawReading = {
     holes: { hole: number; value: number }[];
   }[];
   par: { hole: number; par: number }[];
+  money: {
+    shown: boolean;
+    rate: number;
+    rows: {
+      label: string;
+      sets: number[];
+      front: number;
+      back: number;
+      eighteen: number;
+    }[];
+  };
   details: {
     date: string;
     title: string;
@@ -55,6 +66,8 @@ export type RoundDetails = {
 
 export type RoundExtraction = {
   details: RoundDetails;
+  /** What a position pays, worked back out of the money block. */
+  stakes: DerivedStakes;
   teams: ImportedTeam[];
   /** What the numbers in the image turned out to be. */
   scoreKind: "relative" | "gross";
@@ -250,9 +263,18 @@ export function convertReading(
     rakePerPlayer: Number.isFinite(rake) && rake > 0 ? Math.round(rake * 100) / 100 : null,
   };
 
+  // Worked out last, because it needs the converted scores to rank the bays
+  // and the set length the headers implied to know how the eighteen was cut.
+  const stakes = deriveStakes(teams, raw.money, details.setHoles);
+
+  // The money block is the better witness on set length: it counts the
+  // matches that were actually paid out rather than reading a header.
+  if (stakes.setHoles) details.setHoles = stakes.setHoles;
+
   return {
     ok: true,
     details,
+    stakes,
     teams,
     scoreKind,
     scoreKindAssumed,
@@ -261,4 +283,226 @@ export function convertReading(
     flags,
     dropped,
   };
+}
+
+
+// ------------------------------------------------------------
+//  Working the stakes back out of the money block
+// ------------------------------------------------------------
+
+/** position -> units. The same shape the round stores. */
+export type UnitTable = Record<number, number>;
+
+export type DerivedStakes = {
+  /** Null where the image did not show enough to work it out. */
+  main: UnitTable | null;
+  front: UnitTable | null;
+  back: UnitTable | null;
+  total: UnitTable | null;
+  /** Dollars a unit, per pot, where it could be worked out. */
+  rates: {
+    main: number | null;
+    front: number | null;
+    back: number | null;
+    total: number | null;
+  };
+  /** How many main-game matches the money block implies, if it says. */
+  setHoles: 3 | 6 | null;
+  /** What could not be worked out, and why. */
+  notes: string[];
+};
+
+const FRONT = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const BACK = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+const ALL = [...FRONT, ...BACK];
+const SETS_OF_3 = [[1,2,3],[4,5,6],[7,8,9],[10,11,12],[13,14,15],[16,17,18]];
+const SETS_OF_6 = [[1,2,3,4,5,6],[7,8,9,10,11,12],[13,14,15,16,17,18]];
+
+/** Greatest common divisor over whole cents, so 37.5 and 200 both work. */
+function gcd(a: number, b: number): number {
+  let x = Math.abs(Math.round(a));
+  let y = Math.abs(Math.round(b));
+  while (y) [x, y] = [y, x % y];
+  return x;
+}
+
+/** A team's score over a set of holes, or null if any of them is missing. */
+function segmentScore(team: ImportedTeam, holes: readonly number[]): number | null {
+  let total = 0;
+  for (const h of holes) {
+    const cell = team.holes.find((x) => x.hole === h);
+    if (!cell) return null;
+    total += cell.relative;
+  }
+  return total;
+}
+
+/**
+ * Turns one pot into a units table and a rate.
+ *
+ * Given what each bay scored on a segment and what it was paid for it, the
+ * finishing order is known, so position-to-dollars follows, and the rate is
+ * the largest unit those dollars all divide by. $200, $0 and -$200 is one
+ * unit at $200; -$40, -$40 and $80 is one unit at $40 paying two to the
+ * winner. That is the whole trick.
+ *
+ * A tie is refused rather than guessed. Tied bays split the pot of the
+ * positions they share, so the dollars no longer say what any single
+ * position was worth, and inverting them would invent a table.
+ */
+function invertPot(
+  rows: { score: number | null; dollars: number }[],
+): { table: UnitTable; rate: number } | null {
+  if (rows.length < 2) return null;
+  if (rows.some((r) => r.score === null)) return null;
+
+  const scores = rows.map((r) => r.score as number);
+  if (new Set(scores).size !== scores.length) return null;      // a tie
+  if (rows.every((r) => r.dollars === 0)) return null;           // nothing paid
+
+  // Cents throughout: a sheet writes 37.5 and floats do not divide cleanly.
+  const cents = rows.map((r) => Math.round(r.dollars * 100));
+  if (cents.reduce((n, c) => n + c, 0) !== 0) return null;       // does not balance
+
+  const rate = cents.filter((c) => c !== 0).reduce((g, c) => gcd(g, c), 0);
+  if (!rate) return null;
+
+  const order = rows
+    .map((r, i) => ({ i, score: r.score as number }))
+    .sort((a, b) => a.score - b.score);
+
+  const table: UnitTable = {};
+  order.forEach((o, rank) => {
+    table[rank + 1] = cents[o.i] / rate;
+  });
+  return { table, rate: rate / 100 };
+}
+
+/**
+ * Reads the stakes off the money block.
+ *
+ * The league's book records what each bay WON, not what a position pays, so
+ * the table is worked backwards: rank the bays on the holes they actually
+ * played, line that up against the money, and factor out the unit.
+ *
+ * Everything it cannot work out comes back null and says why, because a
+ * payout table guessed wrong is worse than one left at its default: the
+ * default is obviously a default, and a wrong one looks like a decision.
+ */
+export function deriveStakes(
+  teams: ImportedTeam[],
+  money: RawReading["money"],
+  setHolesHint: 3 | 6 | null,
+): DerivedStakes {
+  const notes: string[] = [];
+  const empty: DerivedStakes = {
+    main: null, front: null, back: null, total: null,
+    rates: { main: null, front: null, back: null, total: null },
+    setHoles: null,
+    notes,
+  };
+
+  if (!money?.shown || !money.rows?.length) {
+    notes.push("the image showed no money block, so the stakes are left at their defaults");
+    return empty;
+  }
+
+  // Match money rows to bays by label, which is the only thing the two
+  // blocks share. A row that matches nothing is not usable.
+  const byLabel = new Map(teams.map((t) => [t.label.trim().toLowerCase(), t]));
+  const paired = money.rows
+    .map((r) => ({ row: r, team: byLabel.get((r.label ?? "").trim().toLowerCase()) }))
+    .filter((p): p is { row: typeof p.row; team: ImportedTeam } => Boolean(p.team));
+
+  if (paired.length !== teams.length) {
+    notes.push(
+      `the money block lined up with ${paired.length} of ${teams.length} bays, ` +
+      `so the stakes are left at their defaults`,
+    );
+    return empty;
+  }
+
+  const out: DerivedStakes = { ...empty, notes };
+
+  // --- the three side pots ------------------------------------------------
+  const side = [
+    { key: "front" as const, holes: FRONT, pick: (r: typeof paired[0]["row"]) => r.front },
+    { key: "back" as const, holes: BACK, pick: (r: typeof paired[0]["row"]) => r.back },
+    { key: "total" as const, holes: ALL, pick: (r: typeof paired[0]["row"]) => r.eighteen },
+  ];
+  for (const s of side) {
+    const got = invertPot(
+      paired.map((p) => ({
+        score: segmentScore(p.team, s.holes),
+        dollars: Number(s.pick(p.row)) || 0,
+      })),
+    );
+    if (got) {
+      out[s.key] = got.table;
+      out.rates[s.key] = got.rate;
+    } else {
+      notes.push(`the ${s.key === "total" ? "eighteen" : s.key + " nine"} pot could not be worked out from the image`);
+    }
+  }
+
+  // --- the main game ------------------------------------------------------
+  //
+  // Every match on the card is the same pot, so each one is an independent
+  // reading of the same table. They have to agree: one disagreeing means a
+  // column was misread, and taking a majority would bury that.
+  const widths = new Set(paired.map((p) => (p.row.sets ?? []).length));
+  const width = widths.size === 1 ? [...widths][0] : 0;
+  const sets = width === 6 ? SETS_OF_3 : width === 3 ? SETS_OF_6 : null;
+
+  if (!sets) {
+    notes.push(
+      width === 0 && widths.size > 1
+        ? "the bays showed different numbers of match columns, so the main game could not be worked out"
+        : "the image showed no per-match money, so the main game is left at its default",
+    );
+    return out;
+  }
+  out.setHoles = width === 6 ? 3 : 6;
+  if (setHolesHint && setHolesHint !== out.setHoles) {
+    notes.push(
+      `the headers read as ${setHolesHint}-hole matches but the money block has ` +
+      `${width} of them, which is ${out.setHoles}-hole matches`,
+    );
+  }
+
+  const readings: { table: UnitTable; rate: number }[] = [];
+  sets.forEach((holes, i) => {
+    const got = invertPot(
+      paired.map((p) => ({
+        score: segmentScore(p.team, holes),
+        dollars: Number((p.row.sets ?? [])[i]) || 0,
+      })),
+    );
+    if (got) readings.push(got);
+  });
+
+  if (readings.length === 0) {
+    notes.push("no single match on the card could be worked out, so the main game is left at its default");
+    return out;
+  }
+
+  const shape = (r: { table: UnitTable; rate: number }) =>
+    JSON.stringify([r.rate, Object.entries(r.table).sort()]);
+  const agreed = new Set(readings.map(shape));
+  if (agreed.size > 1) {
+    notes.push(
+      `the ${readings.length} readable matches did not agree on what a position pays, ` +
+      `so the main game is left at its default`,
+    );
+    return out;
+  }
+
+  out.main = readings[0].table;
+  out.rates.main = readings[0].rate;
+  if (readings.length < sets.length) {
+    notes.push(
+      `${readings.length} of ${sets.length} matches were readable, and they agreed`,
+    );
+  }
+  return out;
 }

@@ -4,7 +4,8 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createRoundFromImport, readRoundDetails } from "@/app/(app)/games/actions";
 import type { ReadRoundDetails } from "@/app/(app)/games/actions";
-import { formatRelative, MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import { defaultPayouts, formatRelative, MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import type { Fb18Segment } from "@/lib/game";
 import { describeDecodeFailure, downscale } from "@/lib/image-file";
 
 /**
@@ -16,14 +17,31 @@ const SHEET_EDGE = 3000;
 const HOLES = Array.from({ length: 18 }, (_, i) => i + 1);
 
 type Read = Extract<ReadRoundDetails, { ok: true }>;
+type Units = Record<number, number>;
+
+/** "Add as new" rather than an id, so a blank select means exactly that. */
+const AS_NEW = "";
+
+const POTS = [
+  { key: "main" as const, label: "Match" },
+  { key: "front" as const, label: "Front nine" },
+  { key: "back" as const, label: "Back nine" },
+  { key: "total" as const, label: "All eighteen" },
+];
 
 /**
  * Builds a whole round out of one uploaded image.
  *
- * The in-round importer pours into a round that already exists. This is the
- * other end of the workflow: upload first, and let what the image says decide
- * how many teams there are, how big they are, when it was played and what it
- * cost, with every one of those still editable before anything is written.
+ * Everything on this form arrives filled in: the bays, who was in them, the
+ * card, the date, the rake, how the eighteen was cut, and what a finishing
+ * position pays, all worked out of the sheet. The job here is reading it back
+ * and correcting what the reader got wrong, not filling a page in beside an
+ * image of the same numbers.
+ *
+ * The one thing it will not decide for you is who a new name belongs to.
+ * Every name the pool has not seen gets a control: add them, or say which
+ * existing golfer it really is. Guessing that wrong pays one player's money
+ * to another, so it is asked rather than inferred.
  */
 export function RoundCreateImport() {
   const router = useRouter();
@@ -46,14 +64,24 @@ export function RoundCreateImport() {
   const [setHoles, setSetHoles] = useState<3 | 6>(3);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
 
+  // What a finishing position pays, per pot, and the side rates that differ.
+  const [units, setUnits] = useState<Record<string, Units>>({});
+  const [segRates, setSegRates] = useState<Partial<Record<Fb18Segment, number>>>({});
+
+  // Who a name read as new actually is. Keyed "bay:player"; blank means add.
+  const [swap, setSwap] = useState<Record<string, string>>({});
+
   function reset() {
     setRead(null);
     setError(null);
+    setUnits({});
+    setSegRates({});
+    setSwap({});
   }
 
   async function onFile(file: File) {
     setError(null);
-    setRead(null);
+    reset();
     setBusy(true);
 
     let dataUrl: string;
@@ -73,14 +101,27 @@ export function RoundCreateImport() {
       }
       setRead(result);
 
-      // Seed the form from the image. Anything it could not find keeps the
-      // sensible default rather than going blank.
-      setName(result.details.title ?? result.details.date ?? "");
-      setCourse(result.details.course ?? "");
-      setMatchDate(result.details.isoDate ?? "");
-      setRosterSize(result.suggested.rosterSize);
-      if (result.details.setHoles) setSetHoles(result.details.setHoles);
-      if (result.details.rakePerPlayer !== null) setRake(result.details.rakePerPlayer);
+      const s = result.suggested;
+      setName(s.name);
+      setCourse(s.course);
+      setMatchDate(s.isoDate ?? "");
+      setRosterSize(s.rosterSize);
+      setDollars(s.dollarsPerUnit);
+      setRake(s.rakePerPlayer);
+      setRoundType(s.roundType);
+      setSetHoles(s.setHoles);
+      setSegRates(s.fb18Rates);
+      setSwap({});
+
+      // A pot the money block did not give up falls back to the shape the
+      // app has always used, so the grid is never blank.
+      const fallback = defaultPayouts(s.teamCount);
+      setUnits({
+        main: s.payouts ?? fallback,
+        front: s.fb18Payouts.front ?? fallback,
+        back: s.fb18Payouts.back ?? fallback,
+        total: s.fb18Payouts.total ?? fallback,
+      });
     } catch (e) {
       setError(
         e instanceof Error
@@ -92,29 +133,75 @@ export function RoundCreateImport() {
     }
   }
 
+  const teamCount = read?.bays.length ?? 0;
+  const positions = Array.from({ length: teamCount }, (_, i) => i + 1);
+
+  /** The golfer a read name will end up as, after any swap. */
+  const resolvedId = (bay: number, player: number, fallback: string | null) => {
+    const key = `${bay}:${player}`;
+    return key in swap ? swap[key] || null : fallback;
+  };
+
   const newNames = read
-    ? [...new Set(read.bays.flatMap((b) => b.players.filter((p) => p.isNew).map((p) => p.read)))]
-    : [];
-  const overCap = read ? read.bays.some((b) => b.players.length > rosterSize) : false;
-  const blockers = read
-    ? [
-        ...read.blockers,
-        ...(overCap
-          ? [
-              `Players per team is set to ${rosterSize}, but a bay on this card has more.`,
-            ]
-          : []),
-      ]
+    ? read.bays.flatMap((b, bi) =>
+        b.players
+          .map((p, pi) => ({ p, bi, pi }))
+          .filter(({ p, bi: b2, pi }) => (p.isNew || p.sharedBy) && !resolvedId(b2, pi, p.golferId)),
+      )
     : [];
 
-  function create() {
+  const blockers = (() => {
+    if (!read) return [];
+    const out = [...read.blockers.filter((b) => !/could be /.test(b))];
+
+    // An ambiguous name is only a problem until somebody says who it is.
+    for (const [bi, b] of read.bays.entries()) {
+      for (const [pi, p] of b.players.entries()) {
+        if (p.sharedBy && !resolvedId(bi, pi, p.golferId)) {
+          out.push(`${p.read} on ${b.label} could be ${p.sharedBy.join(" or ")}. Pick one.`);
+        }
+      }
+    }
+
+    // A swap can seat one man on two bays, which no round can hold.
+    const seen = new Map<string, string>();
+    for (const [bi, b] of read.bays.entries()) {
+      for (const [pi, p] of b.players.entries()) {
+        const id = resolvedId(bi, pi, p.golferId);
+        if (!id) continue;
+        const where = seen.get(id);
+        if (where && where !== b.label) {
+          out.push(`${p.read} is now the same golfer on both ${where} and ${b.label}.`);
+        } else {
+          seen.set(id, b.label);
+        }
+      }
+    }
+
+    for (const b of read.bays) {
+      if (b.players.length > rosterSize) {
+        out.push(`Players per team is set to ${rosterSize}, but ${b.label} has more.`);
+      }
+    }
+    for (const pot of POTS) {
+      const table = units[pot.key];
+      if (!table) continue;
+      const sum = positions.reduce((n, p) => n + (Number(table[p]) || 0), 0);
+      if (Math.abs(sum) > 0.001) {
+        out.push(`${pot.label} units come to ${round2(sum)} rather than zero.`);
+      }
+    }
+    return out;
+  })();
+
+  function commit() {
     if (!read || blockers.length > 0) return;
     setError(null);
     startTransition(async () => {
       const r = await createRoundFromImport({
         round: {
           name, course,
-          teamCount: read.bays.length,
+          teamCount,
           rosterSize,
           dollarsPerUnit: dollars,
           tieDefault,
@@ -122,9 +209,15 @@ export function RoundCreateImport() {
           setHoles,
           matchDate: matchDate || undefined,
           rakePerPlayer: rake,
+          payouts: units.main,
+          fb18Payouts: { front: units.front, back: units.back, total: units.total },
+          fb18Rates: segRates,
         },
-        bays: read.bays.map((b) => ({
-          players: b.players.map((p) => ({ read: p.read, golferId: p.golferId })),
+        bays: read.bays.map((b, bi) => ({
+          players: b.players.map((p, pi) => ({
+            read: p.read,
+            golferId: resolvedId(bi, pi, p.golferId),
+          })),
           holes: b.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
         })),
       });
@@ -138,9 +231,6 @@ export function RoundCreateImport() {
         if (r.matchId) router.push(`/games/${r.matchId}`);
         return;
       }
-      // A round built from a sheet is taken straight to scoring. When it
-      // cannot be, the round still exists and the reason belongs on its own
-      // page rather than on a form that is about to be navigated away from.
       if (!r.started && r.startError) {
         setError(`The round was built but is not scoring yet: ${r.startError}`);
       }
@@ -159,17 +249,20 @@ export function RoundCreateImport() {
     );
   }
 
+  const field =
+    "w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400";
+  const legend = "mb-1.5 block text-sm font-medium";
+
   return (
     <section className="rounded-2xl border border-line bg-raised p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold">Upload round details</h3>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            Upload the sheet and this builds the whole round from it: how many
-            bays played, who was in each one, what they shot, and the date,
-            course, rake and match length if the image shows them. Everything
-            it reads is editable below before anything is created, and any name
-            the pool has not seen gets added exactly as the sheet spells it.
+            Upload the sheet and this fills the whole round in from it: the
+            bays, who played, the card, the date, the rake, how the eighteen
+            was cut, and what a finishing position pays. Read it back, fix
+            anything the reader got wrong, and say who the new names are.
           </p>
         </div>
         <button
@@ -182,7 +275,7 @@ export function RoundCreateImport() {
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="text-sm">
-          <span className="mb-1.5 block font-medium">The hole numbers are</span>
+          <span className={legend}>The hole numbers are</span>
           <select
             value={expect}
             onChange={(e) => { setExpect(e.target.value as "relative" | "gross"); reset(); }}
@@ -218,10 +311,10 @@ export function RoundCreateImport() {
       )}
 
       {read && (
-        <div className="mt-5 space-y-5">
+        <div className="mt-5 space-y-6">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <span className="font-medium">
-              {read.bays.length} bay{read.bays.length === 1 ? "" : "s"} read
+              {teamCount} bay{teamCount === 1 ? "" : "s"} read
             </span>
             <span className={`text-xs ${read.confidence === "low" ? "text-flag-500" : "text-muted"}`}>
               {read.confidence} confidence
@@ -233,7 +326,7 @@ export function RoundCreateImport() {
             {read.details.date && (
               <span className="text-xs text-muted">
                 dated {read.details.date}
-                {!read.details.isoDate && " (could not be turned into a date, so set it below)"}
+                {!read.details.isoDate && " (not a date it could use, so set it below)"}
               </span>
             )}
           </div>
@@ -244,7 +337,6 @@ export function RoundCreateImport() {
             <div className="rounded-lg bg-flag-500/10 px-3 py-2 text-sm text-flag-500">
               <p className="font-medium">Fix these first</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
-                {/* Indexed: two bays can produce the same sentence. */}
                 {blockers.map((b, i) => <li key={`${i}-${b}`}>{b}</li>)}
               </ul>
             </div>
@@ -260,165 +352,301 @@ export function RoundCreateImport() {
               you still need in by hand once the round exists.
             </p>
           )}
-          {newNames.length > 0 && (
-            <p className="rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
-              New to the pool, and added on save exactly as spelled:{" "}
-              <span className="font-medium">{newNames.join(", ")}</span>.
-            </p>
-          )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Round name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)}
-                placeholder="Wednesday night"
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Course</span>
-              <input value={course} onChange={(e) => setCourse(e.target.value)}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Date played</span>
-              <input type="date" value={matchDate} onChange={(e) => setMatchDate(e.target.value)}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-              <span className="mt-1 block text-xs text-muted">Left blank, the round takes today.</span>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Players per team</span>
-              <input type="number" min={MIN_TEAM_SIZE} max={MAX_TEAM_SIZE} value={rosterSize}
-                onChange={(e) => setRosterSize(Number(e.target.value))}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-              <span className="mt-1 block text-xs text-muted">
-                A cap, not a quota. Bays can be uneven and need only {MIN_TEAM_SIZE} to start.
-              </span>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Dollars per unit</span>
-              <input type="number" min={0} step="0.5" value={dollars}
-                onChange={(e) => setDollars(Number(e.target.value))}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Rake</span>
-              <input type="number" min={0} step="1" value={rake}
-                onChange={(e) => setRake(Number(e.target.value))}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
-              <span className="mt-1 block text-xs text-muted">Charged to every player, off settlement.</span>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Round type</span>
-              <select value={roundType}
-                onChange={(e) => {
-                  const next = e.target.value as "season" | "major";
-                  setRoundType(next);
-                  if (next === "major" && !read.details.setHoles) setSetHoles(6);
-                }}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
-                <option value="season">Season round</option>
-                <option value="major">Major &mdash; double points</option>
-              </select>
-            </label>
-            <label>
-              <span className="mb-1.5 block text-sm font-medium">Match length</span>
-              <select value={setHoles}
-                onChange={(e) => setSetHoles(Number(e.target.value) as 3 | 6)}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
-                <option value={3}>Six three-hole matches</option>
-                <option value={6}>Three six-hole matches</option>
-              </select>
-              {read.details.setHoles && (
-                <span className="mt-1 block text-xs text-muted">Read off the image.</span>
-              )}
-            </label>
-            <label className="sm:col-span-2">
-              <span className="mb-1.5 block text-sm font-medium">Default tie ruling</span>
-              <select value={tieDefault}
-                onChange={(e) => setTieDefault(e.target.value as "hole" | "set")}
-                className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400">
-                <option value="hole">Sudden death on the next hole</option>
-                <option value="set">Carry to the next set</option>
-              </select>
-            </label>
+          {/* --- the round itself ------------------------------------- */}
+          <div>
+            <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">Round</h4>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className={legend}>Round name</span>
+                <input value={name} onChange={(e) => setName(e.target.value)}
+                  placeholder="Wednesday night" className={field} />
+              </label>
+              <label>
+                <span className={legend}>Course</span>
+                <input value={course} onChange={(e) => setCourse(e.target.value)} className={field} />
+              </label>
+              <label>
+                <span className={legend}>Date played</span>
+                <input type="date" value={matchDate}
+                  onChange={(e) => setMatchDate(e.target.value)} className={field} />
+                <span className="mt-1 block text-xs text-muted">Left blank, the round takes today.</span>
+              </label>
+              <label>
+                <span className={legend}>Players per team</span>
+                <input type="number" min={MIN_TEAM_SIZE} max={MAX_TEAM_SIZE} value={rosterSize}
+                  onChange={(e) => setRosterSize(Number(e.target.value))} className={field} />
+                <span className="mt-1 block text-xs text-muted">
+                  A cap, not a quota. Bays can be uneven and need only {MIN_TEAM_SIZE} to start.
+                </span>
+              </label>
+              <label>
+                <span className={legend}>Round type</span>
+                <select value={roundType}
+                  onChange={(e) => setRoundType(e.target.value as "season" | "major")}
+                  className={field}>
+                  <option value="season">Season round</option>
+                  <option value="major">Major &mdash; double points</option>
+                </select>
+                {read.suggested.roundType === "major" && (
+                  <span className="mt-1 block text-xs text-muted">The sheet called it a major.</span>
+                )}
+              </label>
+              <label>
+                <span className={legend}>Match length</span>
+                <select value={setHoles}
+                  onChange={(e) => setSetHoles(Number(e.target.value) as 3 | 6)}
+                  className={field}>
+                  <option value={3}>Six three-hole matches</option>
+                  <option value={6}>Three six-hole matches</option>
+                </select>
+                {read.details.setHoles && (
+                  <span className="mt-1 block text-xs text-muted">Read off the image.</span>
+                )}
+              </label>
+              <label className="sm:col-span-2">
+                <span className={legend}>Default tie ruling</span>
+                <select value={tieDefault}
+                  onChange={(e) => setTieDefault(e.target.value as "hole" | "set")}
+                  className={field}>
+                  <option value="hole">Sudden death on the next hole</option>
+                  <option value="set">Carry to the next set</option>
+                </select>
+                <span className="mt-1 block text-xs text-muted">
+                  Not something an image can show, so this one is yours.
+                </span>
+              </label>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {read.bays.map((b, i) => (
-              <div key={`${b.label}-${i}`} className="rounded-xl border border-line p-4">
-                <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-                  <span className="font-medium">{b.label}</span>
-                  <span className="text-xs text-muted">becomes Team {i + 1}</span>
-                  <span className={`text-xs ${
-                    b.players.length > rosterSize ? "text-flag-500" : "text-muted"}`}>
-                    {b.players.length} player{b.players.length === 1 ? "" : "s"}
-                  </span>
-                </div>
+          {/* --- stakes ----------------------------------------------- */}
+          <div>
+            <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+              Stakes and payouts
+            </h4>
+            <div className="mb-4 grid gap-4 sm:grid-cols-2">
+              <label>
+                <span className={legend}>Dollars per unit</span>
+                <input type="number" min={0} step="0.5" value={dollars}
+                  onChange={(e) => setDollars(Number(e.target.value))} className={field} />
+              </label>
+              <label>
+                <span className={legend}>Rake</span>
+                <input type="number" min={0} step="1" value={rake}
+                  onChange={(e) => setRake(Number(e.target.value))} className={field} />
+                <span className="mt-1 block text-xs text-muted">
+                  Charged to every player, off settlement. Never touches points.
+                </span>
+              </label>
+            </div>
 
-                {b.players.length === 0 ? (
-                  <p className="mb-3 text-xs text-flag-500">
-                    No names were legible for this bay. Its scores still import;
-                    add the players by hand afterwards.
-                  </p>
-                ) : (
-                  <div className="mb-3 flex flex-wrap gap-1.5">
-                    {b.players.map((p, j) => (
-                      <span key={`${p.read}-${j}`}
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs ring-1 ${
-                          p.isNew
-                            ? "bg-amber-300/15 text-amber-700 ring-amber-400/40 dark:text-amber-200"
-                            : "bg-fairway-50 text-fairway-700 ring-fairway-300/50 dark:bg-fairway-900/40 dark:text-fairway-200"
-                        }`}>
-                        {p.read}
-                        {p.isNew
-                          ? <span className="font-semibold uppercase tracking-wide">new</span>
-                          : p.matched && p.matched !== p.read && (
-                            <span className="opacity-70">= {p.matched}</span>
-                          )}
-                      </span>
+            {read.stakeNotes.length > 0 && (
+              <p className="mb-3 text-xs text-muted">
+                On the stakes: {read.stakeNotes.join("; ")}.
+              </p>
+            )}
+
+            <div className="overflow-x-auto rounded-xl border border-line">
+              <table className="w-full min-w-max text-sm">
+                <thead>
+                  <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                    <th className="p-2 text-left font-medium">Units</th>
+                    {positions.map((p) => (
+                      <th key={p} className="w-16 p-2 text-center font-medium">{ordinal(p)}</th>
                     ))}
-                  </div>
-                )}
+                    <th className="w-28 p-2 text-left font-medium">$ / unit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {POTS.map((pot) => {
+                    const table = units[pot.key] ?? {};
+                    const sum = positions.reduce((n, p) => n + (Number(table[p]) || 0), 0);
+                    return (
+                      <tr key={pot.key} className="border-b border-line last:border-0">
+                        <td className="p-2 font-medium">
+                          {pot.label}
+                          <span className={`ml-2 text-xs font-normal ${
+                            Math.abs(sum) > 0.001 ? "text-flag-500" : "text-muted"}`}>
+                            {Math.abs(sum) > 0.001 ? `sums to ${round2(sum)}` : "balanced"}
+                          </span>
+                        </td>
+                        {positions.map((p) => (
+                          <td key={p} className="p-1 text-center">
+                            <input
+                              type="number" step="0.5"
+                              value={table[p] ?? 0}
+                              onChange={(e) =>
+                                setUnits((prev) => ({
+                                  ...prev,
+                                  [pot.key]: { ...(prev[pot.key] ?? {}), [p]: Number(e.target.value) },
+                                }))
+                              }
+                              className="w-14 rounded-lg border border-line bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-fairway-400"
+                            />
+                          </td>
+                        ))}
+                        <td className="p-1">
+                          {pot.key === "main" ? (
+                            <span className="px-1.5 text-xs text-muted">${dollars}</span>
+                          ) : (
+                            <input
+                              type="number" min={0} step="0.5"
+                              placeholder={`${dollars}`}
+                              value={segRates[pot.key as Fb18Segment] ?? ""}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setSegRates((prev) => {
+                                  const next = { ...prev };
+                                  if (v === "") delete next[pot.key as Fb18Segment];
+                                  else next[pot.key as Fb18Segment] = Number(v);
+                                  return next;
+                                });
+                              }}
+                              className="w-20 rounded-lg border border-line bg-surface px-1.5 py-1 text-center tabular-nums outline-none focus:border-fairway-400"
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              Each row has to come to zero: the money moves between bays rather
+              than coming from anywhere. A blank rate follows the main one.
+            </p>
+          </div>
 
-                <div className="overflow-x-auto rounded-lg border border-line">
-                  <table className="w-full min-w-max text-sm">
-                    <thead>
-                      <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
-                        <th className="p-2 text-left font-medium">Hole</th>
-                        {HOLES.map((h) => <th key={h} className="w-11 p-2 text-center">{h}</th>)}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td className="p-2 font-medium">Saves as</td>
-                        {HOLES.map((h) => {
-                          const cell = b.holes.find((x) => x.hole === h);
-                          return (
-                            <td key={h} className={`p-2 text-center font-semibold tabular-nums ${
-                              cell ? "" : "text-muted"}`}>
-                              {cell ? formatRelative(cell.relative) : "—"}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    </tbody>
-                  </table>
+          {/* --- the bays --------------------------------------------- */}
+          <div>
+            <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
+              Bays
+              {newNames.length > 0 && (
+                <span className="ml-2 font-normal normal-case tracking-normal text-amber-700 dark:text-amber-200">
+                  {newNames.length} name{newNames.length === 1 ? "" : "s"} to confirm
+                </span>
+              )}
+            </h4>
+            <div className="space-y-3">
+              {read.bays.map((b, bi) => (
+                <div key={`${b.label}-${bi}`} className="rounded-xl border border-line p-4">
+                  <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                    <span className="font-medium">{b.label}</span>
+                    <span className="text-xs text-muted">becomes Team {bi + 1}</span>
+                    <span className={`text-xs ${
+                      b.players.length > rosterSize ? "text-flag-500" : "text-muted"}`}>
+                      {b.players.length} player{b.players.length === 1 ? "" : "s"}
+                    </span>
+                    {b.players.length > 0 && (
+                      <span className="text-xs text-muted">
+                        captain: {b.players[0].read}
+                      </span>
+                    )}
+                  </div>
+
+                  {b.players.length === 0 ? (
+                    <p className="mb-3 text-xs text-flag-500">
+                      No names were legible for this bay. Its scores still
+                      import; add the players by hand afterwards.
+                    </p>
+                  ) : (
+                    <ul className="mb-3 space-y-1.5">
+                      {b.players.map((p, pi) => {
+                        const key = `${bi}:${pi}`;
+                        const needsAnswer = p.isNew || Boolean(p.sharedBy);
+                        const chosen = key in swap ? swap[key] : p.golferId ?? AS_NEW;
+                        return (
+                          <li key={`${pi}-${p.read}`} className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="w-6 text-xs text-muted">
+                              {pi === 0 ? "C" : pi + 1}
+                            </span>
+                            <span className="font-medium">{p.read}</span>
+
+                            {!needsAnswer && p.matched && (
+                              <span className="text-xs text-muted">
+                                {p.matched === p.read ? "already in the pool" : `= ${p.matched}`}
+                              </span>
+                            )}
+
+                            {needsAnswer && (
+                              <>
+                                <select
+                                  value={chosen}
+                                  onChange={(e) =>
+                                    setSwap((prev) => ({ ...prev, [key]: e.target.value }))
+                                  }
+                                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-fairway-400"
+                                >
+                                  <option value={AS_NEW}>
+                                    {p.sharedBy ? "Pick who this is" : `Add ${p.read} as new`}
+                                  </option>
+                                  {read.pool.map((g) => (
+                                    <option key={g.id} value={g.id}>{g.name}</option>
+                                  ))}
+                                </select>
+                                {chosen === AS_NEW && (
+                                  <span className={`text-xs font-semibold uppercase tracking-wide ${
+                                    p.sharedBy ? "text-flag-500" : "text-amber-700 dark:text-amber-200"}`}>
+                                    {p.sharedBy ? "ambiguous" : "new"}
+                                  </span>
+                                )}
+                              </>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+
+                  <div className="overflow-x-auto rounded-lg border border-line">
+                    <table className="w-full min-w-max text-sm">
+                      <thead>
+                        <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
+                          <th className="p-2 text-left font-medium">Hole</th>
+                          {HOLES.map((h) => <th key={h} className="w-11 p-2 text-center">{h}</th>)}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td className="p-2 font-medium">Saves as</td>
+                          {HOLES.map((h) => {
+                            const cell = b.holes.find((x) => x.hole === h);
+                            return (
+                              <td key={h} className={`p-2 text-center font-semibold tabular-nums ${
+                                cell ? "" : "text-muted"}`}>
+                                {cell ? formatRelative(cell.relative) : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <button
-            onClick={create}
+            onClick={commit}
             disabled={pending || blockers.length > 0}
             className="rounded-xl bg-fairway-600 px-5 py-2.5 font-medium text-white transition hover:bg-fairway-700 disabled:opacity-50"
           >
-            {pending
-              ? "Creating..."
-              : `Create a ${read.bays.length} team round from this image`}
+            {pending ? "Creating..." : `Create a ${teamCount} team round from this image`}
           </button>
         </div>
       )}
     </section>
   );
+}
+
+function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function ordinal(n: number) {
+  const tail = n % 100;
+  if (tail >= 11 && tail <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 }
