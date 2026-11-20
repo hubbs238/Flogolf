@@ -36,7 +36,7 @@ function Units({ n }: { n: number }) {
 }
 
 export function MatchResults({
-  match, teams, segments, fb18, unitsByTeam, money, teamMoney, duesPerPlayer,
+  match, teams, segments, fb18, unitsByTeam, money, teamMoney, rakePerPlayer,
   bonus, points, segmentRates, golfers, isAdmin, showMoney, roundType,
   cupEligible,
 }: {
@@ -53,8 +53,8 @@ export function MatchResults({
   money: PlayerMoney[];
   /** Team winnings, rolled up server side so every viewer can see them. */
   teamMoney: Record<string, { perPlayer: number; total: number }>;
-  /** Flat charge each player paid to play. Zero on a round without dues. */
-  duesPerPlayer: number;
+  /** Flat charge each player paid to play. Zero on a round without rake. */
+  rakePerPlayer: number;
   bonus: { segments: BonusSegment[]; pointsByTeam: Record<string, number> };
   points: PlayerRoundPoints[];
   /** Dollars per unit for each FB18 segment. They can differ. */
@@ -126,13 +126,13 @@ export function MatchResults({
   const sumBy = (pick: (m: PlayerMoney) => number) =>
     Math.round(money.reduce((n, m) => n + pick(m), 0) * 100) / 100;
 
-  // Dues are per round, so every settlement row carries the same figure.
+  // The rake is per round, so every settlement row carries the same figure.
   // Rounded the way awardMoney rounds it, so the prose below cannot disagree
   // with the column it describes. Nothing to show on a round that is free.
-  const dues = Number.isFinite(duesPerPlayer)
-    ? Math.max(0, Math.round(duesPerPlayer * 100) / 100)
+  const rake = Number.isFinite(rakePerPlayer)
+    ? Math.max(0, Math.round(rakePerPlayer * 100) / 100)
     : 0;
-  const anyDues = dues > 0;
+  const anyRake = rake > 0;
 
   return (
     <div className="space-y-8">
@@ -358,8 +358,8 @@ export function MatchResults({
           {showMoney
             ? "A unit pays its dollar value to every player on the roster, so the team total is the per player figure multiplied by the roster."
             : `Units won and lost across the ${matchesPhrase} and the side game.`}
-          {showMoney && anyDues &&
-            ` These are winnings before dues: $${dues.toFixed(2)} a player` +
+          {showMoney && anyRake &&
+            ` These are winnings before rake: $${rake.toFixed(2)} a player` +
             " comes off what anyone actually collects."}
         </p>
         <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -474,7 +474,7 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             What each player owes or collects, and where it came from. Positive
             is money in, negative is money out.
-            {anyDues && ` Dues of $${dues.toFixed(2)} a player come off the total.`}
+            {anyRake && ` A rake of $${rake.toFixed(2)} a player comes off the total.`}
             {" "}Only admins see this table.
           </p>
 
@@ -487,7 +487,7 @@ export function MatchResults({
                     <th className="px-3 pt-3 text-center font-medium" colSpan={3}>
                       Bonus Money
                     </th>
-                    <th className="px-3 pt-3" colSpan={anyDues ? 2 : 1} />
+                    <th className="px-3 pt-3" colSpan={anyRake ? 2 : 1} />
                   </tr>
                 )}
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
@@ -501,7 +501,7 @@ export function MatchResults({
                       <th className="w-24 p-3 text-right font-medium">All 18</th>
                     </>
                   )}
-                  {anyDues && <th className="w-24 p-3 text-right font-medium">Dues</th>}
+                  {anyRake && <th className="w-24 p-3 text-right font-medium">Rake</th>}
                   <th className="w-28 p-3 text-right font-medium text-ink">Total</th>
                 </tr>
               </thead>
@@ -518,8 +518,8 @@ export function MatchResults({
                         <td className="p-3 text-right"><Cash n={m.breakdown.eighteen} /></td>
                       </>
                     )}
-                    {anyDues && (
-                      <td className="p-3 text-right"><Cash n={-m.dues} /></td>
+                    {anyRake && (
+                      <td className="p-3 text-right"><Cash n={-m.rake} /></td>
                     )}
                     <td className="p-3 text-right"><Cash n={m.dollars} strong /></td>
                   </tr>
@@ -539,8 +539,8 @@ export function MatchResults({
                       <td className="p-3 text-right"><Cash n={sumBy((m) => m.breakdown.eighteen)} /></td>
                     </>
                   )}
-                  {anyDues && (
-                    <td className="p-3 text-right"><Cash n={sumBy((m) => -m.dues)} /></td>
+                  {anyRake && (
+                    <td className="p-3 text-right"><Cash n={sumBy((m) => -m.rake)} /></td>
                   )}
                   <td className="p-3 text-right"><Cash n={sumBy((m) => m.dollars)} strong /></td>
                 </tr>
@@ -553,9 +553,9 @@ export function MatchResults({
             winnings part lands on zero when every team fields the same number
             of players, and drifts when one plays a man short, since a unit pays
             each player rather than being divided among them.
-            {anyDues &&
-              ` Dues take a further $${(dues * money.length).toFixed(2)} out of the group,` +
-              " since they leave it rather than moving inside it."}
+            {anyRake &&
+              ` The rake takes a further $${(rake * money.length).toFixed(2)} out of the group,` +
+              " since it leaves the group rather than moving inside it."}
           </p>
         </section>
       )}

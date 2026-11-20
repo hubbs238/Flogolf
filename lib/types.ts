@@ -127,7 +127,12 @@ export type Match = {
   /** How many holes a match runs over. Six threes or three sixes. */
   set_holes: number;
   dollars_per_unit: number;
-  /** Flat charge each player pays to play. Money only, never points. */
+  /**
+   * The rake: a flat charge each player pays to play. Money only, never
+   * points. The column keeps its original name so no migration is needed;
+   * everything above the database calls it the rake, which is what the
+   * league's own book calls it.
+   */
   dues_per_player: number;
   /** Null means the side game follows the main rate. */
   fb18_dollars_per_unit: number | null;

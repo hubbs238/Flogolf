@@ -25,14 +25,14 @@ function bd(main: number, front = 0, back = 0, eighteen = 0) {
 }
 
 /** Shorthand for a PlayerMoney fixture. */
-function pm(golferId: string, teamId: string, main: number, extra = 0, dues = 0) {
+function pm(golferId: string, teamId: string, main: number, extra = 0, rake = 0) {
   const breakdown = bd(main, extra);
   const winnings = main + extra;
   return {
     golferId, teamId,
     winnings,
-    dues,
-    dollars: winnings - dues,
+    rake,
+    dollars: winnings - rake,
     cupDollars: main,
     breakdown,
   };
@@ -306,7 +306,7 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
   // The same card under major rules. Every dollar converts there.
   const major = awardMoney({ ...card, cupEligible: "all" });
   check("a major counts every dollar won", major[0].cupDollars, 300);
-  check("which is the winnings figure exactly, gross of dues",
+  check("which is the winnings figure exactly, gross of rake",
     major[0].cupDollars, major[0].winnings);
   check("and the breakdown is untouched either way",
     major[0].breakdown, money[0].breakdown);
@@ -322,18 +322,18 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
     [180, 300]);
 }
 
-console.log("\n=== dues never reach the Cup figure, on either round type ===");
+console.log("\n=== rake never reach the Cup figure, on either round type ===");
 {
   const card = {
     breakdownByTeam: { t1: bd(100, 10, 10, 10) },
     rosters: { t1: ["p1"] },
-    duesPerPlayer: 35,
+    rakePerPlayer: 35,
   };
   const season = awardMoney(card)[0];
   const major = awardMoney({ ...card, cupEligible: "all" })[0];
-  check("matches only: Cup figure is the matches, before dues", season.cupDollars, 100);
-  check("everything: Cup figure is the winnings, before dues", major.cupDollars, 130);
-  check("dues only come off what changes hands",
+  check("matches only: Cup figure is the matches, before rake", season.cupDollars, 100);
+  check("everything: Cup figure is the winnings, before rake", major.cupDollars, 130);
+  check("the rake only comes off what changes hands",
     [season.dollars, major.dollars], [95, 95]);
 }
 
@@ -516,81 +516,81 @@ console.log("\n=== changing a rate moves every player's money ===");
     before.find((m) => m.golferId === "a1")!.cupDollars);
 }
 
-console.log("\n=== dues come off settlement, never off points ===");
+console.log("\n=== rake come off settlement, never off points ===");
 {
   const money = awardMoney({
     breakdownByTeam: { t1: bd(180, 40, 30, 50), t2: bd(-180) },
     rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
-    duesPerPlayer: 35,
+    rakePerPlayer: 35,
   });
   const p1 = money.find((m) => m.golferId === "p1")!;
   const p3 = money.find((m) => m.golferId === "p3")!;
 
-  check("winnings are reported before dues", p1.winnings, 300);
-  check("dues are held apart, not folded into the breakdown",
-    [p1.dues, p1.breakdown], [35, { main: 180, front: 40, back: 30, eighteen: 50 }]);
-  check("settlement is winnings less dues", p1.dollars, 265);
-  check("a loser pays dues on top of the loss", p3.dollars, -215);
+  check("winnings are reported before rake", p1.winnings, 300);
+  check("the rake is held apart, not folded into the breakdown",
+    [p1.rake, p1.breakdown], [35, { main: 180, front: 40, back: 30, eighteen: 50 }]);
+  check("settlement is winnings less rake", p1.dollars, 265);
+  check("a loser pays rake on top of the loss", p3.dollars, -215);
   check("everyone on the card is charged the same, whichever team they are on",
-    money.map((m) => [m.teamId, m.dues]),
+    money.map((m) => [m.teamId, m.rake]),
     [["t1", 35], ["t1", 35], ["t2", 35], ["t2", 35]]);
 
-  // The one that matters: points must not notice dues at all.
-  check("dues never touch the Cup figure", [p1.cupDollars, p3.cupDollars], [180, -180]);
+  // The one that matters: points must not notice rake at all.
+  check("rake never touch the Cup figure", [p1.cupDollars, p3.cupDollars], [180, -180]);
   const pts = roundPoints({
     money, bonusByTeam: {}, rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
   });
   check("so the winner still scores the full 180",
     pts.find((p) => p.golferId === "p1")!.total, 180);
-  check("and the loser still floors at 0, not at minus the dues",
+  check("and the loser still floors at 0, not at minus the rake",
     pts.find((p) => p.golferId === "p3")!.total, 0);
 }
 {
-  // Winnings balance across a round, dues do not: they leave the group.
+  // Winnings balance across a round, rake do not: they leave the group.
   const money = awardMoney({
     breakdownByTeam: { t1: bd(100), t2: bd(-100) },
     rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
-    duesPerPlayer: 35,
+    rakePerPlayer: 35,
   });
   const sum = (pick: (m: typeof money[number]) => number) =>
     Math.round(money.reduce((n, m) => n + pick(m), 0) * 100) / 100;
 
   check("equal rosters: winnings net to zero", sum((m) => m.winnings), 0);
-  check("but settlement is short the whole dues take", sum((m) => m.dollars), -140);
-  check("which is exactly dues times the players on the card",
-    sum((m) => m.dues), 140);
+  check("but settlement is short the whole rake take", sum((m) => m.dollars), -140);
+  check("which is exactly rake times the players on the card",
+    sum((m) => m.rake), 140);
 }
 {
-  // A short roster already unbalances winnings. Dues follow heads, not teams,
+  // A short roster already unbalances winnings. Rake follow heads, not teams,
   // so the shorthanded side pays less in total.
   const money = awardMoney({
     breakdownByTeam: { t1: bd(100), t2: bd(-100) },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7"] },
-    duesPerPlayer: 35,
+    rakePerPlayer: 35,
   });
-  const duesFor = (team: string) =>
-    money.filter((m) => m.teamId === team).reduce((n, m) => n + m.dues, 0);
+  const rakeFor = (team: string) =>
+    money.filter((m) => m.teamId === team).reduce((n, m) => n + m.rake, 0);
 
-  check("four players pay four lots of dues", duesFor("t1"), 140);
-  check("three players pay three", duesFor("t2"), 105);
+  check("four players pay four lots of rake", rakeFor("t1"), 140);
+  check("three players pay three", rakeFor("t2"), 105);
   check("and each player's own charge is unchanged by roster size",
-    [...new Set(money.map((m) => m.dues))], [35]);
+    [...new Set(money.map((m) => m.rake))], [35]);
 }
 {
   const money = awardMoney({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
   });
-  check("no dues argument means no charge",
-    [money[0].winnings, money[0].dues, money[0].dollars], [100, 0, 100]);
+  check("no rake argument means no charge",
+    [money[0].winnings, money[0].rake, money[0].dollars], [100, 0, 100]);
 }
 {
   const money = awardMoney({
     breakdownByTeam: { t1: bd(0) },
     rosters: { t1: ["p1"] },
-    duesPerPlayer: 12.5,
+    rakePerPlayer: 12.5,
   });
-  check("dues survive a half dollar", money[0].dollars, -12.5);
+  check("rake survive a half dollar", money[0].dollars, -12.5);
 }
 {
   // A cleared input reaches Number() as NaN. Math.max(0, NaN) is NaN, so the
@@ -598,18 +598,18 @@ console.log("\n=== dues come off settlement, never off points ===");
   const bad = awardMoney({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
-    duesPerPlayer: Number("") + Number("x"),
+    rakePerPlayer: Number("") + Number("x"),
   });
   check("a NaN charge falls back to nothing rather than spreading",
-    [bad[0].dues, bad[0].dollars], [0, 100]);
+    [bad[0].rake, bad[0].dollars], [0, 100]);
 
   const negative = awardMoney({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
-    duesPerPlayer: -20,
+    rakePerPlayer: -20,
   });
   check("and a negative charge cannot pay anyone",
-    [negative[0].dues, negative[0].dollars], [0, 100]);
+    [negative[0].rake, negative[0].dollars], [0, 100]);
 }
 
 console.log("\n=== points earned in a round ===");
@@ -880,7 +880,7 @@ console.log("\n=== rounding up belongs to the major rule alone ===");
     cupDollarsOf(bd(91.7, 40, 30, 39.98), "main"), 91.7);
   check("and a losing total is still floored at zero, not rounded into points",
     roundPoints({
-      money: [{ golferId: "p1", teamId: "t1", winnings: -150.3, dues: 0,
+      money: [{ golferId: "p1", teamId: "t1", winnings: -150.3, rake: 0,
                 dollars: -150.3, cupDollars: cupDollarsOf(bd(-100, -20, -20, -10.3), "all"),
                 breakdown: bd(-100, -20, -20, -10.3) }],
       bonusByTeam: {}, rosters: { t1: ["p1"] }, multiplier: POINT_MULTIPLIER.major,

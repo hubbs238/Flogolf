@@ -208,8 +208,8 @@ export function computeMatch(b: MatchBundle) {
       .map((p) => p.golfer_id);
   }
 
-  const duesPerPlayer = Number(b.match.dues_per_player ?? 0);
-  const money = awardMoney({ breakdownByTeam, rosters, duesPerPlayer, cupEligible });
+  const rakePerPlayer = Number(b.match.dues_per_player ?? 0);
+  const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer, cupEligible });
   const bonus = scoreBonusPoints(teamIds, b.scores, multiplier);
 
   // Team level winnings, rolled up here rather than in the browser so a page
@@ -231,7 +231,7 @@ export function computeMatch(b: MatchBundle) {
     setHoles,
     multiplier,
     cupEligible,
-    duesPerPlayer,
+    rakePerPlayer,
     teamMoney,
     bonus,
     rosters,
@@ -248,8 +248,8 @@ export type SeasonRow = {
   /** FB18 front nine, back nine and all eighteen. Earns points on a major. */
   bonusMoney: number;
   /** Flat charges paid to play. Money only, never points. */
-  dues: number;
-  /** What changed hands: match money plus bonus money, less dues. */
+  rake: number;
+  /** What changed hands: match money plus bonus money, less rake. */
   dollars: number;
   /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
   pointsFromMoney: number;
@@ -268,7 +268,7 @@ export type GolferRoundRow = {
   roundType: RoundType;
   matchMoney: number;
   bonusMoney: number;
-  dues: number;
+  rake: number;
   dollars: number;
   pointsFromMoney: number;
   pointsBonus: number;
@@ -324,7 +324,7 @@ async function scoreCompletedRounds(): Promise<
           matchMoney: row.breakdown.main,
           bonusMoney:
             row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,
-          dues: row.dues,
+          rake: row.rake,
           dollars: row.dollars,
           pointsFromMoney: p?.fromMoney ?? 0,
           pointsBonus: p?.bonus ?? 0,
@@ -351,13 +351,13 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
         golferId: row.golferId, rounds: 0,
-        matchMoney: 0, bonusMoney: 0, dues: 0, dollars: 0,
+        matchMoney: 0, bonusMoney: 0, rake: 0, dollars: 0,
         pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
       cur.matchMoney += row.matchMoney;
       cur.bonusMoney += row.bonusMoney;
-      cur.dues += row.dues;
+      cur.rake += row.rake;
       cur.dollars += row.dollars;
       cur.pointsFromMoney += row.pointsFromMoney;
       cur.pointsBonus += row.pointsBonus;
@@ -371,7 +371,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     ...r,
     matchMoney: round2(r.matchMoney),
     bonusMoney: round2(r.bonusMoney),
-    dues: round2(r.dues),
+    rake: round2(r.rake),
     dollars: round2(r.dollars),
     pointsFromMoney: round2(r.pointsFromMoney),
     pointsBonus: round2(r.pointsBonus),

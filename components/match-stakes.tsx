@@ -52,7 +52,7 @@ export function MatchStakes({
     total: Number(match.fb18_total_dollars_per_unit ?? fb18Rate),
   };
   const mainSum = positions.reduce((n, p) => n + (tables.main[p] ?? 0), 0);
-  const dues = Number(match.dues_per_player ?? 0);
+  const rake = Number(match.dues_per_player ?? 0);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -153,9 +153,9 @@ export function MatchStakes({
         </label>
 
         <label>
-          <span className="mb-1.5 block text-sm font-medium">Dues</span>
-          <input type="number" min={0} step="1" defaultValue={dues}
-            onBlur={(e) => run(() => updateMatchSettings(match.id, { duesPerPlayer: Number(e.target.value) }))}
+          <span className="mb-1.5 block text-sm font-medium">Rake</span>
+          <input type="number" min={0} step="1" defaultValue={rake}
+            onBlur={(e) => run(() => updateMatchSettings(match.id, { rakePerPlayer: Number(e.target.value) }))}
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
           <span className="mt-1 block text-xs text-muted">
             Charged to every player, taken off settlement. Never touches points.

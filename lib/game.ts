@@ -645,20 +645,20 @@ export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
-  /** What this player wins this round, before dues. Not a share of a pot. */
+  /** What this player wins this round, before rake. Not a share of a pot. */
   winnings: number;
   /**
    * The flat charge for playing, the same for everyone on the card. It leaves
    * the group rather than changing hands, so it is held apart from winnings.
    */
-  dues: number;
-  /** What actually changes hands: winnings less dues. */
+  rake: number;
+  /** What actually changes hands: winnings less rake. */
   dollars: number;
   /**
    * The portion that counts toward FLO Cup points: the matches alone, or on a
    * major every dollar won, rounded up to the dollar. See cupEligibleFor and
-   * cupDollarsOf. Dues never reach it either way, since they leave the group
-   * rather than changing hands.
+   * cupDollarsOf. The rake never reaches it either way, since it leaves the
+   * group rather than changing hands.
    */
   cupDollars: number;
   breakdown: MoneyBreakdown;
@@ -679,15 +679,15 @@ export type PlayerMoney = {
  * different rates, which makes a single combined unit figure meaningless.
  * The conversion happens upstream where both rates are known.
  *
- * Dues come off the end. They are the same for everyone on the card and are
- * money leaving the group rather than moving inside it, so they never reach
- * cupDollars and a round carrying them will not net to zero.
+ * The rake comes off the end. It is the same for everyone on the card and is
+ * money leaving the group rather than moving inside it, so it never reaches
+ * cupDollars and a round carrying it will not net to zero.
  */
 export function awardMoney(opts: {
   breakdownByTeam: Record<string, MoneyBreakdown>;
   rosters: Record<string, string[]>;
-  /** Flat charge per player. Zero on a round with no dues. */
-  duesPerPlayer?: number;
+  /** Flat charge per player. Zero on a round with no rake. */
+  rakePerPlayer?: number;
   /**
    * Which winnings feed the Cup. Defaults to the matches alone, so a caller
    * that has not thought about it cannot accidentally pay the FB18 money
@@ -698,8 +698,8 @@ export function awardMoney(opts: {
   const { breakdownByTeam, rosters, cupEligible = "main" } = opts;
   // Math.max(0, NaN) is NaN, so the clamp alone would let a bad figure
   // through and poison every settlement row on the round.
-  const raw = opts.duesPerPlayer ?? 0;
-  const dues = Number.isFinite(raw) ? Math.max(0, Math.round(raw * 100) / 100) : 0;
+  const raw = opts.rakePerPlayer ?? 0;
+  const rake = Number.isFinite(raw) ? Math.max(0, Math.round(raw * 100) / 100) : 0;
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const out: PlayerMoney[] = [];
 
@@ -714,14 +714,14 @@ export function awardMoney(opts: {
     const winnings = round2(
       breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen,
     );
-    const dollars = round2(winnings - dues);
+    const dollars = round2(winnings - rake);
 
     for (const golferId of golferIds) {
       out.push({
         golferId,
         teamId,
         winnings,
-        dues,
+        rake,
         dollars,
         // Rounded like winnings: summing four already-rounded figures can
         // land on float noise, and this one is read out as a point total.

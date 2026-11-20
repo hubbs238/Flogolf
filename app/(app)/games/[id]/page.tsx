@@ -152,7 +152,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             unitsByTeam={computed.unitsByTeam}
             money={view.showMoney ? computed.money : []}
             teamMoney={view.showMoney ? computed.teamMoney : {}}
-            duesPerPlayer={view.showMoney ? computed.duesPerPlayer : 0}
+            rakePerPlayer={view.showMoney ? computed.rakePerPlayer : 0}
             bonus={computed.bonus} points={computed.points}
             segmentRates={
               view.showMoney

@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "verify-draft": "tsx scripts/verify-draft.ts",
-    "verify-game": "tsx scripts/verify-game.ts"
+    "verify-game": "tsx scripts/verify-game.ts",
+    "audit-sheet": "tsx scripts/audit-sheet.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
