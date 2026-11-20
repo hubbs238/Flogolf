@@ -32,7 +32,10 @@ const POTS = [
   { key: "main" as const, label: "Match" },
   { key: "front" as const, label: "Front nine" },
   { key: "back" as const, label: "Back nine" },
-  { key: "total" as const, label: "All eighteen" },
+  { key: "total" as const, label: "Lowest eighteen" },
+  // Its own pot, which the lowest round pays into. Two columns on the sheet,
+  // two pots here.
+  { key: "second" as const, label: "2nd lowest eighteen" },
 ];
 
 /**
@@ -127,6 +130,7 @@ export function RoundCreateImport() {
         front: s.fb18Payouts.front ?? defaultFb18Payouts(s.teamCount, "front"),
         back: s.fb18Payouts.back ?? defaultFb18Payouts(s.teamCount, "back"),
         total: s.fb18Payouts.total ?? defaultFb18Payouts(s.teamCount, "total"),
+        second: s.fb18Payouts.second ?? defaultFb18Payouts(s.teamCount, "second"),
       });
     } catch (e) {
       setError(
@@ -216,7 +220,10 @@ export function RoundCreateImport() {
           matchDate: matchDate || undefined,
           rakePerPlayer: rake,
           payouts: units.main,
-          fb18Payouts: { front: units.front, back: units.back, total: units.total },
+          fb18Payouts: {
+            front: units.front, back: units.back,
+            total: units.total, second: units.second,
+          },
           fb18Rates: segRates,
         },
         bays: read.bays.map((b, bi) => ({

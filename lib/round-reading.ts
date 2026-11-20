@@ -34,6 +34,7 @@ export type RawReading = {
       front: number;
       back: number;
       eighteen: number;
+      secondEighteen: number;
     }[];
   };
   details: {
@@ -298,13 +299,17 @@ export type DerivedStakes = {
   main: UnitTable | null;
   front: UnitTable | null;
   back: UnitTable | null;
+  /** The lowest eighteen. */
   total: UnitTable | null;
+  /** The second lowest eighteen, its own pot with its own payers. */
+  second: UnitTable | null;
   /** Dollars a unit, per pot, where it could be worked out. */
   rates: {
     main: number | null;
     front: number | null;
     back: number | null;
     total: number | null;
+    second: number | null;
   };
   /** How many main-game matches the money block implies, if it says. */
   setHoles: 3 | 6 | null;
@@ -396,8 +401,8 @@ export function deriveStakes(
 ): DerivedStakes {
   const notes: string[] = [];
   const empty: DerivedStakes = {
-    main: null, front: null, back: null, total: null,
-    rates: { main: null, front: null, back: null, total: null },
+    main: null, front: null, back: null, total: null, second: null,
+    rates: { main: null, front: null, back: null, total: null, second: null },
     setHoles: null,
     notes,
   };
@@ -426,9 +431,16 @@ export function deriveStakes(
 
   // --- the three side pots ------------------------------------------------
   const side = [
-    { key: "front" as const, holes: FRONT, pick: (r: typeof paired[0]["row"]) => r.front },
-    { key: "back" as const, holes: BACK, pick: (r: typeof paired[0]["row"]) => r.back },
-    { key: "total" as const, holes: ALL, pick: (r: typeof paired[0]["row"]) => r.eighteen },
+    { key: "front" as const, name: "front nine", holes: FRONT,
+      pick: (r: typeof paired[0]["row"]) => r.front },
+    { key: "back" as const, name: "back nine", holes: BACK,
+      pick: (r: typeof paired[0]["row"]) => r.back },
+    { key: "total" as const, name: "lowest eighteen", holes: ALL,
+      pick: (r: typeof paired[0]["row"]) => r.eighteen },
+    // Same eighteen, same ranking, different column. It is a separate pot
+    // because the league pays it separately: the lowest round pays into it.
+    { key: "second" as const, name: "second lowest eighteen", holes: ALL,
+      pick: (r: typeof paired[0]["row"]) => r.secondEighteen },
   ];
   for (const s of side) {
     const got = invertPot(
@@ -441,7 +453,7 @@ export function deriveStakes(
       out[s.key] = got.table;
       out.rates[s.key] = got.rate;
     } else {
-      notes.push(`the ${s.key === "total" ? "eighteen" : s.key + " nine"} pot could not be worked out from the image`);
+      notes.push(`the ${s.name} pot could not be worked out from the image`);
     }
   }
 

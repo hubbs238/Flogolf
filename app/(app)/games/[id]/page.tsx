@@ -179,7 +179,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             segmentRates={
               view.showMoney
                 ? computed.rates.segment
-                : { front: 0, back: 0, total: 0 }
+                : { front: 0, back: 0, total: 0, second: 0 }
             }
             golfers={golfers} isAdmin={isAdmin} showMoney={view.showMoney}
             roundType={computed.roundType} cupEligible={computed.cupEligible}

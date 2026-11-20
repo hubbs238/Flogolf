@@ -2,6 +2,8 @@ import {
   awardMoney,
   defaultPayouts,
   defaultFb18Payouts,
+  FB18_SEGMENTS,
+  SECOND_EIGHTEEN_RATE_SHARE,
   nameKey,
   MIN_TEAM_SIZE,
   MAX_TEAM_SIZE,
@@ -1211,9 +1213,9 @@ console.log("\n=== working the stakes back out of a money block ===");
     shown: true,
     rate: 0,
     rows: [
-      { label: "Bay 1", sets: [-200, -200, -200], front: -40, back: -40, eighteen: -60 },
-      { label: "Bay 2", sets: [0, 200, 0], front: -40, back: -40, eighteen: 20 },
-      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40 },
+      { label: "Bay 1", sets: [-200, -200, -200], front: -40, back: -40, eighteen: -40, secondEighteen: -20 },
+      { label: "Bay 2", sets: [0, 200, 0], front: -40, back: -40, eighteen: 0, secondEighteen: 20 },
+      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40, secondEighteen: 0 },
     ],
   };
 
@@ -1229,11 +1231,14 @@ console.log("\n=== working the stakes back out of a money block ===");
   check("the back nine reads the same", [got.back, got.rates.back],
     [{ 1: 2, 2: -1, 3: -1 }, 40]);
 
-  // The sheet splits the eighteen into a lowest and a second lowest prize.
-  // Added together they are one pot, which is how the app stores it.
-  check("the eighteen's two prizes come back as one table",
-    got.total, { 1: 2, 2: 1, 3: -3 });
-  check("at twenty a unit", got.rates.total, 20);
+  // Two prizes, two pots, which is how the league plays them and now how the
+  // app stores them. Ranked on the same eighteen: Bay 3 lowest, Bay 2 second.
+  check("the lowest eighteen is its own pot",
+    got.total, { 1: 1, 2: 0, 3: -1 });
+  check("at forty a unit", got.rates.total, 40);
+  check("and the second lowest is another, paying position two",
+    got.second, { 1: 0, 2: 1, 3: -1 });
+  check("at twenty, which is half of it", got.rates.second, 20);
   check("the tied middle six is skipped, and the note says what was used",
     got.notes, ["2 of 3 matches were readable, and they agreed"]);
 
@@ -1264,9 +1269,9 @@ console.log("\n=== working the stakes back out of a money block ===");
   const inconsistent = deriveStakes(teams, {
     ...money,
     rows: [
-      { label: "Bay 1", sets: [-100, -200, -200], front: -40, back: -40, eighteen: -60 },
-      { label: "Bay 2", sets: [-100, 200, 0], front: -40, back: -40, eighteen: 20 },
-      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40 },
+      { label: "Bay 1", sets: [-100, -200, -200], front: -40, back: -40, eighteen: -40, secondEighteen: -20 },
+      { label: "Bay 2", sets: [-100, 200, 0], front: -40, back: -40, eighteen: 0, secondEighteen: 20 },
+      { label: "Bay 3", sets: [200, 0, 200], front: 80, back: 80, eighteen: 40, secondEighteen: 0 },
     ],
   }, 6);
   check("matches that disagree leave the main game alone", inconsistent.main, null);
@@ -1294,9 +1299,9 @@ console.log("\n=== working the stakes back out of a money block ===");
   const threes = deriveStakes(teams, {
     shown: true, rate: 0,
     rows: [
-      { label: "Bay 1", sets: [0, -25, 0, -25, -25, -25], front: 0, back: 0, eighteen: 0 },
-      { label: "Bay 2", sets: [0, -25, 0, -25, -25,  50], front: 0, back: 0, eighteen: 0 },
-      { label: "Bay 3", sets: [0,  50, 0,  50,  50, -25], front: 0, back: 0, eighteen: 0 },
+      { label: "Bay 1", sets: [0, -25, 0, -25, -25, -25], front: 0, back: 0, eighteen: 0, secondEighteen: 0 },
+      { label: "Bay 2", sets: [0, -25, 0, -25, -25,  50], front: 0, back: 0, eighteen: 0, secondEighteen: 0 },
+      { label: "Bay 3", sets: [0,  50, 0,  50,  50, -25], front: 0, back: 0, eighteen: 0, secondEighteen: 0 },
     ],
   }, null);
   check("six columns of match money means three-hole matches", threes.setHoles, 3);
@@ -1316,7 +1321,10 @@ console.log("\n=== what a finishing position pays, by default ===");
   // invent or destroy money on every round played at that size.
   for (const n of [2, 3, 4, 5, 6, 7, 8, 12]) {
     check(`${n} bays: the match balances`, sums(row(defaultPayouts(n), n)), 0);
-    for (const seg of ["front", "back", "total"] as const) {
+    for (const seg of ["front", "back", "total", "second"] as const) {
+      // A two bay round has no second lowest pot at all, which is an empty
+      // table rather than an unbalanced one.
+      if (seg === "second" && n < 3) continue;
       check(`${n} bays: the ${seg} pot balances`,
         sums(row(defaultFb18Payouts(n, seg), n)), 0);
     }
@@ -1344,10 +1352,19 @@ console.log("\n=== what a finishing position pays, by default ===");
     row(defaultFb18Payouts(5, "back"), 5), [4, -1, -1, -1, -1]);
   check("which is the 40 against -10 four times the sheet settled",
     row(defaultFb18Payouts(5, "back"), 5).map((u) => u * 10), [40, -10, -10, -10, -10]);
-  check("five bays, the eighteen is a full pot and a half pot",
-    row(defaultFb18Payouts(5, "total"), 5), [7, 2, -3, -3, -3]);
-  check("which is the 35, 10, -15, -15, -15 the sheet settled",
-    row(defaultFb18Payouts(5, "total"), 5).map((u) => u * 5), [35, 10, -15, -15, -15]);
+  // The eighteen is two pots, as the league plays it. The lowest round takes
+  // a full one and pays into the second lowest's, which runs at half.
+  check("five bays, the lowest eighteen is winner takes all",
+    row(defaultFb18Payouts(5, "total"), 5), [4, -1, -1, -1, -1]);
+  check("five bays, the second lowest is the same pot one place down",
+    row(defaultFb18Payouts(5, "second"), 5), [-1, 4, -1, -1, -1]);
+  check("at ten and five, together they are the 35, 10, -15 the sheet settled",
+    row(defaultFb18Payouts(5, "total"), 5)
+      .map((u, i) => u * 10 + row(defaultFb18Payouts(5, "second"), 5)[i] * 5),
+    [35, 10, -15, -15, -15]);
+  check("and each pot balances on its own",
+    [sums(row(defaultFb18Payouts(5, "total"), 5)),
+     sums(row(defaultFb18Payouts(5, "second"), 5))], [0, 0]);
 
   // --- the shape of the rules, stated once ------------------------------
   check("third place and below always pay a unit in the match",
@@ -1361,24 +1378,38 @@ console.log("\n=== what a finishing position pays, by default ===");
   check("a nine pays nobody but the winner",
     [3, 5, 7].every((n) => row(defaultFb18Payouts(n, "front"), n).slice(1).every((u) => u === -1)),
     true);
-  check("the eighteen pays exactly two places",
+  check("each eighteen pot pays exactly one place, like the nines",
+    [5, 7].every((n) =>
+      [row(defaultFb18Payouts(n, "total"), n), row(defaultFb18Payouts(n, "second"), n)]
+        .every((r) => r.filter((u) => u > 0).length === 1)),
+    true);
+  check("and between them they pay the top two, nobody else",
     [5, 7].every((n) => {
-      const r = row(defaultFb18Payouts(n, "total"), n);
-      return r[0] > 0 && r[1] > 0 && r.slice(2).every((u) => u === -3);
+      const paid = row(defaultFb18Payouts(n, "total"), n)
+        .map((u, i) => u + row(defaultFb18Payouts(n, "second"), n)[i]);
+      return paid[0] > 0 && paid[1] > 0 && paid.slice(2).every((u) => u < 0);
     }),
     true);
 
   // Two bays is the degenerate case every one of these has to survive.
   check("two bays: the match is a straight unit", row(defaultPayouts(2), 2), [1, -1]);
   check("two bays: so is a nine", row(defaultFb18Payouts(2, "front"), 2), [1, -1]);
-  check("two bays: and the eighteen, since there is no second lowest to pay",
-    row(defaultFb18Payouts(2, "total"), 2), [1, -1]);
+  check("two bays: and the lowest eighteen", row(defaultFb18Payouts(2, "total"), 2), [1, -1]);
+  check("two bays: the second lowest pot does not exist, since paying the " +
+    "loser out of the winner is the first pot run backwards",
+    defaultFb18Payouts(2, "second"), {});
 
   // Three bays on the eighteen is the one place the league's own book
-  // disagrees with itself: 9/30 paid second place, every week after did not.
-  // The default follows the later weeks, and this pins which.
-  check("three bays: the eighteen leaves second place level",
-    row(defaultFb18Payouts(3, "total"), 3), [3, 0, -3]);
+  // disagrees with itself. 9/30 settled it 40 / 20 / -60, where the lowest
+  // round was excluded from the second pot rather than paying into it. Every
+  // week after pays it the way these defaults do, which at $40 and $20 comes
+  // to 60 / 0 / -60.
+  check("three bays: the lowest eighteen", row(defaultFb18Payouts(3, "total"), 3), [2, -1, -1]);
+  check("three bays: the second lowest", row(defaultFb18Payouts(3, "second"), 3), [-1, 2, -1]);
+  check("which at forty and twenty is 60 / 0 / -60, not 9/30's 40 / 20 / -60",
+    row(defaultFb18Payouts(3, "total"), 3)
+      .map((u, i) => u * 40 + row(defaultFb18Payouts(3, "second"), 3)[i] * 20),
+    [60, 0, -60]);
 
   // The side pots must not be the match shape. This is the regression that
   // sent a round out paying places the league does not pay.
@@ -1387,16 +1418,115 @@ console.log("\n=== what a finishing position pays, by default ===");
       JSON.stringify(row(defaultFb18Payouts(n, "front"), n)) !==
       JSON.stringify(row(defaultPayouts(n), n))),
     true);
-  check("nor is the eighteen",
+  check("nor is either eighteen pot",
     [3, 5, 7].every((n) =>
-      JSON.stringify(row(defaultFb18Payouts(n, "total"), n)) !==
-      JSON.stringify(row(defaultPayouts(n), n))),
+      (["total", "second"] as const).every((seg) =>
+        JSON.stringify(row(defaultFb18Payouts(n, seg), n)) !==
+        JSON.stringify(row(defaultPayouts(n), n)))),
+    true);
+  check("the second lowest pot is the lowest's, shifted one place",
+    [3, 5, 7].every((n) => {
+      const first = row(defaultFb18Payouts(n, "total"), n);
+      const second = row(defaultFb18Payouts(n, "second"), n);
+      return second[0] === -1 && second[1] === first[0] && first[1] === -1;
+    }),
     true);
   check("and the two nines pay the same as each other",
     [2, 3, 5, 7].every((n) =>
       JSON.stringify(defaultFb18Payouts(n, "front")) ===
       JSON.stringify(defaultFb18Payouts(n, "back"))),
     true);
+}
+
+
+console.log("\n=== the eighteen is two pots, not one table ===");
+{
+  // Three bays on one card. Bay C has the lowest eighteen, Bay B the second
+  // lowest, Bay A the highest. Every pot is ranked off the same eighteen.
+  const h = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
+  const scores: HoleScores = {
+    A: h([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),       // E
+    B: h([-1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),      // -1
+    C: h([-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),     // -2
+  };
+  const teamIds = ["A", "B", "C"];
+
+  const scored = scoreFb18({
+    teamIds, scores,
+    payouts: {
+      total: defaultFb18Payouts(3, "total"),
+      second: defaultFb18Payouts(3, "second"),
+    },
+  });
+
+  check("every pot is scored, the second eighteen included",
+    scored.results.map((r) => r.segment), [...FB18_SEGMENTS]);
+
+  const pot = (seg: string) => {
+    const r = scored.results.find((x) => x.segment === seg)!;
+    return teamIds.map((t) => r.awards.find((a) => a.teamId === t)?.units ?? 0);
+  };
+  check("the lowest eighteen goes to the lowest round", pot("total"), [-1, -1, 2]);
+  check("the second lowest goes to the runner up", pot("second"), [-1, 2, -1]);
+  check("and the lowest round pays into that pot, rather than sitting it out",
+    pot("second")[2], -1);
+
+  // Rates: the second pot runs at half, so the lowest round clears more than
+  // the runner up even though each pot is winner takes all.
+  const rate = 10;
+  const half = rate * SECOND_EIGHTEEN_RATE_SHARE;
+  check("the second pot runs at half the rate", SECOND_EIGHTEEN_RATE_SHARE, 0.5);
+  check("so five dollars a unit against ten", half, 5);
+
+  const dollars = fb18DollarsBySegment(scored.results, { total: rate, second: half });
+  const take = (t: string) => {
+    const d = dollars[t] ?? { front: 0, back: 0, total: 0, second: 0 };
+    return d.total + d.second;
+  };
+  // C takes the lowest pot (+$20) and pays $5 into the second; B pays $10
+  // into the lowest and takes the second (+$10); A pays into both.
+  check("lowest round clears 15, runner up breaks even, last pays 15",
+    teamIds.map(take), [-15, 0, 15]);
+  check("and the two pots net to nothing between them",
+    teamIds.reduce((n, t) => n + take(t), 0), 0);
+
+  // The whole reason for two pots rather than one table: a tie at the top.
+  // One table splits first and second between the tied pair. Two pots still
+  // split, but each pot splits on its own, which is a different number.
+  const tied: HoleScores = {
+    A: h([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    B: h([-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+    C: h([-1, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+  };
+  const tiedScored = scoreFb18({
+    teamIds, scores: tied,
+    payouts: {
+      total: defaultFb18Payouts(3, "total"),
+      second: defaultFb18Payouts(3, "second"),
+    },
+  });
+  const tiedDollars = fb18DollarsBySegment(tiedScored.results, { total: rate, second: half });
+  const tiedTake = (t: string) => {
+    const d = tiedDollars[t] ?? { front: 0, back: 0, total: 0, second: 0 };
+    return d.total + d.second;
+  };
+  // This is what two pots buys: a tie splits each pot separately, so the
+  // tied pair take 7.5 apiece rather than one clearing 15 and the other
+  // nothing. The money the last bay pays does not move.
+  check("two bays tied for lowest split both pots between them",
+    teamIds.map(tiedTake), [-15, 7.5, 7.5]);
+  check("which still nets to nothing",
+    teamIds.reduce((n, t) => n + tiedTake(t), 0), 0);
+
+  // A pot nobody set up pays nothing, which is how every round made before
+  // this existed keeps settling exactly as it did.
+  const legacy = scoreFb18({
+    teamIds, scores,
+    payouts: { total: defaultFb18Payouts(3, "total") },
+  });
+  const legacyDollars = fb18DollarsBySegment(legacy.results, { total: rate });
+  check("a round with no second pot pays nothing out of it",
+    teamIds.map((t) => (legacyDollars[t] ?? { second: 0 }).second ?? 0), [0, 0, 0]);
 }
 
 console.log("\n=== who is shown money ===");

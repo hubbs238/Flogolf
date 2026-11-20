@@ -8,6 +8,8 @@ import { computeMatch, getMatchBundle } from "@/lib/match-data";
 import {
   defaultFb18Payouts,
   defaultPayouts,
+  FB18_SEGMENTS,
+  SECOND_EIGHTEEN_RATE_SHARE,
   MAX_TEAM_SIZE,
   MIN_TEAM_SIZE,
   nameKey,
@@ -122,9 +124,21 @@ async function insertRound(
     ["front", "fb18_front_dollars_per_unit"],
     ["back", "fb18_back_dollars_per_unit"],
     ["total", "fb18_total_dollars_per_unit"],
+    ["second", "fb18_second_dollars_per_unit"],
   ] as const) {
     const rate = input.fb18Rates?.[segment];
     if (typeof rate === "number" && rate > 0) row[column] = rate;
+  }
+  // The second lowest eighteen is paid at half, so unless a rate was given
+  // it is written out explicitly rather than left to inherit. Inheriting
+  // would pay the second lowest the same as the lowest, which is a different
+  // game and the one that was wrong before.
+  if (row.fb18_second_dollars_per_unit === undefined) {
+    const eighteen =
+      (typeof input.fb18Rates?.total === "number" ? input.fb18Rates.total : null) ??
+      input.dollarsPerUnit;
+    const half = Math.round(eighteen * SECOND_EIGHTEEN_RATE_SHARE * 100) / 100;
+    if (half > 0) row.fb18_second_dollars_per_unit = half;
   }
 
   const { data: match, error } = await supabase
@@ -166,7 +180,7 @@ async function insertRound(
   // set up by hand, or imported off a sheet with no money block, came out
   // paying places the league does not pay.
   await supabase.from("fb18_payouts").insert(
-    (["front", "back", "total"] as const).flatMap((segment) => {
+    FB18_SEGMENTS.flatMap((segment) => {
       const given = input.fb18Payouts?.[segment];
       const fb = given ? trim(given) : defaultFb18Payouts(input.teamCount, segment);
       return Object.entries(fb).map(([position, units]) => ({
@@ -359,7 +373,7 @@ export async function setFb18(
 export async function savePayouts(
   matchId: string,
   main: Record<number, number>,
-  fb18: { front: Record<number, number>; back: Record<number, number>; total: Record<number, number> },
+  fb18: Partial<Record<Fb18Segment, Record<number, number>>>,
 ): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();
@@ -374,8 +388,8 @@ export async function savePayouts(
 
   await supabase.from("fb18_payouts").delete().eq("match_id", matchId);
   const { error: fe } = await supabase.from("fb18_payouts").insert(
-    (["front", "back", "total"] as const).flatMap((segment) =>
-      Object.entries(fb18[segment]).map(([position, units]) => ({
+    FB18_SEGMENTS.flatMap((segment) =>
+      Object.entries(fb18[segment] ?? {}).map(([position, units]) => ({
         match_id: matchId, segment, position: Number(position), units,
       })),
     ),
@@ -727,10 +741,14 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
       })),
     ),
     supabase.from("fb18_payouts").insert(
-      (["front", "back", "total"] as const).flatMap((segment) =>
-        Object.entries(table).map(([position, units]) => ({
-          match_id: match.id, segment, position: Number(position), units,
-        })),
+      // Each pot takes its own default rather than the match table, the same
+      // way a round made any other way does.
+      FB18_SEGMENTS.flatMap((segment) =>
+        Object.entries(defaultFb18Payouts(draftTeams.length, segment)).map(
+          ([position, units]) => ({
+            match_id: match.id, segment, position: Number(position), units,
+          }),
+        ),
       ),
     ),
   ]);
@@ -1581,7 +1599,7 @@ export async function readRoundDetails(
     null;
 
   const fb18Rates: Partial<Record<Fb18Segment, number>> = {};
-  for (const segment of ["front", "back", "total"] as const) {
+  for (const segment of FB18_SEGMENTS) {
     const rate = read.stakes.rates[segment];
     // Only worth recording where it differs from the main rate; otherwise it
     // inherits, which is what the column's null already means.
@@ -1589,7 +1607,7 @@ export async function readRoundDetails(
   }
 
   const fb18Payouts: Partial<Record<Fb18Segment, Record<number, number>>> = {};
-  for (const segment of ["front", "back", "total"] as const) {
+  for (const segment of FB18_SEGMENTS) {
     const table = read.stakes[segment];
     if (table) fb18Payouts[segment] = table;
   }

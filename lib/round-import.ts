@@ -84,9 +84,15 @@ const RoundSchema = z.object({
             eighteen: z
               .number()
               .describe(
-                "What this bay won or lost on the eighteen hole result. If the " +
-                  "image splits it into a lowest and a second lowest prize, add " +
-                  "the two together. 0 if not shown.",
+                "What this bay won or lost on the LOWEST eighteen prize, often " +
+                  "a column headed 1ST 18. 0 if not shown.",
+              ),
+            secondEighteen: z
+              .number()
+              .describe(
+                "What this bay won or lost on the SECOND lowest eighteen prize, " +
+                  "often a column headed 2ND 18. These are two separate pots: " +
+                  "do not add them together. 0 if the image has no such column.",
               ),
           }),
         )
@@ -168,8 +174,10 @@ Report:
    columns headed 3, 6, 9, 12, 15, 18, or F6, M6, B6, or similar), and what
    it won on the front nine, the back nine and the eighteen hole result.
 
-   Add the two eighteen-hole prizes together if the sheet splits them into a
-   lowest and a second lowest. Use negative numbers for a bay that paid out.
+   The eighteen is usually TWO columns, a lowest and a second lowest, often
+   headed 1ST 18 and 2ND 18. Report them separately; they are separate pots
+   and adding them together loses which is which. Use negative numbers for a
+   bay that paid out.
    Report a unit rate only if one is actually written, such as "$200/unit".
    Set shown to false and leave rows empty if there is no money block.
 

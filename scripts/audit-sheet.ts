@@ -81,21 +81,29 @@ eq("the TOTAL column", [-600, 200, 400],
   teamIds.map((t) => (main.unitsByTeam[t] ?? 0) * 200));
 
 console.log("\n=== FB18: the nines pay 1st +2 and the rest -1 at $40;");
-console.log("    the eighteen pays 1st +2, 2nd +1, 3rd -3 at $20, which is the");
-console.log("    sheet's 1ST 18 and 2ND 18 columns rolled into one pot ===");
+console.log("    the eighteen is TWO pots, 1ST 18 and 2ND 18, exactly as the");
+console.log("    sheet keeps them ===");
 const fb18 = scoreFb18({
   teamIds, scores,
   payouts: {
     front: { 1: 2, 2: -1, 3: -1 },
     back: { 1: 2, 2: -1, 3: -1 },
-    total: { 1: 2, 2: 1, 3: -3 },
+    // 1ST 18: the lowest takes it, the last pays, second is level.
+    total: { 1: 1, 2: 0, 3: -1 },
+    // 2ND 18: the second lowest takes it, the last pays, and that week the
+    // lowest round was left out rather than paying in.
+    second: { 1: 0, 2: 1, 3: -1 },
   },
 });
-const fbDollars = fb18DollarsBySegment(fb18.results, { front: 40, back: 40, total: 20 });
-const fb = (t: string) => fbDollars[t] ?? { front: 0, back: 0, total: 0 };
+const fbDollars = fb18DollarsBySegment(fb18.results, {
+  front: 40, back: 40, total: 40, second: 20,
+});
+const fb = (t: string) =>
+  fbDollars[t] ?? { front: 0, back: 0, total: 0, second: 0 };
 eq("F9", [-40, -40, 80], teamIds.map((t) => fb(t).front));
 eq("B9", [-40, -40, 80], teamIds.map((t) => fb(t).back));
-eq("1ST 18 and 2ND 18 added together", [-60, 20, 40], teamIds.map((t) => fb(t).total));
+eq("1ST 18", [-40, 0, 40], teamIds.map((t) => fb(t).total));
+eq("2ND 18", [-20, 20, 0], teamIds.map((t) => fb(t).second));
 
 console.log("\n=== settlement, with the $35 rake ===");
 const breakdownByTeam: Record<string, MoneyBreakdown> = Object.fromEntries(
@@ -103,14 +111,16 @@ const breakdownByTeam: Record<string, MoneyBreakdown> = Object.fromEntries(
     main: (main.unitsByTeam[t] ?? 0) * 200,
     front: fb(t).front,
     back: fb(t).back,
-    eighteen: fb(t).total,
+    // The breakdown keeps one eighteen figure, so the two pots are added
+    // here. That is presentation; the scoring kept them apart.
+    eighteen: fb(t).total + fb(t).second,
   }]),
 );
 const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer: RAKE });
 const mine = (t: string) => money.find((m) => m.teamId === t)!;
 
 eq("the FB18 TOTAL column", [-140, -60, 200],
-  teamIds.map((t) => fb(t).front + fb(t).back + fb(t).total));
+  teamIds.map((t) => fb(t).front + fb(t).back + fb(t).total + fb(t).second));
 eq("the RAKE column, which is the rake times the roster",
   [-175, -140, -140], teamIds.map((t) => -RAKE * size(t)));
 eq("BALANCE TEAM", [-915, 0, 460], teamIds.map((t) => {
@@ -195,25 +205,32 @@ console.log("\n=== do the app's DEFAULT stakes reproduce the sheet? ===");
   // The one place the defaults and this particular week part company, and it
   // is the sheet that is inconsistent rather than the app.
   //
-  // 9/30 settled the eighteen at +40 to the lowest, +20 to the second lowest
-  // and -60 to the last. Every later week settles it winner-heavy: the lowest
-  // takes a full pot and the second lowest a half one, which on three bays
-  // leaves second place with nothing. The defaults follow the later weeks,
-  // because that is what the league has done every week since.
+  // 9/30 left the lowest round OUT of the second lowest's pot: Bay 3 won the
+  // eighteen and paid nothing into 2ND 18. Every later week has it paying in
+  // like everybody else. The defaults follow the later weeks, because that is
+  // what the league has done every week since.
   const sheet18 = [-60, 20, 40];
-  const app18 = paidBy(defaultFb18Payouts(3, "total"), ALL_HOLES, rate.total);
+  const app18 = teamIds.map((_, i) =>
+    paidBy(defaultFb18Payouts(3, "total"), ALL_HOLES, rate.total)[i] +
+    paidBy(defaultFb18Payouts(3, "second"), ALL_HOLES, rate.total / 2)[i]);
   console.log("  NOTE    the eighteen is the one pot 9/30 settled differently");
   console.log(`            sheet, that week   ${JSON.stringify(sheet18)}`);
   console.log(`            app, every week    ${JSON.stringify(app18)}`);
-  console.log("            both net to zero; they split the pot differently");
+  console.log("            both net to zero; they differ on whether the");
+  console.log("            lowest round pays into the second lowest's pot");
 
-  // What the later weeks do, checked on its own terms. Five bays at $5 a half
-  // unit: the lowest eighteen clears $35, the second lowest $10, the rest pay
-  // $15 each. That is the structure every week from 10/7 onward.
-  const five = defaultFb18Payouts(5, "total");
-  eq("five bays, the eighteen as the recent weeks pay it",
+  // What the later weeks do, checked on its own terms. Five bays with the
+  // eighteen at $10 and the second lowest at half that: the lowest round
+  // clears $35, the second lowest $10, the rest pay $15 each.
+  eq("five bays, the eighteen's two pots as the recent weeks pay them",
     [35, 10, -15, -15, -15],
-    [1, 2, 3, 4, 5].map((p) => (five[p] ?? 0) * 5));
+    [1, 2, 3, 4, 5].map((p) =>
+      (defaultFb18Payouts(5, "total")[p] ?? 0) * 10 +
+      (defaultFb18Payouts(5, "second")[p] ?? 0) * 5));
+  eq("five bays, each eighteen pot is winner takes all on its own place",
+    [[4, -1, -1, -1, -1], [-1, 4, -1, -1, -1]],
+    [defaultFb18Payouts(5, "total"), defaultFb18Payouts(5, "second")]
+      .map((t) => [1, 2, 3, 4, 5].map((p) => t[p] ?? 0)));
   eq("five bays, a nine is winner takes all at ten dollars",
     [40, -10, -10, -10, -10],
     [1, 2, 3, 4, 5].map((p) => (defaultFb18Payouts(5, "front")[p] ?? 0) * 10));

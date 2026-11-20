@@ -7,7 +7,7 @@ import { BONUS_POINTS, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
-  BonusSegment, CupEligible, Fb18Result, PlayerMoney, PlayerRoundPoints,
+  BonusSegment, CupEligible, Fb18Result, Fb18Segment, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
 } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
@@ -58,7 +58,7 @@ export function MatchResults({
   bonus: { segments: BonusSegment[]; pointsByTeam: Record<string, number> };
   points: PlayerRoundPoints[];
   /** Dollars per unit for each FB18 segment. They can differ. */
-  segmentRates: Record<"front" | "back" | "total", number>;
+  segmentRates: Record<Fb18Segment, number>;
   golfers: Golfer[];
   isAdmin: boolean;
   /** False for players, and for an admin previewing the player view. */
@@ -267,7 +267,11 @@ export function MatchResults({
               <div key={r.segment} className="rounded-2xl border border-line bg-raised p-4">
                 <div className="mb-2 flex items-baseline justify-between">
                   <h4 className="font-semibold capitalize">
-                    {r.segment === "total" ? "All 18" : `${r.segment} nine`}
+                    {r.segment === "total"
+                      ? "Lowest 18"
+                      : r.segment === "second"
+                        ? "2nd lowest 18"
+                        : `${r.segment} nine`}
                     {showMoney && (
                       <span className="ml-2 text-xs font-normal text-muted">
                         ${segmentRates[r.segment]}/unit

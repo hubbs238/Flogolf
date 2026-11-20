@@ -33,7 +33,7 @@ const ROUND = {
   setHoles: 3 as const,
   tieDefault: "hole" as const,
   rakePerPlayer: 35,
-  rates: { main: 25, front: 10, back: 10, total: 15 },
+  rates: { main: 25, front: 10, back: 10, total: 15, second: 7.5 },
 };
 
 const PAYOUTS: PayoutTable = { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 };

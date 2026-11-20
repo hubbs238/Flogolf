@@ -140,6 +140,12 @@ export type Match = {
   fb18_front_dollars_per_unit: number | null;
   fb18_back_dollars_per_unit: number | null;
   fb18_total_dollars_per_unit: number | null;
+  /**
+   * The second lowest eighteen. Null falls back to HALF the lowest
+   * eighteen's rate, not to the side game rate, because the league pays that
+   * pot at half. See segmentRate in lib/match-data.ts.
+   */
+  fb18_second_dollars_per_unit: number | null;
   tie_default: "hole" | "set";
   status: MatchStatus;
   created_by: string | null;

@@ -3,14 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { savePayouts, setFb18, updateMatchSettings } from "@/app/(app)/games/actions";
-import type { PayoutTable } from "@/lib/game";
+import { SECOND_EIGHTEEN_RATE_SHARE } from "@/lib/game";
+import type { Fb18Segment, PayoutTable } from "@/lib/game";
 import type { Match, MatchTeam } from "@/lib/types";
 
 type Tables = {
   main: PayoutTable;
   front: PayoutTable;
   back: PayoutTable;
+  /** The lowest eighteen. */
   total: PayoutTable;
+  /** The second lowest eighteen, a pot of its own that the lowest pays into. */
+  second: PayoutTable;
 };
 
 /**
@@ -29,7 +33,7 @@ export function MatchStakes({
   match: Match;
   teams: MatchTeam[];
   payouts: PayoutTable;
-  fb18Payouts: { front: PayoutTable; back: PayoutTable; total: PayoutTable };
+  fb18Payouts: Partial<Record<Fb18Segment, PayoutTable>>;
   onSaved?: () => void;
 }) {
   const router = useRouter();
@@ -39,6 +43,9 @@ export function MatchStakes({
   const [tables, setTables] = useState<Tables>({
     main: { ...payouts }, front: { ...fb18Payouts.front },
     back: { ...fb18Payouts.back }, total: { ...fb18Payouts.total },
+    // Empty on a round made before this pot existed, which is how such a
+    // round keeps settling exactly as it did.
+    second: { ...(fb18Payouts.second ?? {}) },
   });
 
   const positions = Array.from({ length: match.team_count }, (_, i) => i + 1);
@@ -50,6 +57,12 @@ export function MatchStakes({
     front: Number(match.fb18_front_dollars_per_unit ?? fb18Rate),
     back: Number(match.fb18_back_dollars_per_unit ?? fb18Rate),
     total: Number(match.fb18_total_dollars_per_unit ?? fb18Rate),
+    // Falls back to HALF the eighteen's rate, not to the side game rate,
+    // because that is what the league pays it. Same chain as the server's.
+    second: Number(
+      match.fb18_second_dollars_per_unit ??
+      Number(match.fb18_total_dollars_per_unit ?? fb18Rate) * SECOND_EIGHTEEN_RATE_SHARE,
+    ),
   };
   const mainSum = positions.reduce((n, p) => n + (tables.main[p] ?? 0), 0);
   const rake = Number(match.dues_per_player ?? 0);
@@ -176,14 +189,16 @@ export function MatchStakes({
       <div>
         <span className="mb-1.5 block text-sm font-medium">FB18 rates</span>
         <p className="mb-2 text-xs text-muted">
-          Front nine, back nine, and the eighteen can each be worth different
-          money. Set one to 1 and its payout numbers below become dollars.
+          Each of the four pots can be worth different money. Set one to 1 and
+          its payout numbers below become dollars. The second lowest eighteen
+          starts at half the lowest, which is how the league pays it.
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-4">
           {([
             ["front", "F9", "fb18FrontDollarsPerUnit"],
             ["back", "B9", "fb18BackDollarsPerUnit"],
-            ["total", "All 18", "fb18TotalDollarsPerUnit"],
+            ["total", "Lowest 18", "fb18TotalDollarsPerUnit"],
+            ["second", "2nd lowest 18", "fb18SecondDollarsPerUnit"],
           ] as const).map(([seg, label, field]) => (
             <label key={seg}>
               <span className="mb-1.5 block text-xs font-medium text-muted">
@@ -238,7 +253,9 @@ export function MatchStakes({
             <tbody>
               {([["main", Number(match.set_holes) === 6 ? "Each 6 hole match" : "Each 3 hole match"],
                  ["front", "FB18 front 9"],
-                 ["back", "FB18 back 9"], ["total", "FB18 all 18"]] as const).map(([key, label]) => (
+                 ["back", "FB18 back 9"],
+                 ["total", "FB18 lowest 18"],
+                 ["second", "FB18 2nd lowest 18"]] as const).map(([key, label]) => (
                 <tr key={key} className="border-b border-line last:border-0">
                   <td className="p-3 font-medium">{label}</td>
                   {positions.map((p) => {
@@ -272,8 +289,10 @@ export function MatchStakes({
       <div className="flex items-center gap-3">
         <button
           onClick={() => run(async () => {
-            const r = await savePayouts(match.id, tables.main,
-              { front: tables.front, back: tables.back, total: tables.total });
+            const r = await savePayouts(match.id, tables.main, {
+              front: tables.front, back: tables.back,
+              total: tables.total, second: tables.second,
+            });
             if (r.ok) setSaved(true);
             return r;
           })}

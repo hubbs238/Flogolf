@@ -462,7 +462,22 @@ export function scoreMainGame(opts: {
 //  lowest front nine, lowest back nine, lowest eighteen.
 // ------------------------------------------------------------
 
-export type Fb18Segment = "front" | "back" | "total";
+/**
+ * The four side pots, all scored off the same card.
+ *
+ * "total" is the lowest eighteen and "second" the second lowest. They are two
+ * pots rather than one table because that is how the league plays them: each
+ * has its own rate and its own set of payers, and the lowest round pays into
+ * the second lowest's pot. Folding them together could reproduce a given
+ * night's money but changed what happens on a tie.
+ */
+export type Fb18Segment = "front" | "back" | "total" | "second";
+
+/**
+ * Every pot, in the order a settlement sheet reads them. One list, so adding
+ * a fifth never means hunting for the loops that forgot it.
+ */
+export const FB18_SEGMENTS = ["front", "back", "total", "second"] as const;
 
 export type Fb18Result = {
   segment: Fb18Segment;
@@ -477,6 +492,9 @@ const FB18_HOLES: Record<Fb18Segment, readonly number[]> = {
   front: FRONT_NINE,
   back: BACK_NINE,
   total: [...FRONT_NINE, ...BACK_NINE],
+  // Same eighteen holes, same ranking. What differs is which position the
+  // table pays, which is the whole point of it being a separate pot.
+  second: [...FRONT_NINE, ...BACK_NINE],
 };
 
 /**
@@ -558,7 +576,11 @@ function scoreFb18Segment(
 export function scoreFb18(opts: {
   teamIds: string[];
   scores: HoleScores;
-  payouts: Record<Fb18Segment, PayoutTable>;
+  /**
+   * Partial on purpose. A pot with no table pays nothing, which is what every
+   * round created before the second eighteen existed has to keep doing.
+   */
+  payouts: Partial<Record<Fb18Segment, PayoutTable>>;
 }): { results: Fb18Result[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts } = opts;
 
@@ -577,6 +599,7 @@ export function scoreFb18(opts: {
     scoreFb18Segment("front", teamIds, scores, payouts.front ?? {}, byBackNine),
     scoreFb18Segment("back", teamIds, scores, payouts.back ?? {}),
     scoreFb18Segment("total", teamIds, scores, payouts.total ?? {}),
+    scoreFb18Segment("second", teamIds, scores, payouts.second ?? {}),
   ];
 
   const unitsByTeam: Record<string, number> = {};
@@ -597,13 +620,13 @@ export function scoreFb18(opts: {
  */
 export function fb18DollarsBySegment(
   results: Fb18Result[],
-  rates: Record<Fb18Segment, number>,
+  rates: Partial<Record<Fb18Segment, number>>,
 ): Record<string, Record<Fb18Segment, number>> {
   const out: Record<string, Record<Fb18Segment, number>> = {};
   for (const result of results) {
     const rate = rates[result.segment] ?? 0;
     for (const award of result.awards) {
-      out[award.teamId] ??= { front: 0, back: 0, total: 0 };
+      out[award.teamId] ??= { front: 0, back: 0, total: 0, second: 0 };
       out[award.teamId][result.segment] += award.units * rate;
     }
   }
@@ -839,17 +862,29 @@ export function defaultFb18Payouts(teamCount: number, segment: Fb18Segment): Pay
   const table: PayoutTable = {};
   if (teamCount < 2) return table;
 
-  if (segment === "front" || segment === "back") {
-    for (let p = 1; p <= teamCount; p++) table[p] = -1;
-    table[1] = teamCount - 1;
-    return table;
-  }
+  // Every pot is winner takes all. All that changes is which position wins:
+  // the lowest nine, the lowest eighteen, or the SECOND lowest eighteen.
+  // Everybody else pays a unit in, the lowest round included when it is the
+  // second lowest's pot being filled.
+  const wins = segment === "second" ? 2 : 1;
+  for (let p = 1; p <= teamCount; p++) table[p] = -1;
 
-  for (let p = 1; p <= teamCount; p++) table[p] = -3;
-  table[1] = 2 * teamCount - 3;
-  table[2] = teamCount - 3;
+  // Two bays have no second lowest worth paying: the pot would be one unit
+  // from the winner to the loser, which is the first pot run backwards.
+  if (segment === "second" && teamCount < 3) return {};
+
+  table[wins] = teamCount - 1;
   return table;
 }
+
+/**
+ * What the second lowest eighteen is worth against the lowest.
+ *
+ * The league pays it at half, so a night at $10 on the eighteen pays $20 to
+ * the second lowest rather than $40. Kept here rather than written into a
+ * form so the two places that set up a round cannot drift.
+ */
+export const SECOND_EIGHTEEN_RATE_SHARE = 0.5;
 
 /** Golf convention for a relative score: E at par, explicit sign otherwise. */
 export function formatRelative(n: number | null | undefined): string {
@@ -877,15 +912,21 @@ export function isUnusualScore(relative: number): boolean {
 
 /**
  * FLO Cup points for the three nine-and-eighteen results. One winner each.
+ *
+ * Deliberately NOT keyed on Fb18Segment. The second lowest eighteen is a pot
+ * of money and nothing else: adding a fourth bonus here would pay Cup points
+ * for finishing second at a game the league already pays in dollars, and the
+ * type is narrow so nobody can do it by accident.
  */
-export const BONUS_POINTS: Record<Fb18Segment, number> = {
+export const BONUS_POINTS: Record<"front" | "back" | "total", number> = {
   front: 10,
   back: 10,
   total: 15,
 };
 
 export type BonusSegment = {
-  segment: Fb18Segment;
+  /** Three, not four. The second lowest eighteen pays money only. */
+  segment: "front" | "back" | "total";
   status: "pending" | "complete";
   /** Each team's total for this segment, null while unfinished. */
   totals: Record<string, number | null>;
@@ -921,7 +962,14 @@ export function scoreBonusPoints(
     },
   });
 
-  const segments: BonusSegment[] = results.map((r) => {
+  // The second lowest eighteen comes back from scoreFb18 like any other pot
+  // and is dropped here. It was never given a table above, so it awards
+  // nothing anyway; leaving it in would put a fourth row on the bonus list
+  // reading "no winner" forever.
+  const segments: BonusSegment[] = results
+    .filter((r): r is typeof r & { segment: "front" | "back" | "total" } =>
+      r.segment !== "second")
+    .map((r) => {
     const winners = r.awards.filter((a) => a.units > 0);
     return {
       segment: r.segment,

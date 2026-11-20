@@ -5,6 +5,7 @@ import {
   roundPoints,
   cupEligibleFor,
   cupDollarsOf,
+  SECOND_EIGHTEEN_RATE_SHARE,
   POINT_MULTIPLIER,
   scoreBonusPoints,
   scoreFb18,
@@ -120,11 +121,17 @@ export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
       front: bySegment("front"),
       back: bySegment("back"),
       total: bySegment("total"),
+      // Empty on every round made before this pot existed, which is how they
+      // keep settling exactly as they always did.
+      second: bySegment("second"),
     },
     scores: toHoleScores((scores.data ?? []) as HoleScore[]),
     decisions: decisionMap,
   };
 }
+
+/** Cents, not fractions of one: a half rate of 7.5 is a real rate. */
+const toCents = (n: number) => Math.round(n * 100) / 100;
 
 /** Runs the engine over a bundle. Everything on screen comes from here. */
 export function computeMatch(b: MatchBundle) {
@@ -168,10 +175,18 @@ export function computeMatch(b: MatchBundle) {
     v === null || v === undefined ? fallback : Number(v);
 
   const fb18Rate = pick(b.match.fb18_dollars_per_unit, mainRate);
+  const eighteenRate = pick(b.match.fb18_total_dollars_per_unit, fb18Rate);
   const segmentRate: Record<Fb18Segment, number> = {
     front: pick(b.match.fb18_front_dollars_per_unit, fb18Rate),
     back: pick(b.match.fb18_back_dollars_per_unit, fb18Rate),
-    total: pick(b.match.fb18_total_dollars_per_unit, fb18Rate),
+    total: eighteenRate,
+    // The second lowest eighteen falls back to a SHARE of the lowest's rate
+    // rather than to the side game rate, because that is how the league pays
+    // it: a half pot. A round that sets it explicitly overrides this.
+    second: pick(
+      b.match.fb18_second_dollars_per_unit,
+      toCents(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE),
+    ),
   };
 
   // Per player figures, a unit paying its rate to each team member, and kept
