@@ -145,7 +145,10 @@ async function insertRound(
     .from("matches").insert(row).select("id").single();
 
   if (error || !match) {
-    return { ok: false, error: error?.message ?? "Could not create the round." };
+    return {
+      ok: false,
+      error: error ? describePayoutWriteError(error) : "Could not create the round.",
+    };
   }
 
   const teams = Array.from({ length: input.teamCount }, (_, i) => ({
@@ -179,7 +182,7 @@ async function insertRound(
   // are winner takes all and its eighteen pays only the lowest two. A round
   // set up by hand, or imported off a sheet with no money block, came out
   // paying places the league does not pay.
-  await supabase.from("fb18_payouts").insert(
+  const { error: fe } = await supabase.from("fb18_payouts").insert(
     FB18_SEGMENTS.flatMap((segment) => {
       const given = input.fb18Payouts?.[segment];
       const fb = given ? trim(given) : defaultFb18Payouts(input.teamCount, segment);
@@ -191,6 +194,14 @@ async function insertRound(
       }));
     }),
   );
+
+  // A round without its side pots looks finished and pays nothing on them,
+  // which is worse than no round. So a refused insert takes the half-made
+  // round back out with it; its teams and match payouts go by cascade.
+  if (fe) {
+    await supabase.from("matches").delete().eq("id", match.id);
+    return { ok: false, error: describePayoutWriteError(fe) };
+  }
 
   return { ok: true, id: match.id };
 }
@@ -370,6 +381,29 @@ export async function setFb18(
   return { ok: true };
 }
 
+/**
+ * Turns "your database is behind the code" into an instruction.
+ *
+ * The fourth side pot needs migration 0016. Until it runs, Postgres refuses
+ * any 'second' row with a constraint name nobody but the person who wrote the
+ * migration would recognise, and refuses the new rate column with a schema
+ * cache message that is worse. Both mean the same thing and have the same fix.
+ */
+function describePayoutWriteError(error: { code?: string; message: string }): string {
+  const text = error.message ?? "";
+  if (
+    /fb18_payouts_segment_check/.test(text) ||
+    /fb18_second_dollars_per_unit/.test(text)
+  ) {
+    return (
+      "The database is missing migration 0016, which adds the second lowest " +
+      "eighteen. Paste supabase/migrations/0016_second_eighteen.sql into the " +
+      "Supabase SQL editor and run it, then save again. Nothing was changed."
+    );
+  }
+  return text;
+}
+
 export async function savePayouts(
   matchId: string,
   main: Record<number, number>,
@@ -378,23 +412,46 @@ export async function savePayouts(
   await requireAdmin();
   const supabase = await createClient();
 
-  await supabase.from("match_payouts").delete().eq("match_id", matchId);
-  const { error } = await supabase.from("match_payouts").insert(
-    Object.entries(main).map(([position, units]) => ({
-      match_id: matchId, position: Number(position), units,
+  // Write first, prune second. The old order deleted every row and then
+  // inserted the new ones, so an insert Postgres refused left the round with
+  // no table at all: its pots paid nothing until somebody noticed. An upsert
+  // is one statement, so it lands whole or not at all, and only once it has
+  // landed is anything removed.
+  const fb18Rows = FB18_SEGMENTS.flatMap((segment) =>
+    Object.entries(fb18[segment] ?? {}).map(([position, units]) => ({
+      match_id: matchId, segment, position: Number(position), units,
     })),
   );
-  if (error) return { ok: false, error: error.message };
+  if (fb18Rows.length > 0) {
+    const { error: fe } = await supabase
+      .from("fb18_payouts")
+      .upsert(fb18Rows, { onConflict: "match_id,segment,position" });
+    if (fe) return { ok: false, error: describePayoutWriteError(fe) };
+  }
 
-  await supabase.from("fb18_payouts").delete().eq("match_id", matchId);
-  const { error: fe } = await supabase.from("fb18_payouts").insert(
-    FB18_SEGMENTS.flatMap((segment) =>
-      Object.entries(fb18[segment] ?? {}).map(([position, units]) => ({
-        match_id: matchId, segment, position: Number(position), units,
-      })),
-    ),
-  );
-  if (fe) return { ok: false, error: fe.message };
+  const mainRows = Object.entries(main).map(([position, units]) => ({
+    match_id: matchId, position: Number(position), units,
+  }));
+  if (mainRows.length > 0) {
+    const { error } = await supabase
+      .from("match_payouts")
+      .upsert(mainRows, { onConflict: "match_id,position" });
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // Now drop whatever the new tables no longer have: places beyond the team
+  // count, and a pot cleared out entirely.
+  const keep = (positions: string[]) => "(" + positions.map(Number).join(",") + ")";
+  const mainKept = Object.keys(main);
+  const pruneMain = supabase.from("match_payouts").delete().eq("match_id", matchId);
+  await (mainKept.length ? pruneMain.not("position", "in", keep(mainKept)) : pruneMain);
+
+  for (const segment of FB18_SEGMENTS) {
+    const kept = Object.keys(fb18[segment] ?? {});
+    const prune = supabase
+      .from("fb18_payouts").delete().eq("match_id", matchId).eq("segment", segment);
+    await (kept.length ? prune.not("position", "in", keep(kept)) : prune);
+  }
 
   revalidateMatch(matchId);
   return { ok: true };
@@ -734,7 +791,7 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
   }
 
   const table = defaultPayouts(draftTeams.length);
-  await Promise.all([
+  const [{ error: mpe }, { error: fpe }] = await Promise.all([
     supabase.from("match_payouts").insert(
       Object.entries(table).map(([position, units]) => ({
         match_id: match.id, position: Number(position), units,
@@ -752,6 +809,13 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
       ),
     ),
   ]);
+
+  // Same reasoning as insertRound: a round missing its tables is worse than
+  // no round, so it goes back out and the admin is told why.
+  if (mpe || fpe) {
+    await supabase.from("matches").delete().eq("id", match.id);
+    return { ok: false, error: describePayoutWriteError((fpe ?? mpe)!) };
+  }
 
   for (const dt of draftTeams) {
     const { data: mt } = await supabase
