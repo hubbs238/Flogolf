@@ -775,23 +775,79 @@ export function nineTotals(holes: Record<number, number | undefined> | undefined
 }
 
 /**
- * A starting payout table that sums to zero, shaped like the seven team
- * example: 1st +3, 2nd +1, 3rd 0, everyone from 4th down -1 each. Admins
- * edit it anyway, this just avoids starting from a blank grid.
+ * What a finishing position pays in a match, the way the league actually
+ * plays it.
+ *
+ * Everyone from third down pays a unit, and that pot goes to the top two
+ * roughly two to one. Read off the league's own book, which settles a three
+ * bay night at 1st +1, 2nd 0, 3rd -1 and a five bay night at 1st +2, 2nd +1
+ * and -1 each from third down.
+ *
+ * Third place paying is the part worth saying out loud: the earlier default
+ * spared it and paid second nothing, which is a different game. On a five bay
+ * card that handed first place the whole pot and left the runner up level
+ * with the field.
+ *
+ * Two and three bay rounds have no "third down" to speak of, so the lowest
+ * place pays and there is nothing left over for second.
  */
 export function defaultPayouts(teamCount: number): PayoutTable {
   const table: PayoutTable = {};
-  const firstLoser = teamCount <= 3 ? teamCount : 4;
-  const pot = teamCount - firstLoser + 1;
+  if (teamCount < 2) return table;
+
+  // Third and below pay, except in a two or three bay round where that is
+  // the last place and nothing below it exists.
+  const firstPayer = teamCount <= 3 ? teamCount : 3;
+  const pot = teamCount - firstPayer + 1;
 
   for (let p = 1; p <= teamCount; p++) table[p] = 0;
-  for (let p = firstLoser; p <= teamCount; p++) table[p] = -1;
+  for (let p = firstPayer; p <= teamCount; p++) table[p] = -1;
 
-  const first = Math.ceil(pot * 0.75);
-  table[1] = first;
-  // Only pay a second place when position 2 is not itself a losing slot,
-  // which it is in a two team round.
-  if (teamCount >= 2 && 2 < firstLoser) table[2] = pot - first;
+  const second = Math.floor(pot / 3);
+  table[1] = pot - second;
+  // Only pay a second place when position 2 is not itself a paying slot,
+  // which it is in a two bay round.
+  if (2 < firstPayer) table[2] = second;
+  return table;
+}
+
+/**
+ * What a finishing position pays in each FB18 side pot.
+ *
+ * These are NOT the match shape, which is where this went wrong before: the
+ * side pots were handed the main game's table and paid second and third
+ * places that the league pays nothing to.
+ *
+ * The nines are winner takes all. Everybody puts a unit in and the lowest
+ * nine takes the lot, which is -1 each and +(n-1) to the winner. The book
+ * settles a three bay front nine at -40, -40, +80 and a five bay one at -10
+ * four times over against +40.
+ *
+ * The eighteen is two prizes in one pot, because a round stores one table per
+ * segment. The lowest eighteen takes a full pot and the second lowest takes a
+ * half one, which the league pays at half the rate. Counted in half units so
+ * both come out whole:
+ *
+ *   lowest        +2(n-1) from the big pot, -1 into the small one
+ *   second lowest -2 into the big pot,      +(n-1) from the small one
+ *   everyone else -2 and -1
+ *
+ * A two bay round has no second lowest to pay, and the arithmetic says so on
+ * its own: +1 and -1.
+ */
+export function defaultFb18Payouts(teamCount: number, segment: Fb18Segment): PayoutTable {
+  const table: PayoutTable = {};
+  if (teamCount < 2) return table;
+
+  if (segment === "front" || segment === "back") {
+    for (let p = 1; p <= teamCount; p++) table[p] = -1;
+    table[1] = teamCount - 1;
+    return table;
+  }
+
+  for (let p = 1; p <= teamCount; p++) table[p] = -3;
+  table[1] = 2 * teamCount - 3;
+  table[2] = teamCount - 3;
   return table;
 }
 

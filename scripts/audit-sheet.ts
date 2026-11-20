@@ -13,6 +13,8 @@
  *   npm run audit-sheet
  */
 import {
+  defaultPayouts,
+  defaultFb18Payouts,
   SIX_HOLE_SETS,
   scoreMainGame,
   scoreFb18,
@@ -24,6 +26,7 @@ import {
 } from "../lib/game";
 
 const holes = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
+const ALL_HOLES = Array.from({ length: 18 }, (_, i) => i + 1);
 const sum = (team: string, hs: readonly number[]) =>
   hs.reduce((n, h) => n + (scores[team][h] ?? 0), 0);
 
@@ -153,6 +156,71 @@ console.log(`\n  the rake takes $${-rakeOut} out of the group, so a settled card
 console.log(`  add up to ${rakeOut} across every player`);
 console.log(`            sheet, divided   ${balance(sheetIndividual)}`);
 console.log(`            app, in full     ${balance(appIndividual)}`);
+
+
+console.log("\n=== do the app's DEFAULT stakes reproduce the sheet? ===");
+// The checks above told the engine what each pot pays. This asks the harder
+// question: set a round up with nothing but a team count, the way an admin
+// does when the uploaded image has no money block, and does the app pay what
+// the league pays?
+//
+// This is the check that was missing. The side pots used to be handed the
+// match table, which pays a second and a third place the league's nines pay
+// nothing to, so a round set up without a money block came out wrong.
+{
+  const rate = { main: 200, front: 40, back: 40, total: 20 };
+  // Position order for this card, lowest score first, per segment.
+  const rank = (hs: readonly number[]) =>
+    teamIds
+      .map((t) => ({ t, score: sum(t, hs) }))
+      .sort((a, b) => a.score - b.score)
+      .map((x) => x.t);
+
+  const paidBy = (table: Record<number, number>, hs: readonly number[], r: number) => {
+    const order = rank(hs);
+    const out: Record<string, number> = {};
+    order.forEach((t, i) => { out[t] = (table[i + 1] ?? 0) * r; });
+    return teamIds.map((t) => out[t]);
+  };
+
+  eq("the match table, by position", [1, 0, -1],
+    teamIds.map((_, i) => defaultPayouts(3)[i + 1] ?? 0));
+  eq("a six-hole match pays what the sheet paid", [-200, 0, 200],
+    paidBy(defaultPayouts(3), SIX_HOLE_SETS[0], rate.main));
+  eq("and the front nine too", [-40, -40, 80],
+    paidBy(defaultFb18Payouts(3, "front"), [1,2,3,4,5,6,7,8,9], rate.front));
+  eq("and the back nine", [-40, -40, 80],
+    paidBy(defaultFb18Payouts(3, "back"), [10,11,12,13,14,15,16,17,18], rate.back));
+
+  // The one place the defaults and this particular week part company, and it
+  // is the sheet that is inconsistent rather than the app.
+  //
+  // 9/30 settled the eighteen at +40 to the lowest, +20 to the second lowest
+  // and -60 to the last. Every later week settles it winner-heavy: the lowest
+  // takes a full pot and the second lowest a half one, which on three bays
+  // leaves second place with nothing. The defaults follow the later weeks,
+  // because that is what the league has done every week since.
+  const sheet18 = [-60, 20, 40];
+  const app18 = paidBy(defaultFb18Payouts(3, "total"), ALL_HOLES, rate.total);
+  console.log("  NOTE    the eighteen is the one pot 9/30 settled differently");
+  console.log(`            sheet, that week   ${JSON.stringify(sheet18)}`);
+  console.log(`            app, every week    ${JSON.stringify(app18)}`);
+  console.log("            both net to zero; they split the pot differently");
+
+  // What the later weeks do, checked on its own terms. Five bays at $5 a half
+  // unit: the lowest eighteen clears $35, the second lowest $10, the rest pay
+  // $15 each. That is the structure every week from 10/7 onward.
+  const five = defaultFb18Payouts(5, "total");
+  eq("five bays, the eighteen as the recent weeks pay it",
+    [35, 10, -15, -15, -15],
+    [1, 2, 3, 4, 5].map((p) => (five[p] ?? 0) * 5));
+  eq("five bays, a nine is winner takes all at ten dollars",
+    [40, -10, -10, -10, -10],
+    [1, 2, 3, 4, 5].map((p) => (defaultFb18Payouts(5, "front")[p] ?? 0) * 10));
+  eq("five bays, a match pays fifty, twenty five, then everyone pays",
+    [50, 25, -25, -25, -25],
+    [1, 2, 3, 4, 5].map((p) => (defaultPayouts(5)[p] ?? 0) * 25));
+}
 
 console.log(bad === 0
   ? "\nSHEET AND APP AGREE ON EVERY SHARED FIGURE\n"

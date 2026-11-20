@@ -1,5 +1,7 @@
 import {
   awardMoney,
+  defaultPayouts,
+  defaultFb18Payouts,
   nameKey,
   MIN_TEAM_SIZE,
   MAX_TEAM_SIZE,
@@ -1300,6 +1302,101 @@ console.log("\n=== working the stakes back out of a money block ===");
   check("six columns of match money means three-hole matches", threes.setHoles, 3);
   check("and the units follow from the order they finished in",
     [threes.main, threes.rates.main], [{ 1: 2, 2: -1, 3: -1 }, 25]);
+}
+
+
+console.log("\n=== what a finishing position pays, by default ===");
+{
+  const row = (t: Record<number, number>, n: number) =>
+    Array.from({ length: n }, (_, i) => t[i + 1] ?? 0);
+  const sums = (a: number[]) => a.reduce((x, y) => x + y, 0);
+
+  // Every pot has to net to zero at every size. The money moves between bays
+  // rather than coming from anywhere, so a table that does not balance would
+  // invent or destroy money on every round played at that size.
+  for (const n of [2, 3, 4, 5, 6, 7, 8, 12]) {
+    check(`${n} bays: the match balances`, sums(row(defaultPayouts(n), n)), 0);
+    for (const seg of ["front", "back", "total"] as const) {
+      check(`${n} bays: the ${seg} pot balances`,
+        sums(row(defaultFb18Payouts(n, seg), n)), 0);
+    }
+  }
+
+  // --- against the league's own book ------------------------------------
+  //
+  // Three bays, 9/30. Matches settled at $200 a unit, nines at $40.
+  check("three bays, a match pays 1 / 0 / -1",
+    row(defaultPayouts(3), 3), [1, 0, -1]);
+  check("which is the 200, 0, -200 the sheet settled",
+    row(defaultPayouts(3), 3).map((u) => u * 200), [200, 0, -200]);
+  check("three bays, a nine is winner takes all",
+    row(defaultFb18Payouts(3, "front"), 3), [2, -1, -1]);
+  check("which is the 80, -40, -40 the sheet settled",
+    row(defaultFb18Payouts(3, "front"), 3).map((u) => u * 40), [80, -40, -40]);
+
+  // Five bays, every week from 10/7 on. Matches at $25, nines at $10, the
+  // eighteen at $5 a half unit.
+  check("five bays, a match pays 2 / 1 then everyone pays",
+    row(defaultPayouts(5), 5), [2, 1, -1, -1, -1]);
+  check("which is the 50, 25, -25, -25, -25 the sheet settled",
+    row(defaultPayouts(5), 5).map((u) => u * 25), [50, 25, -25, -25, -25]);
+  check("five bays, a nine is winner takes all",
+    row(defaultFb18Payouts(5, "back"), 5), [4, -1, -1, -1, -1]);
+  check("which is the 40 against -10 four times the sheet settled",
+    row(defaultFb18Payouts(5, "back"), 5).map((u) => u * 10), [40, -10, -10, -10, -10]);
+  check("five bays, the eighteen is a full pot and a half pot",
+    row(defaultFb18Payouts(5, "total"), 5), [7, 2, -3, -3, -3]);
+  check("which is the 35, 10, -15, -15, -15 the sheet settled",
+    row(defaultFb18Payouts(5, "total"), 5).map((u) => u * 5), [35, 10, -15, -15, -15]);
+
+  // --- the shape of the rules, stated once ------------------------------
+  check("third place and below always pay a unit in the match",
+    [4, 5, 6, 7].every((n) => row(defaultPayouts(n), n).slice(2).every((u) => u === -1)),
+    true);
+  check("second place is paid something from four bays up",
+    [4, 5, 6, 7].map((n) => defaultPayouts(n)[2]! >= 0), [true, true, true, true]);
+  check("but never more than first",
+    [2, 3, 4, 5, 6, 7, 8, 12].every((n) => defaultPayouts(n)[1]! >= defaultPayouts(n)[2]!),
+    true);
+  check("a nine pays nobody but the winner",
+    [3, 5, 7].every((n) => row(defaultFb18Payouts(n, "front"), n).slice(1).every((u) => u === -1)),
+    true);
+  check("the eighteen pays exactly two places",
+    [5, 7].every((n) => {
+      const r = row(defaultFb18Payouts(n, "total"), n);
+      return r[0] > 0 && r[1] > 0 && r.slice(2).every((u) => u === -3);
+    }),
+    true);
+
+  // Two bays is the degenerate case every one of these has to survive.
+  check("two bays: the match is a straight unit", row(defaultPayouts(2), 2), [1, -1]);
+  check("two bays: so is a nine", row(defaultFb18Payouts(2, "front"), 2), [1, -1]);
+  check("two bays: and the eighteen, since there is no second lowest to pay",
+    row(defaultFb18Payouts(2, "total"), 2), [1, -1]);
+
+  // Three bays on the eighteen is the one place the league's own book
+  // disagrees with itself: 9/30 paid second place, every week after did not.
+  // The default follows the later weeks, and this pins which.
+  check("three bays: the eighteen leaves second place level",
+    row(defaultFb18Payouts(3, "total"), 3), [3, 0, -3]);
+
+  // The side pots must not be the match shape. This is the regression that
+  // sent a round out paying places the league does not pay.
+  check("a nine is never the match table",
+    [3, 5, 7].every((n) =>
+      JSON.stringify(row(defaultFb18Payouts(n, "front"), n)) !==
+      JSON.stringify(row(defaultPayouts(n), n))),
+    true);
+  check("nor is the eighteen",
+    [3, 5, 7].every((n) =>
+      JSON.stringify(row(defaultFb18Payouts(n, "total"), n)) !==
+      JSON.stringify(row(defaultPayouts(n), n))),
+    true);
+  check("and the two nines pay the same as each other",
+    [2, 3, 5, 7].every((n) =>
+      JSON.stringify(defaultFb18Payouts(n, "front")) ===
+      JSON.stringify(defaultFb18Payouts(n, "back"))),
+    true);
 }
 
 console.log("\n=== who is shown money ===");

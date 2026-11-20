@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { defaultPayouts, MAX_TEAM_SIZE, MIN_TEAM_SIZE, nameKey } from "@/lib/game";
+import {
+  defaultFb18Payouts,
+  defaultPayouts,
+  MAX_TEAM_SIZE,
+  MIN_TEAM_SIZE,
+  nameKey,
+} from "@/lib/game";
 import { isoFromLooseDate } from "@/lib/dates";
 import type { Fb18Segment, RoundType, SetLength, TieChoice } from "@/lib/game";
 
@@ -151,12 +157,17 @@ async function insertRound(
   );
 
   // Each segment takes its own table where one is known, and otherwise the
-  // same default shape as the main game.
-  const fallback = defaultPayouts(input.teamCount);
+  // default for THAT POT rather than the main game's.
+  //
+  // This is where the stakes were going wrong. The side pots were handed the
+  // match shape, which pays a second and a third place; the league's nines
+  // are winner takes all and its eighteen pays only the lowest two. A round
+  // set up by hand, or imported off a sheet with no money block, came out
+  // paying places the league does not pay.
   await supabase.from("fb18_payouts").insert(
     (["front", "back", "total"] as const).flatMap((segment) => {
       const given = input.fb18Payouts?.[segment];
-      const fb = given ? trim(given) : fallback;
+      const fb = given ? trim(given) : defaultFb18Payouts(input.teamCount, segment);
       return Object.entries(fb).map(([position, units]) => ({
         match_id: match.id,
         segment,

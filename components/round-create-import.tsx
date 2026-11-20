@@ -4,7 +4,13 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { createRoundFromImport, readRoundDetails } from "@/app/(app)/games/actions";
 import type { ReadRoundDetails } from "@/app/(app)/games/actions";
-import { defaultPayouts, formatRelative, MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import {
+  defaultFb18Payouts,
+  defaultPayouts,
+  formatRelative,
+  MAX_TEAM_SIZE,
+  MIN_TEAM_SIZE,
+} from "@/lib/game";
 import type { Fb18Segment } from "@/lib/game";
 import { describeDecodeFailure, downscale } from "@/lib/image-file";
 
@@ -113,14 +119,14 @@ export function RoundCreateImport() {
       setSegRates(s.fb18Rates);
       setSwap({});
 
-      // A pot the money block did not give up falls back to the shape the
-      // app has always used, so the grid is never blank.
-      const fallback = defaultPayouts(s.teamCount);
+      // A pot the money block did not give up falls back to the league's
+      // own shape FOR THAT POT, so the grid is never blank and never shows
+      // the match table against a side game that does not pay like one.
       setUnits({
-        main: s.payouts ?? fallback,
-        front: s.fb18Payouts.front ?? fallback,
-        back: s.fb18Payouts.back ?? fallback,
-        total: s.fb18Payouts.total ?? fallback,
+        main: s.payouts ?? defaultPayouts(s.teamCount),
+        front: s.fb18Payouts.front ?? defaultFb18Payouts(s.teamCount, "front"),
+        back: s.fb18Payouts.back ?? defaultFb18Payouts(s.teamCount, "back"),
+        total: s.fb18Payouts.total ?? defaultFb18Payouts(s.teamCount, "total"),
       });
     } catch (e) {
       setError(
