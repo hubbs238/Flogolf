@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { computeMatch, getMatchBundle } from "@/lib/match-data";
 import {
   defaultFb18Payouts,
   defaultPayouts,
@@ -1727,5 +1728,141 @@ export async function createRoundFromImport(input: {
     holesWritten: applied.holesWritten,
     started: started.ok,
     startError: started.ok ? null : started.error,
+  };
+}
+
+
+// ------------------------------------------------------------
+//  Handing a whole round over as one file
+// ------------------------------------------------------------
+
+/**
+ * The round, everything it was scored from, and everything that followed.
+ *
+ * Built so a round can be checked, or shown to somebody, without handing over
+ * database access. The alternative was a service key, which bypasses every
+ * policy in this project; this goes through requireAdmin like every other
+ * money surface and shows exactly one round.
+ *
+ * Both halves are in here on purpose. The inputs alone would need re-scoring
+ * to say anything, and the outputs alone could not be checked. Together they
+ * are enough to reproduce the round or to catch the engine disagreeing with
+ * the league's own book.
+ */
+export async function exportRoundJson(
+  matchId: string,
+): Promise<{ ok: true; filename: string; json: string } | { ok: false; error: string }> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const bundle = await getMatchBundle(matchId);
+  if (!bundle) return { ok: false, error: "Round not found." };
+
+  const computed = computeMatch(bundle);
+
+  const golferIds = [...new Set(bundle.players.map((p) => p.golfer_id))];
+  const { data: golfers } = await supabase
+    .from("golfers").select("id, name, nickname").in("id", golferIds.length ? golferIds : [""]);
+  const nameOf = new Map(
+    ((golfers ?? []) as { id: string; name: string }[]).map((g) => [g.id, g.name]),
+  );
+
+  const teamName = new Map(bundle.teams.map((t) => [t.id, t.name]));
+
+  const payload = {
+    exported: "round",
+    round: {
+      id: bundle.match.id,
+      name: bundle.match.name,
+      course: bundle.match.course,
+      date: bundle.match.match_date,
+      status: bundle.match.status,
+      roundType: computed.roundType,
+      setHoles: computed.setHoles,
+      pointMultiplier: computed.multiplier,
+      cupEligibleMoney: computed.cupEligible,
+      isFirstMajor: bundle.firstMajorId === bundle.match.id,
+      teamCount: bundle.match.team_count,
+      rosterCap: bundle.match.roster_size,
+      tieDefault: bundle.match.tie_default,
+      rakePerPlayer: computed.rakePerPlayer,
+      rates: computed.rates,
+    },
+    payouts: {
+      main: bundle.payouts,
+      front: bundle.fb18Payouts.front,
+      back: bundle.fb18Payouts.back,
+      total: bundle.fb18Payouts.total,
+    },
+    tieDecisions: bundle.decisions,
+    teams: bundle.teams.map((t) => ({
+      slot: t.slot,
+      name: t.name,
+      captain: t.captain_golfer_id ? nameOf.get(t.captain_golfer_id) ?? null : null,
+      roster: bundle.players
+        .filter((p) => p.team_id === t.id)
+        .sort((a, b) => a.slot - b.slot)
+        .map((p) => ({ slot: p.slot, name: nameOf.get(p.golfer_id) ?? p.golfer_id })),
+      holes: bundle.scores[t.id] ?? {},
+    })),
+    // What the engine made of it, so the two can be compared.
+    scored: {
+      matches: computed.main.segments.map((s) => ({
+        match: s.segment,
+        holes: s.holes,
+        status: s.status,
+        totals: Object.fromEntries(
+          Object.entries(s.totals).map(([id, v]) => [teamName.get(id) ?? id, v]),
+        ),
+        carriedIn: s.carriedIn,
+        carriedOut: s.carriedOut,
+        awards: s.awards.map((a) => ({ team: teamName.get(a.teamId) ?? a.teamId, units: a.units })),
+        unresolvedTies: s.ties.filter((t) => t.needsDecision).length,
+      })),
+      fb18: computed.fb18.results.map((r) => ({
+        segment: r.segment,
+        status: r.status,
+        totals: Object.fromEntries(
+          Object.entries(r.totals).map(([id, v]) => [teamName.get(id) ?? id, v]),
+        ),
+        awards: r.awards.map((a) => ({ team: teamName.get(a.teamId) ?? a.teamId, units: a.units })),
+      })),
+      bonusPoints: computed.bonus.segments.map((b) => ({
+        segment: b.segment,
+        status: b.status,
+        winners: b.winners.map((id) => teamName.get(id) ?? id),
+        eachWins: b.each,
+      })),
+      settlement: computed.money.map((m) => ({
+        player: nameOf.get(m.golferId) ?? m.golferId,
+        team: teamName.get(m.teamId) ?? m.teamId,
+        matchMoney: m.breakdown.main,
+        front: m.breakdown.front,
+        back: m.breakdown.back,
+        eighteen: m.breakdown.eighteen,
+        winnings: m.winnings,
+        rake: m.rake,
+        dollars: m.dollars,
+        cupEligibleDollars: m.cupDollars,
+      })),
+      points: computed.points.map((p) => ({
+        player: nameOf.get(p.golferId) ?? p.golferId,
+        team: teamName.get(p.teamId) ?? p.teamId,
+        fromMoney: p.fromMoney,
+        bonus: p.bonus,
+        total: p.total,
+      })),
+    },
+  };
+
+  const slug =
+    (bundle.match.match_date || "round").replace(/[^0-9a-zA-Z-]/g, "-") +
+    "-" +
+    (bundle.match.name || "round").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+  return {
+    ok: true,
+    filename: `flo-round-${slug}.json`,
+    json: JSON.stringify(payload, null, 2),
   };
 }

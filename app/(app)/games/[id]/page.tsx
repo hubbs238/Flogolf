@@ -7,6 +7,7 @@ import { computeMatch, getAllGolfers, getMatchBundle, getPoolGolfers } from "@/l
 import { MatchSetup } from "@/components/match-setup";
 import { RosterFill } from "@/components/roster-fill";
 import { RosterEditor } from "@/components/roster-editor";
+import { RoundExport } from "@/components/round-export";
 import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
@@ -146,6 +147,12 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
           {match.status === "in_progress" && scorableTeams.length > 0 && (
             <ScorecardUpload matchId={match.id} teams={scorableTeams} />
           )}
+          {/*
+            Last on the page, because it is a tool rather than part of the
+            round: it hands an admin the whole thing as one file so a round
+            can be checked against the sheet without database access.
+          */}
+          {isAdmin && <RoundExport matchId={match.id} name={match.name} />}
           <LiveScorecard
             match={match} teams={teams} captainNames={captainNames} scores={scores}
             isAdmin={isAdmin} myUserId={session.userId}
