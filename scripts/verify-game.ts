@@ -1,5 +1,6 @@
 import {
   awardMoney,
+  shareByPrize,
   defaultPayouts,
   defaultFb18Payouts,
   FB18_SEGMENTS,
@@ -1510,11 +1511,13 @@ console.log("\n=== the eighteen is two pots, not one table ===");
     const d = tiedDollars[t] ?? { front: 0, back: 0, total: 0, second: 0 };
     return d.total + d.second;
   };
-  // This is what two pots buys: a tie splits each pot separately, so the
-  // tied pair take 7.5 apiece rather than one clearing 15 and the other
-  // nothing. The money the last bay pays does not move.
-  check("two bays tied for lowest split both pots between them",
-    teamIds.map(tiedTake), [-15, 7.5, 7.5]);
+  // Two pots AND a fixed prize pool. The tied pair split the whole prize of
+  // each pot, 2 units of the lowest and 2 of the second, rather than
+  // averaging a prize against a penalty. A alone is out of the money, so A
+  // alone funds both, which is why the last bay's bill doubles when the two
+  // ahead of it cannot be separated.
+  check("two bays tied for lowest split the full prize of both pots",
+    teamIds.map(tiedTake), [-30, 15, 15]);
   check("which still nets to nothing",
     teamIds.reduce((n, t) => n + tiedTake(t), 0), 0);
 
@@ -1527,6 +1530,100 @@ console.log("\n=== the eighteen is two pots, not one table ===");
   const legacyDollars = fb18DollarsBySegment(legacy.results, { total: rate });
   check("a round with no second pot pays nothing out of it",
     teamIds.map((t) => (legacyDollars[t] ?? { second: 0 }).second ?? 0), [0, 0, 0]);
+}
+
+
+console.log("\n=== the prize side of a match is fixed ===");
+{
+  // A table pays out whatever its positive entries come to, every time. The
+  // rule this replaced pooled a tied group's positions whole, so a tie that
+  // straddled the last paying place and the first losing one quietly shrank
+  // the match: two bays tied for second on 2 / 1 / -1 / -1 / -1 took
+  // (1 + -1) / 2 = nothing, and the match paid two units where every other
+  // match paid three.
+  const TABLE = { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 };
+  const five = ["A", "B", "C", "D", "E"];
+  const got = (groups: { teamIds: string[]; from: number; held?: boolean }[]) =>
+    shareByPrize(groups, TABLE);
+  const paidOut = (r: Record<string, number>) =>
+    Object.values(r).filter((v) => v > 0).reduce((n, v) => n + v, 0);
+  const nets = (r: Record<string, number>) =>
+    Math.round(Object.values(r).reduce((n, v) => n + v, 0) * 1000) / 1000;
+
+  const clean = got(five.map((t, i) => ({ teamIds: [t], from: i + 1 })));
+  check("nobody tied: straight off the table",
+    five.map((t) => clean[t]), [2, 1, -1, -1, -1]);
+  check("three units paid out", paidOut(clean), 3);
+
+  // The case that started this. B and C tie for second.
+  const second = got([
+    { teamIds: ["A"], from: 1 },
+    { teamIds: ["B", "C"], from: 2 },
+    { teamIds: ["D"], from: 4 },
+    { teamIds: ["E"], from: 5 },
+  ]);
+  check("tied for second: they split the one unit second pays",
+    [second.B, second.C], [0.5, 0.5]);
+  check("and the two bays out of the money cover it",
+    [second.D, second.E], [-1.5, -1.5]);
+  check("still three units paid out", paidOut(second), 3);
+  check("and it nets to nothing", nets(second), 0);
+
+  // A tie for first covers two paying places, so the pair split both.
+  const first = got([
+    { teamIds: ["A", "B"], from: 1 },
+    { teamIds: ["C", "D"], from: 3 },
+    { teamIds: ["E"], from: 5 },
+  ]);
+  check("tied for first: they split both prizes", [first.A, first.B], [1.5, 1.5]);
+  check("and the three out of the money each pay one",
+    [first.C, first.D, first.E], [-1, -1, -1]);
+  check("three units paid out here too", paidOut(first), 3);
+
+  // Four tie for first: still three units, and the one bay left funds it.
+  const four = got([
+    { teamIds: ["A", "B", "C", "D"], from: 1 },
+    { teamIds: ["E"], from: 5 },
+  ]);
+  check("four tied: a quarter of the prize pool each",
+    [four.A, four.B, four.C, four.D], [0.75, 0.75, 0.75, 0.75]);
+  check("and the last bay funds the lot", four.E, -3);
+  check("three units, still", paidOut(four), 3);
+
+  // Nobody left to pay means nothing changes hands.
+  const all = got([{ teamIds: five, from: 1 }]);
+  check("the whole field tied: a push", five.map((t) => all[t]), [0, 0, 0, 0, 0]);
+
+  // A position set to exactly zero is neither a prize nor a cost, so the bay
+  // sitting on it funds nothing.
+  const withZero = shareByPrize(
+    five.map((t, i) => ({ teamIds: [t], from: i + 1 })),
+    { 1: 3, 2: 1, 3: 0, 4: -1, 5: -1 },
+  );
+  check("a zero place pays nothing and funds nothing", withZero.C, 0);
+  check("the two paying places cover the four units",
+    [withZero.D, withZero.E], [-2, -2]);
+
+  // A table that charges nobody, like the Cup bonus, has nothing to fund.
+  const bonusLike = shareByPrize(
+    [{ teamIds: ["A", "B"], from: 1 }, { teamIds: ["C"], from: 3 }],
+    { 1: 10 },
+  );
+  check("a prize-only table splits the prize and charges nobody",
+    [bonusLike.A, bonusLike.B, bonusLike.C], [5, 5, 0]);
+
+  // A carried block collects nothing now, but the bays out of the money are
+  // funding its prize all the same. That is what makes a carry balance
+  // across two matches rather than leaving one of them short.
+  const carried = got([
+    { teamIds: ["A", "B"], from: 1, held: true },
+    { teamIds: ["C"], from: 3 },
+    { teamIds: ["D"], from: 4 },
+    { teamIds: ["E"], from: 5 },
+  ]);
+  check("a carried block collects nothing", [carried.A, carried.B], [0, 0]);
+  check("but the losers still pay for the prize that rolled forward",
+    [carried.C, carried.D, carried.E], [-1, -1, -1]);
 }
 
 console.log("\n=== who is shown money ===");

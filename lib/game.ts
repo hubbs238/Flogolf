@@ -206,17 +206,99 @@ export function resolveSuddenDeath(
   return tiers;
 }
 
-/** Even share of the units attached to a run of positions. */
-function shareOf(
-  positions: number[],
+
+/**
+ * Splits a segment's units among the groups that finished it.
+ *
+ * The prize side of a payout table is fixed. Whatever its positive entries
+ * come to is what the segment pays out, every time, and whoever finished out
+ * of the money funds it in equal shares. A tied group splits the prizes of
+ * the positions it covers.
+ *
+ * The rule this replaced pooled each tied group's positions whole, prizes and
+ * costs together. That quietly shrank the pot whenever a tie straddled the
+ * last paying place and the first losing one: two bays tied for second on a
+ * table paying 2 / 1 / -1 / -1 / -1 took (1 + -1) / 2 = nothing each, and the
+ * match paid two units out where every other match paid three. Over six
+ * matches the round paid 17 units instead of 18, and nobody could see where
+ * the missing one went.
+ *
+ * Groups are given in finishing order with the position each starts at.
+ * Positions nobody is given, because their units carried forward or because
+ * the holes that settle them are not in yet, are simply absent and their
+ * prizes stay out of the pool.
+ *
+ * A segment where every team is in the money and nobody is left to pay for it
+ * is a push: all ties, nothing changes hands.
+ */
+export function shareByPrize(
+  groups: { teamIds: string[]; from: number; held?: boolean }[],
   table: PayoutTable,
-  amongTeams: number,
-): number {
-  if (amongTeams === 0) return 0;
-  const pot = positions.reduce((sum, p) => sum + (table[p] ?? 0), 0);
-  // Three decimals keeps a three way split of an odd pot from drifting the
-  // round off zero sum by more than a rounding hair.
-  return Math.round((pot / amongTeams) * 1000) / 1000;
+): Record<string, number> {
+  const placed = groups.map((g) => ({
+    teamIds: g.teamIds,
+    held: g.held === true,
+    positions: g.teamIds.map((_, i) => g.from + i),
+  }));
+
+  const prizeOf = (positions: number[]) =>
+    positions.reduce((n, p) => n + Math.max(0, table[p] ?? 0), 0);
+  const paysIn = (positions: number[]) =>
+    positions.some((p) => (table[p] ?? 0) < 0);
+
+  const pool = placed.reduce((n, g) => n + prizeOf(g.positions), 0);
+  const anyCost = placed.some((g) => paysIn(g.positions));
+
+  const out: Record<string, number> = {};
+  const funders: string[] = [];
+
+  for (const g of placed) {
+    const prize = prizeOf(g.positions);
+
+    // A group whose units rolled into the next match, or whose deciding
+    // holes are not in yet, collects nothing now. Its prize still counts
+    // toward the pool, because the bays out of the money are funding it
+    // either way: that is what makes a carry balance across two matches
+    // rather than leaving one of them short.
+    if (g.held) {
+      for (const id of g.teamIds) out[id] = 0;
+      continue;
+    }
+
+    if (prize > 0) {
+      // Three decimals, matching the rest of the engine, so a three way
+      // split of an odd pot cannot drift the round off zero sum by more
+      // than a rounding hair.
+      const each = round3(prize / g.teamIds.length);
+      for (const id of g.teamIds) out[id] = each;
+      continue;
+    }
+    for (const id of g.teamIds) out[id] = 0;
+    // A position set to exactly zero is neither a prize nor a cost, so the
+    // team sitting on it funds nothing. Only a position the table charges
+    // for makes its team a payer.
+    if (paysIn(g.positions)) funders.push(...g.teamIds);
+  }
+
+  if (funders.length > 0) {
+    const each = round3(pool / funders.length);
+    for (const id of funders) out[id] = -each;
+    return out;
+  }
+
+  // Nobody is left to pay. On a table that charges somebody, that means the
+  // whole field tied: a push, where nothing changes hands. On a table that
+  // charges nobody, like the Cup bonus, there was never anything to fund and
+  // the prizes stand on their own.
+  if (anyCost) {
+    for (const id of Object.keys(out)) out[id] = 0;
+  }
+  return out;
+}
+
+/** Three decimals, which is the precision every split in here settles to. */
+function round3(n: number): number {
+  return Math.round(n * 1000) / 1000;
 }
 
 function addInto(target: PayoutTable, positions: number[], from: PayoutTable) {
@@ -302,17 +384,18 @@ export function scoreMainGame(opts: {
     const awards: TeamAward[] = [];
     const ties: TieInfo[] = [];
     const carriedOut: PayoutTable = {};
+    // Who finished where, for shareByPrize at the end. A block that carried
+    // its units forward, or one still waiting on the holes that settle it, is
+    // left out: its prizes are not in play, so they must not be in the pool.
+    const groups: { teamIds: string[]; from: number; held?: boolean }[] = [];
 
     let position = 1;
     for (const block of blocks) {
       const positions = block.map((_, i) => position + i);
 
       if (block.length === 1) {
-        awards.push({
-          teamId: block[0],
-          position,
-          units: effective[position] ?? 0,
-        });
+        awards.push({ teamId: block[0], position, units: 0 });
+        groups.push({ teamIds: block, from: position });
         position += 1;
         continue;
       }
@@ -326,12 +409,9 @@ export function scoreMainGame(opts: {
 
       if (uniform) {
         for (let i = 0; i < block.length; i++) {
-          awards.push({
-            teamId: block[i],
-            position: positions[i],
-            units: values[0],
-          });
+          awards.push({ teamId: block[i], position: positions[i], units: 0 });
         }
+        groups.push({ teamIds: block, from: position });
         ties.push({
           segment: s,
           blockKey,
@@ -352,12 +432,12 @@ export function scoreMainGame(opts: {
       if (choice === "set" && lastSegment) {
         // Nothing left to roll into. Share the block out rather than
         // vanishing units that were staked.
-        const share = shareOf(positions, effective, block.length);
         for (let i = 0; i < block.length; i++) {
           awards.push({
-            teamId: block[i], position: positions[i], units: share, splitShare: true,
+            teamId: block[i], position: positions[i], units: 0, splitShare: true,
           });
         }
+        groups.push({ teamIds: block, from: position });
         ties.push({
           segment: s, blockKey, teamIds: block, positions,
           needsDecision: true, choice, resolved: true,
@@ -372,6 +452,7 @@ export function scoreMainGame(opts: {
         for (const id of block) {
           awards.push({ teamId: id, position: null, units: 0, carriedForward: true });
         }
+        groups.push({ teamIds: block, from: position, held: true });
         ties.push({
           segment: s,
           blockKey,
@@ -409,17 +490,17 @@ export function scoreMainGame(opts: {
       let p = position;
       for (const tier of tiers) {
         if (tier.length === 1) {
-          awards.push({ teamId: tier[0], position: p, units: effective[p] ?? 0 });
+          awards.push({ teamId: tier[0], position: p, units: 0 });
+          groups.push({ teamIds: tier, from: p });
           p += 1;
         } else {
-          // Ran out of holes without separating. The positions these teams
-          // were contesting are pooled and shared evenly, which keeps the
-          // round zero sum: the units stay inside the block either way.
-          const tierPositions = tier.map((_, i) => p + i);
-          const share = shareOf(tierPositions, effective, tier.length);
+          // Ran out of holes without separating. They split the prizes of the
+          // positions they were contesting, and the bays out of the money
+          // fund it, so the match still pays out what the table says it does.
           for (const id of tier) {
-            awards.push({ teamId: id, position: p, units: share, splitShare: true });
+            awards.push({ teamId: id, position: p, units: 0, splitShare: true });
           }
+          groups.push({ teamIds: tier, from: p });
           p += tier.length;
         }
       }
@@ -434,6 +515,12 @@ export function scoreMainGame(opts: {
       });
       position += block.length;
     }
+
+    // Every group is placed, so the prize pool and the number of bays funding
+    // it are both known. A block that carried forward or is still pending was
+    // never added to groups, so it keeps the zero it was awarded.
+    const settled = shareByPrize(groups, effective);
+    for (const a of awards) a.units = settled[a.teamId] ?? 0;
 
     for (const a of awards) unitsByTeam[a.teamId] += a.units;
 
@@ -532,21 +619,26 @@ function scoreFb18Segment(
   const blocks = blocksByScore(totals as Record<string, number>, teamIds);
   const awards: TeamAward[] = [];
   const split: number[] = [];
+  // Who finished where. The units come from shareByPrize once every group is
+  // known, because what a losing bay pays depends on how many of them there
+  // are, which is not settled until the last group is placed.
+  const groups: { teamIds: string[]; from: number }[] = [];
   let position = 1;
 
-  /** Pools the contested positions and hands each tied team an equal share. */
+  /** Records a tied group and marks its positions as shared. */
   const shareOut = (tied: string[], from: number) => {
     const positions = tied.map((_, i) => from + i);
-    const share = shareOf(positions, payouts, tied.length);
     for (const id of tied) {
-      awards.push({ teamId: id, position: from, units: share, splitShare: true });
+      awards.push({ teamId: id, position: from, units: 0, splitShare: true });
     }
+    groups.push({ teamIds: tied, from });
     split.push(...positions);
   };
 
   for (const block of blocks) {
     if (block.length === 1) {
-      awards.push({ teamId: block[0], position, units: payouts[position] ?? 0 });
+      awards.push({ teamId: block[0], position, units: 0 });
+      groups.push({ teamIds: block, from: position });
       position += 1;
       continue;
     }
@@ -561,7 +653,8 @@ function scoreFb18Segment(
 
     for (const tier of tiers) {
       if (tier.length === 1) {
-        awards.push({ teamId: tier[0], position, units: payouts[position] ?? 0 });
+        awards.push({ teamId: tier[0], position, units: 0 });
+        groups.push({ teamIds: tier, from: position });
         position += 1;
       } else {
         shareOut(tier, position);
@@ -569,6 +662,13 @@ function scoreFb18Segment(
       }
     }
   }
+
+  // Every group is placed, so the prize pool and the number of bays funding
+  // it are both known. Units are filled in here rather than as each group was
+  // awarded, because what a losing bay pays depends on how many losers there
+  // turned out to be.
+  const units = shareByPrize(groups, payouts);
+  for (const a of awards) a.units = units[a.teamId] ?? 0;
 
   return { segment, status: "complete", totals, awards, split };
 }
