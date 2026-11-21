@@ -28,8 +28,7 @@ export default async function FloCupPage() {
 
       <p className="mb-4 text-sm text-muted">
         Season rounds award one point per dollar of individual winnings before rake,
-        including side games. Losing rounds earn zero points. Majors use double
-        money points and award separate front-nine, back-nine and eighteen-hole bonuses.
+        including side games. Losing rounds earn zero points. Majors earn two points per dollar under the same rule.
       </p>
       <StandingsTable
         rows={rows}

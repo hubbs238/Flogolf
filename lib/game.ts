@@ -763,14 +763,7 @@ export type MoneyBreakdown = {
   eighteen: number;
 };
 
-/** Season rounds use exact gross winnings. The first major used match money
- * alone, while later majors round gross winnings up before doubling. */
 export type CupEligible = "gross" | "main" | "all";
-
-export function cupEligibleFor(roundType: RoundType, legacy = false): CupEligible {
-  if (roundType === "season") return "gross";
-  return legacy ? "main" : "all";
-}
 
 export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
   if (eligible === "main") return b.main;
@@ -792,7 +785,7 @@ export type PlayerMoney = {
   dollars: number;
   /**
    * The portion that counts toward FLO Cup points: the matches alone, or on a
-   * major every dollar won, rounded up to the dollar. See cupEligibleFor and
+   * major every dollar won, rounded up to the dollar. See
    * cupDollarsOf. The rake never reaches it either way, since it leaves the
    * group rather than changing hands.
    */
@@ -846,7 +839,7 @@ export function awardMoney(opts: {
   /**
    * Which winnings feed the Cup. Defaults to the matches alone, so a caller
    * that has not thought about it cannot accidentally pay the FB18 money
-   * twice. Comes from cupEligibleFor.
+   * twice.
    */
   cupEligible?: CupEligible;
 }): PlayerMoney[] {
@@ -1112,7 +1105,7 @@ export function pointsForRound(dollars: number, multiplier = 1): number {
 export type PlayerRoundPoints = {
   golferId: string;
   teamId: string;
-  /** Points from Cup-eligible money. See cupEligibleFor for what counts. */
+  /** Points from Cup-eligible money. */
   fromMoney: number;
   /** Front nine, back nine and eighteen hole bonuses, otherwise 0. */
   bonus: number;
@@ -1155,5 +1148,15 @@ export function roundPoints(opts: {
       // braces against a future negative bonus sneaking in.
       total: Math.max(0, round2(fromMoney + bonus)),
     };
+  });
+}
+
+/** Score each player's settled share before rake. Multipliers apply after
+ * the bay's winnings have been divided among its actual roster. */
+export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
+  return money.map(({ golferId, teamId, winnings }) => {
+    const cents = Math.round(winnings * 100);
+    const points = pointsForRound(cents, POINT_MULTIPLIER[roundType]) / 100;
+    return { golferId, teamId, fromMoney: points, bonus: 0, total: points };
   });
 }

@@ -8,7 +8,7 @@ import {
   nameKey,
   MIN_TEAM_SIZE,
   MAX_TEAM_SIZE,
-  cupEligibleFor,
+  cupPointsForPlayers,
   cupDollarsOf,
   fb18DollarsBySegment,
   resolveSuddenDeath,
@@ -335,10 +335,6 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
 
   check("the default is the season rule, so a caller who forgets cannot pay twice",
     awardMoneyAt(card)[0].cupDollars, 180);
-  check("season rounds use exact gross winnings, majors keep their eligibility rules",
-    [cupEligibleFor("season"), cupEligibleFor("major"),
-     cupEligibleFor("season", true), cupEligibleFor("major", true)],
-    ["gross", "all", "gross", "main"]);
   check("and the helper agrees with both",
     [cupDollarsOf(bd(180, 40, 30, 50), "main"), cupDollarsOf(bd(180, 40, 30, 50), "all")],
     [180, 300]);
@@ -832,62 +828,18 @@ console.log("\n=== the double is applied once, not twice ===");
     plain.find((p) => p.golferId === "p1")!.total, 135);
 }
 
-console.log("\n=== one major card, under the old rule and the new ===");
+console.log("\n=== major points double individual gross winnings ===");
 {
-  // The card from the 10/28 major: $91.70 of match money and $109.98 across
-  // the three FB18 segments, $201.68 a player, and a clean sweep of all three
-  // bonuses.
-  //
-  // That round was the first major, so it keeps the scoring it was settled
-  // under. Every major after it converts the lot. Both answers are pinned
-  // here so the two cannot quietly converge later.
-  const breakdown = bd(91.7, 40, 30, 39.98);
-  const rosters = { t1: ["hubbs"], t2: ["other"] };
-  const card = {
-    breakdownByTeam: { t1: breakdown, t2: bd(-91.7, 0, 0, 0) },
-    rosters,
-  };
-  const score = (legacy: boolean) => {
-    const money = awardMoneyAt({
-      ...card,
-      cupEligible: cupEligibleFor("major", legacy),
-    });
-    const mine = money.find((m) => m.golferId === "hubbs")!;
-    const pts = roundPoints({
-      money,
-      bonusByTeam: { t1: 70, t2: 0 },   // 20 + 20 + 30, already doubled
-      rosters,
-      multiplier: POINT_MULTIPLIER.major,
-    });
-    return {
-      winnings: mine.winnings,
-      cupDollars: mine.cupDollars,
-      ...pts.find((p) => p.golferId === "hubbs")!,
-    };
-  };
-
-  const first = score(true);
-  check("winnings are the four parts added up", first.winnings, 201.68);
-  check("the first major counts the matches alone", first.cupDollars, 91.7);
-  check("so money points are 183.4", first.fromMoney, 183.4);
-  check("the clean sweep is worth 70 either way", first.bonus, 70);
-  check("253.4 on the round, which is what it was settled at",
-    first.total, 253.4);
-
-  const later = score(false);
-  check("every major after it counts the total, rounded up",
-    later.cupDollars, 202);
-  check("rounded up rather than truncated or nearest",
-    later.cupDollars, Math.ceil(201.68));
-  check("so money points are 404", later.fromMoney, 404);
-  check("474 on the round", later.total, 474);
-
-  // And the same card as a plain season round, for the third point of
-  // comparison: exact gross winnings, without a separate bonus.
-  const season = awardMoneyAt({ ...card, cupEligible: cupEligibleFor("season") });
-  check("season points use gross winnings to the cent",
-    roundPoints({ money: season, bonusByTeam: scoreBonusPoints([], {}, 1, "season").pointsByTeam, rosters })
-      .find((p) => p.golferId === "hubbs")!.total, 201.68);
+  const money = awardMoneyAt({
+    breakdownByTeam: { win: bd(91.7, 40, 30, 39.98), loss: bd(-1,0,0,0), even: bd(0,0,0,0) },
+    rosters: { win: ["a"], loss: ["b"], even: ["c"] }, rakePerPlayer: 35,
+  });
+  const major = cupPointsForPlayers(money, "major");
+  check("double the full amount including cents; losses and ties earn zero",
+    major.map(p => p.total), [403.36, 0, 0]);
+  check("side games count through winnings without extra bonus points", major.map(p => p.bonus), [0,0,0]);
+  check("season and major differ only in multiplier",
+    cupPointsForPlayers(money, "season").map(p => p.total * 2), major.map(p => p.total));
 }
 
 console.log("\n=== rounding up belongs to the major rule alone ===");

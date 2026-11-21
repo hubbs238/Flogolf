@@ -12,15 +12,13 @@ import assert from "node:assert/strict";
 import {
   scoreMainGame,
   scoreFb18,
-  scoreBonusPoints,
   fb18DollarsBySegment,
   awardMoney,
-  roundPoints,
+  cupPointsForPlayers,
   segmentsFor,
   nineTotals,
   formatRelative,
   POINT_MULTIPLIER,
-  cupEligibleFor,
   type HoleScores,
   type MoneyBreakdown,
   type PayoutTable,
@@ -74,7 +72,7 @@ const fbDollars = fb18DollarsBySegment(fb18.results, {
   front: ROUND.rates.front, back: ROUND.rates.back, total: ROUND.rates.total, second: ROUND.rates.second,
 });
 const multiplier = POINT_MULTIPLIER[ROUND.roundType];
-const cupEligible = cupEligibleFor(ROUND.roundType);
+const cupEligible = "gross";
 
 const breakdownByTeam: Record<string, MoneyBreakdown> = Object.fromEntries(
   teamIds.map((t) => [t, {
@@ -89,10 +87,7 @@ const money = awardMoney({
   rakePerPlayer: ROUND.rakePerPlayer, cupEligible,
 });
 assert.deepEqual(teamIds.map(t => money.find(row => row.teamId === t)?.dollars), [105, -220, 47, -70, -53]);
-const bonus = scoreBonusPoints(teamIds, scores, multiplier, ROUND.roundType);
-const points = roundPoints({
-  money, bonusByTeam: bonus.pointsByTeam, rosters: ROSTERS, multiplier,
-});
+const points = cupPointsForPlayers(money, ROUND.roundType);
 
 assert.deepEqual(teamIds.map(team => points.find(p => p.teamId === team)?.total), [140, 0, 82, 0, 0]);
 
@@ -156,15 +151,6 @@ for (const r of fb18.results) {
   const pot = teamIds.reduce(
     (n, t) => n + (r.awards.find((a) => a.teamId === t)?.units ?? 0) * rate, 0);
   if (Math.abs(pot) > 0.004) console.log(`  !! this pot is ${money2(pot)} out of balance`);
-}
-
-console.log("\n--- bonus points (points, not money) --------------------------");
-for (const b of bonus.segments) {
-  const label = b.segment === "total" ? "lowest 18" : `lowest ${b.segment} nine`;
-  console.log(
-    `  ${pad(label, 20)} ${pad(b.winners.join(" and ") || "nobody", 22)} ` +
-    `+${b.each} each${b.winners.length > 1 ? "  (tied, split)" : ""}`,
-  );
 }
 
 console.log("\n--- settlement, per player ------------------------------------");

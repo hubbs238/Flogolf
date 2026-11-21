@@ -1912,12 +1912,7 @@ export async function exportRoundJson(
         ),
         awards: r.awards.map((a) => ({ team: teamName.get(a.teamId) ?? a.teamId, units: a.units })),
       })),
-      bonusPoints: computed.bonus.segments.map((b) => ({
-        segment: b.segment,
-        status: b.status,
-        winners: b.winners.map((id) => teamName.get(id) ?? id),
-        eachWins: b.each,
-      })),
+      bonusPoints: [],
       settlement: computed.money.map((m) => ({
         player: nameOf.get(m.golferId) ?? m.golferId,
         team: teamName.get(m.teamId) ?? m.teamId,

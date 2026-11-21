@@ -48,8 +48,7 @@ export function GolferRoundHistory({
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
         Season rounds award one point per dollar of individual winnings before rake,
-        including side games. Losing rounds earn zero points. Majors use double
-        money points and award separate front-nine, back-nine and eighteen-hole bonuses.
+        including side games. Losing rounds earn zero points. Majors earn two points per dollar under the same rule.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">

@@ -105,9 +105,7 @@ export function MatchStakes({
             <option value="major">Major — double points</option>
           </select>
           <span className="mt-1 block text-xs text-muted">
-            A major pays double on every point, and converts every dollar won,
-            FB18 included, as the total rounded up. The money itself is the
-            same either way, and this can be changed at any time.
+            Majors earn two points per dollar of individual winnings before rake, including side games.
           </span>
         </label>
 

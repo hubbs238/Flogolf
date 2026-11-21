@@ -3,20 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
-import { BONUS_POINTS, POINT_MULTIPLIER, formatRelative } from "@/lib/game";
 import { setTieDecision } from "@/app/(app)/games/actions";
 import { TrophyIcon } from "./trophy-icon";
 import type {
-  BonusSegment, CupEligible, Fb18Result, Fb18Segment, PlayerMoney, PlayerRoundPoints,
+  Fb18Result, Fb18Segment, PlayerMoney, PlayerRoundPoints,
   SegmentResult, TieChoice,
 } from "@/lib/game";
 import type { Golfer, Match, MatchTeam } from "@/lib/types";
-
-const BONUS_LABEL: Record<"front" | "back" | "total", string> = {
-  front: "Front nine",
-  back: "Back nine",
-  total: "All eighteen",
-};
 
 function Cash({ n, strong = false }: { n: number; strong?: boolean }) {
   const cls = n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -37,8 +30,7 @@ function Units({ n }: { n: number }) {
 
 export function MatchResults({
   match, teams, segments, fb18, unitsByTeam, money, teamMoney, rakePerPlayer,
-  bonus, points, segmentRates, golfers, isAdmin, showMoney, roundType,
-  cupEligible,
+  points, segmentRates, golfers, isAdmin, showMoney, roundType,
 }: {
   match: Match;
   teams: MatchTeam[];
@@ -55,7 +47,6 @@ export function MatchResults({
   teamMoney: Record<string, { perPlayer: number; total: number }>;
   /** Flat charge each player paid to play. Zero on a round without rake. */
   rakePerPlayer: number;
-  bonus: { segments: BonusSegment[]; pointsByTeam: Record<string, number> };
   points: PlayerRoundPoints[];
   /** Dollars per unit for each FB18 segment. They can differ. */
   segmentRates: Record<Fb18Segment, number>;
@@ -65,11 +56,6 @@ export function MatchResults({
   showMoney: boolean;
   /** A major pays double in points. It says nothing about the shape. */
   roundType: "season" | "major";
-  /**
-   * Whether the FB18 money converts to points on this round. Passed down
-   * rather than re-derived, so the prose cannot disagree with the engine.
-   */
-  cupEligible: CupEligible;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -105,18 +91,6 @@ export function MatchResults({
   const matchCount = segments.length;
   const matchesPhrase =
     matchCount === 3 ? "three six-hole matches" : "six three-hole matches";
-
-  // Derived, never written out. A figure typed into copy beside a figure the
-  // engine computed is a contradiction waiting to be shipped: on a major the
-  // table said +70 while the sentence above it said the three bonuses came to
-  // 35. Both sides multiply the same constants by the same multiplier now.
-  const bonusPts = (segment: "front" | "back" | "total") =>
-    BONUS_POINTS[segment] * POINT_MULTIPLIER[roundType];
-
-  // Where the FB18 winnings convert too, the column is no longer the matches
-  // alone and must not keep calling itself Match Points.
-  const allMoney = cupEligible === "all";
-  const moneyPointsLabel = !major || allMoney ? "Money Points" : "Match Points";
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -258,9 +232,7 @@ export function MatchResults({
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
             {showMoney && " All three pay money."}
-            {!major ? " Side-game winnings count toward each player’s pre-rake points." : allMoney
-              ? " Every dollar of it converts to FLO Cup points as well on this round, on top of the bonus points."
-              : " None of it feeds FLO Cup points, since the bonus points already reward the same results."}
+            {" Side-game winnings count toward pre-rake points."}
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -313,46 +285,6 @@ export function MatchResults({
               </div>
             ))}
           </div>
-        </section>
-      )}
-
-      {bonus.segments.some((b) => b.winners.length > 0) && (
-        <section>
-          <h3 className="mb-1 font-semibold">Bonus points</h3>
-          <p className="mb-3 text-sm text-muted">
-            FLO Cup points, not money. One winner each, and every player on
-            that roster collects the points toward the season standings.
-          </p>
-          <ul className="space-y-2">
-            {bonus.segments.map((b) => (
-              <li
-                key={b.segment}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised p-3 text-sm"
-              >
-                <TrophyIcon className="h-4 w-4 shrink-0 text-fairway-600 dark:text-fairway-300" />
-                <span className="w-24 shrink-0 font-medium">{BONUS_LABEL[b.segment]}</span>
-                <span className="min-w-0 flex-1 text-muted">
-                  {b.winners.length === 0 ? (
-                    b.status === "pending" ? "Not finished yet" : "No winner"
-                  ) : (
-                    <>
-                      <span className="font-medium text-ink">
-                        {b.winners.map(teamName).join(" and ")}
-                      </span>
-                      {" at "}
-                      {formatRelative(b.totals[b.winners[0]])}
-                      {b.winners.length > 1 && " · tied, points split"}
-                    </>
-                  )}
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300">
-                  {b.winners.length === 0
-                    ? `${bonusPts(b.segment)} pts`
-                    : `+${b.each} pts each`}
-                </span>
-              </li>
-            ))}
-          </ul>
         </section>
       )}
 
@@ -415,9 +347,8 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            {!major
-              ? "Each player earns one point per dollar of total winnings before rake, including side games. Losing rounds earn zero points."
-              : `${moneyPointsLabel} are doubled. ${allMoney ? "Total winnings round up before doubling." : "Only match winnings count for this major."} Bonus points are ${bonusPts("front")} for the front nine, ${bonusPts("back")} for the back nine, and ${bonusPts("total")} for the eighteen.`}
+            Each player earns {major ? "two points" : "one point"} per dollar of
+            total winnings before rake, including side games. Losing rounds earn zero points.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -425,8 +356,6 @@ export function MatchResults({
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 text-left font-medium">Player</th>
                   <th className="p-3 text-left font-medium">Team</th>
-                  <th className="w-32 p-3 text-right font-medium">{moneyPointsLabel}</th>
-                  <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
                   <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
                 </tr>
               </thead>
@@ -435,14 +364,6 @@ export function MatchResults({
                   <tr key={p.golferId} className="border-b border-line last:border-0">
                     <td className="p-3 font-medium">{golferName(p.golferId)}</td>
                     <td className="p-3 text-muted">{teamName(p.teamId)}</td>
-                    <td className={`p-3 text-right tabular-nums ${
-                      p.fromMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
-                        : p.fromMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                      {p.fromMoney > 0 ? "+" : ""}{p.fromMoney.toFixed(2)}
-                    </td>
-                    <td className="p-3 text-right tabular-nums text-muted">
-                      {p.bonus > 0 ? `+${p.bonus}` : "—"}
-                    </td>
                     <td className="p-3 text-right">
                       <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${
                         p.total > 0 ? "text-fairway-600 dark:text-fairway-300"

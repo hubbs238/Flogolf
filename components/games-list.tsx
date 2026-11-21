@@ -149,9 +149,7 @@ export function GamesList({
                   <option value="major">Major &mdash; double points</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">
-                  A major pays double on every point, and converts every dollar
-                  won, FB18 included, as the total rounded up. The money itself
-                  is the same.
+                  Majors earn two points per dollar of individual winnings before rake, including side games.
                 </span>
               </label>
 

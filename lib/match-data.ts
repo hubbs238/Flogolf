@@ -2,12 +2,10 @@ import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
-  roundPoints,
-  cupEligibleFor,
+  cupPointsForPlayers,
   cupDollarsOf,
   SECOND_EIGHTEEN_RATE_SHARE,
   POINT_MULTIPLIER,
-  scoreBonusPoints,
   scoreFb18,
   scoreMainGame,
   segmentsFor,
@@ -33,10 +31,7 @@ import type {
 
 export type MatchBundle = {
   match: Match;
-  /**
-   * The earliest major, still scored under the old matches-only rule. Null
-   * before any major has been created.
-   */
+  /** Historical metadata included in round exports. */
   firstMajorId: string | null;
   teams: MatchTeam[];
   players: MatchPlayer[];
@@ -61,16 +56,7 @@ function toHoleScores(rows: HoleScore[]): HoleScores {
   return s;
 }
 
-/**
- * The first major ever played, which keeps the old matches-only scoring.
- *
- * Cached per render rather than asked per round: the season standings walk
- * every finished round and each one needs the same answer.
- *
- * Derived rather than stored, so it needs no column and no migration. The one
- * way to move it is to create a major dated before that round, which would
- * hand the exemption to the new one.
- */
+/** Cached across round exports in the same render. */
 const getFirstMajorId = cache(async (): Promise<string | null> => {
   const supabase = await createClient();
   const { data } = await supabase
@@ -143,10 +129,7 @@ export function computeMatch(b: MatchBundle) {
   const roundType: RoundType = b.match.round_type === "major" ? "major" : "season";
   const setHoles = setLengthOf(b.match.set_holes);
   const multiplier = POINT_MULTIPLIER[roundType];
-  // The first major was settled before every dollar started converting, so it
-  // keeps the scoring it was played under. Every major after it converts.
-  const legacyMajor = b.firstMajorId !== null && b.match.id === b.firstMajorId;
-  const cupEligible = cupEligibleFor(roundType, legacyMajor);
+  const cupEligible = "gross" as const;
 
   const main = scoreMainGame({
     teamIds,
@@ -221,7 +204,6 @@ export function computeMatch(b: MatchBundle) {
 
   const rakePerPlayer = Number(b.match.dues_per_player ?? 0);
   const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer, cupEligible });
-  const bonus = scoreBonusPoints(teamIds, b.scores, multiplier, roundType);
 
   // Team level winnings, rolled up here rather than in the browser so a page
   // can show the state of the round without shipping a row per player.
@@ -244,10 +226,9 @@ export function computeMatch(b: MatchBundle) {
     cupEligible,
     rakePerPlayer,
     teamMoney,
-    bonus,
     rosters,
     money,
-    points: roundPoints({ money, bonusByTeam: bonus.pointsByTeam, rosters, multiplier }),
+    points: cupPointsForPlayers(money, roundType),
   };
 }
 
