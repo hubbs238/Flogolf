@@ -836,9 +836,28 @@ export type PlayerMoney = {
  * money leaving the group rather than moving inside it, so it never reaches
  * cupDollars and a round carrying it will not net to zero.
  */
+/**
+ * How many shares a bay's winnings are cut into, whoever turns up.
+ *
+ * The league's book settles a bay as a team: its winnings are the per-man
+ * figure times four, split evenly among the men actually on the bay. A bay
+ * of four takes the per-man figure each, exactly as before. A bay of five
+ * splits four shares five ways, so each man takes four fifths of it; a bay
+ * of three splits four shares three ways.
+ *
+ * This is what makes a night always net to exactly the rake. Paying every
+ * man the full per-man figure meant a five-man bay collected more than a
+ * four-man bay handed over, and uneven rounds never balanced. Checked against
+ * both weeks of the sheet: 9/30 at -183 / 0 / 115 and 11/18 at
+ * 105 / -220 / 47 / -70 / -53.
+ */
+export const TEAM_SHARES = 4;
+
 export function awardMoney(opts: {
   breakdownByTeam: Record<string, MoneyBreakdown>;
   rosters: Record<string, string[]>;
+  /** Shares a bay's winnings are cut into. Defaults to TEAM_SHARES. */
+  shares?: number;
   /** Flat charge per player. Zero on a round with no rake. */
   rakePerPlayer?: number;
   /**
@@ -849,6 +868,7 @@ export function awardMoney(opts: {
   cupEligible?: CupEligible;
 }): PlayerMoney[] {
   const { breakdownByTeam, rosters, cupEligible = "main" } = opts;
+  const shares = opts.shares && opts.shares > 0 ? opts.shares : TEAM_SHARES;
   // Math.max(0, NaN) is NaN, so the clamp alone would let a bad figure
   // through and poison every settlement row on the round.
   const raw = opts.rakePerPlayer ?? 0;
@@ -858,11 +878,15 @@ export function awardMoney(opts: {
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
     const b = breakdownByTeam[teamId] ?? { main: 0, front: 0, back: 0, eighteen: 0 };
+    // The per-man figures scaled to this bay's share of a four-man pot. Every
+    // part of the breakdown scales, so the Cup points follow the money each
+    // man actually takes home.
+    const scale = golferIds.length > 0 ? shares / golferIds.length : 1;
     const breakdown: MoneyBreakdown = {
-      main: round2(b.main),
-      front: round2(b.front),
-      back: round2(b.back),
-      eighteen: round2(b.eighteen),
+      main: round2(b.main * scale),
+      front: round2(b.front * scale),
+      back: round2(b.back * scale),
+      eighteen: round2(b.eighteen * scale),
     };
     const winnings = round2(
       breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen,

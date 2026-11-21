@@ -48,6 +48,18 @@ function pm(golferId: string, teamId: string, main: number, extra = 0, rake = 0)
   };
 }
 
+
+/**
+ * Most money tests use bays of one or two to isolate a rule (rake, Cup
+ * eligibility), not to test the four-share split. They ask for a share per
+ * man on the first bay, so those bays take the per-man figure unscaled. The
+ * split itself has its own tests further down.
+ */
+function awardMoneyAt(opts: Parameters<typeof awardMoney>[0]) {
+  const first = Object.values(opts.rosters)[0]?.length ?? 1;
+  return awardMoney({ shares: first, ...opts });
+}
+
 let failures = 0;
 function check(label: string, got: unknown, want: unknown) {
   const a = JSON.stringify(got);
@@ -224,7 +236,7 @@ console.log("\n=== FB18 ===");
 console.log("\n=== a unit pays every player, it is not divided ===");
 {
   // 3 units at $100 is $300 each, so a four man team collects $1,200.
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(300), t2: bd(-300) },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7", "p8"] },
   });
@@ -237,7 +249,7 @@ console.log("\n=== a unit pays every player, it is not divided ===");
 }
 {
   // Roster size no longer divides anything, it multiplies the team total.
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(90) },
     rosters: { t1: ["p1", "p2", "p3"] },
   });
@@ -307,14 +319,14 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
     breakdownByTeam: { t1: bd(180, 40, 30, 50) },
     rosters: { t1: ["p1", "p2", "p3", "p4"] },
   };
-  const money = awardMoney(card);
+  const money = awardMoneyAt(card);
   check("money column reports the full figure", money[0].dollars, 300);
   check("Cup figure excludes FB18 entirely", money[0].cupDollars, 180);
   check("and the breakdown says where it came from",
     money[0].breakdown, { main: 180, front: 40, back: 30, eighteen: 50 });
 
   // The same card under major rules. Every dollar converts there.
-  const major = awardMoney({ ...card, cupEligible: "all" });
+  const major = awardMoneyAt({ ...card, cupEligible: "all" });
   check("a major counts every dollar won", major[0].cupDollars, 300);
   check("which is the winnings figure exactly, gross of rake",
     major[0].cupDollars, major[0].winnings);
@@ -322,7 +334,7 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
     major[0].breakdown, money[0].breakdown);
 
   check("the default is the season rule, so a caller who forgets cannot pay twice",
-    awardMoney(card)[0].cupDollars, 180);
+    awardMoneyAt(card)[0].cupDollars, 180);
   check("a major counts everything, anything else the matches alone",
     [cupEligibleFor("season"), cupEligibleFor("major"),
      cupEligibleFor("season", true), cupEligibleFor("major", true)],
@@ -339,8 +351,8 @@ console.log("\n=== rake never reach the Cup figure, on either round type ===");
     rosters: { t1: ["p1"] },
     rakePerPlayer: 35,
   };
-  const season = awardMoney(card)[0];
-  const major = awardMoney({ ...card, cupEligible: "all" })[0];
+  const season = awardMoneyAt(card)[0];
+  const major = awardMoneyAt({ ...card, cupEligible: "all" })[0];
   check("matches only: Cup figure is the matches, before rake", season.cupDollars, 100);
   check("everything: Cup figure is the winnings, before rake", major.cupDollars, 130);
   check("the rake only comes off what changes hands",
@@ -438,7 +450,7 @@ console.log("\n=== settlement includes every FB18 segment ===");
   check("FB18 nets out per team", [fb.A, fb.B], [50, -50]);
 
   // Main game gave A +100 a head. Settlement must carry both.
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: {
       A: { main: 100, front: perSeg.A.front, back: perSeg.A.back, eighteen: perSeg.A.total },
       B: { main: -100, front: perSeg.B.front, back: perSeg.B.back, eighteen: perSeg.B.total },
@@ -497,7 +509,7 @@ console.log("\n=== changing a rate moves every player's money ===");
   const settle = (rates: { front: number; back: number; total: number }) => {
     const fb = fb18DollarsBySegment(results, rates);
     const seg = (id: string) => fb[id] ?? { front: 0, back: 0, total: 0 };
-    return awardMoney({
+    return awardMoneyAt({
       breakdownByTeam: {
         A: { main: 100, front: seg("A").front, back: seg("A").back, eighteen: seg("A").total },
         B: { main: -100, front: seg("B").front, back: seg("B").back, eighteen: seg("B").total },
@@ -528,7 +540,7 @@ console.log("\n=== changing a rate moves every player's money ===");
 
 console.log("\n=== rake come off settlement, never off points ===");
 {
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(180, 40, 30, 50), t2: bd(-180) },
     rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
     rakePerPlayer: 35,
@@ -557,7 +569,7 @@ console.log("\n=== rake come off settlement, never off points ===");
 }
 {
   // Winnings balance across a round, rake do not: they leave the group.
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(100), t2: bd(-100) },
     rosters: { t1: ["p1", "p2"], t2: ["p3", "p4"] },
     rakePerPlayer: 35,
@@ -573,7 +585,7 @@ console.log("\n=== rake come off settlement, never off points ===");
 {
   // A short roster already unbalances winnings. Rake follow heads, not teams,
   // so the shorthanded side pays less in total.
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(100), t2: bd(-100) },
     rosters: { t1: ["p1", "p2", "p3", "p4"], t2: ["p5", "p6", "p7"] },
     rakePerPlayer: 35,
@@ -587,7 +599,7 @@ console.log("\n=== rake come off settlement, never off points ===");
     [...new Set(money.map((m) => m.rake))], [35]);
 }
 {
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
   });
@@ -595,7 +607,7 @@ console.log("\n=== rake come off settlement, never off points ===");
     [money[0].winnings, money[0].rake, money[0].dollars], [100, 0, 100]);
 }
 {
-  const money = awardMoney({
+  const money = awardMoneyAt({
     breakdownByTeam: { t1: bd(0) },
     rosters: { t1: ["p1"] },
     rakePerPlayer: 12.5,
@@ -605,7 +617,7 @@ console.log("\n=== rake come off settlement, never off points ===");
 {
   // A cleared input reaches Number() as NaN. Math.max(0, NaN) is NaN, so the
   // clamp alone would poison every row on the round.
-  const bad = awardMoney({
+  const bad = awardMoneyAt({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
     rakePerPlayer: Number("") + Number("x"),
@@ -613,7 +625,7 @@ console.log("\n=== rake come off settlement, never off points ===");
   check("a NaN charge falls back to nothing rather than spreading",
     [bad[0].rake, bad[0].dollars], [0, 100]);
 
-  const negative = awardMoney({
+  const negative = awardMoneyAt({
     breakdownByTeam: { t1: bd(100) },
     rosters: { t1: ["p1"] },
     rakePerPlayer: -20,
@@ -836,7 +848,7 @@ console.log("\n=== one major card, under the old rule and the new ===");
     rosters,
   };
   const score = (legacy: boolean) => {
-    const money = awardMoney({
+    const money = awardMoneyAt({
       ...card,
       cupEligible: cupEligibleFor("major", legacy),
     });
@@ -872,7 +884,7 @@ console.log("\n=== one major card, under the old rule and the new ===");
 
   // And the same card as a plain season round, for the third point of
   // comparison: single points, matches only, undoubled bonus.
-  const season = awardMoney({ ...card, cupEligible: cupEligibleFor("season") });
+  const season = awardMoneyAt({ ...card, cupEligible: cupEligibleFor("season") });
   check("as a season round it is 91.7 + 35",
     roundPoints({ money: season, bonusByTeam: { t1: 35, t2: 0 }, rosters })
       .find((p) => p.golferId === "hubbs")!.total, 126.7);
