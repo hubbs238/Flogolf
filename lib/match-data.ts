@@ -205,7 +205,6 @@ export function computeMatch(b: MatchBundle) {
   const rakePerPlayer = Number(b.match.dues_per_player ?? 0);
   const money = awardMoney({
     breakdownByTeam, rosters, rakePerPlayer, cupEligible,
-    wholeDollarSettlement: b.match.whole_dollar_settlement,
   });
 
   // Team level winnings, rolled up here rather than in the browser so a page

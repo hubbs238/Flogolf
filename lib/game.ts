@@ -720,7 +720,6 @@ export function awardMoney(opts: {
    * twice.
    */
   cupEligible?: CupEligible;
-  wholeDollarSettlement?: boolean;
 }): PlayerMoney[] {
   const { breakdownByTeam, rosters, cupEligible = "main" } = opts;
   const shares = opts.shares && opts.shares > 0 ? opts.shares : TEAM_SHARES;
@@ -743,9 +742,8 @@ export function awardMoney(opts: {
       back: round2(b.back * scale),
       eighteen: round2(b.eighteen * scale),
     };
-    const winnings = opts.wholeDollarSettlement
-      ? Math.round((b.main + b.front + b.back + b.eighteen) * scale)
-      : round2(breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen);
+    // Round the combined share once. Exact halves go to the higher dollar.
+    const winnings = Math.round((b.main + b.front + b.back + b.eighteen) * scale);
     const dollars = round2(winnings - rake);
 
     for (const golferId of golferIds) {

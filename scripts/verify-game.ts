@@ -827,6 +827,16 @@ console.log("\n=== the double is applied once, not twice ===");
     plain.find((p) => p.golferId === "p1")!.total, 135);
 }
 
+{
+  const money = awardMoney({
+    breakdownByTeam: { win: bd(25, 0.625), loss: bd(-25, -0.625) },
+    rosters: { win: ["a","b","c","d","e"], loss: ["f","g","h","i","j"] },
+    rakePerPlayer: 35, cupEligible: "gross",
+  });
+  check("round each five-player share once before rake, including signed half dollars",
+    [money[0], money[5]].map(p => [p.winnings, p.dollars]), [[21, -14], [-20, -55]]);
+}
+
 console.log("\n=== major points double individual gross winnings ===");
 {
   const money = awardMoneyAt({
@@ -834,8 +844,8 @@ console.log("\n=== major points double individual gross winnings ===");
     rosters: { win: ["a"], loss: ["b"], even: ["c"] }, rakePerPlayer: 35,
   });
   const major = cupPointsForPlayers(money, "major");
-  check("double the full amount including cents; losses and ties earn zero",
-    major.map(p => p.total), [403.36, 0, 0]);
+  check("double the awarded gross; losses and ties earn zero",
+    major.map(p => p.total), [404, 0, 0]);
   check("side games count through winnings without extra bonus points", major.map(p => p.bonus), [0,0,0]);
   check("season and major differ only in multiplier",
     cupPointsForPlayers(money, "season").map(p => p.total * 2), major.map(p => p.total));
@@ -1568,7 +1578,7 @@ console.log("\n=== who is shown money ===");
   const breakdownByTeam = Object.fromEntries(teamIds.map(id =>
     [id, bd(main.unitsByTeam[id] * 25, side[id].front, side[id].back, side[id].total + side[id].second)]));
   const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer: 35,
-    wholeDollarSettlement: true, cupEligible: "gross" });
+    cupEligible: "gross" });
   const each = teamIds.map(id => money.find(player => player.teamId === id)!);
   check("November 11 net per player", each.map(p => p.dollars), [150,-145,-28,-103,-95]);
   check("November 11 pre-rake points", each.map(p => pointsForRound(p.cupDollars, 1)), [185,0,7,0,0]);

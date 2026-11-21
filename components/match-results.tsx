@@ -390,7 +390,7 @@ export function MatchResults({
             What each player owes or collects, and where it came from. Positive
             is money in, negative is money out.
             {anyRake && ` A rake of $${rake.toFixed(2)} a player comes off the total.`}
-            {match.whole_dollar_settlement && " This round rounds each player’s share to the nearest dollar before rake."}
+            {" "}Each player’s share is rounded to the nearest dollar before rake.
             {" "}Only admins see this table.
           </p>
 
