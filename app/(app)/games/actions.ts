@@ -981,15 +981,8 @@ export type ResolvedName = {
   read: string;
   /** The golfer already in the pool this matches, if any. */
   golferId: string | null;
-  /** That golfer's stored name, for showing what it matched. */
-  matched: string | null;
   /** True when committing would create a golfer under the name as read. */
   isNew: boolean;
-  /**
-   * The other bay this same person was read on, when that happened. Null for
-   * a repeat within one bay, which the commit path simply dedupes.
-   */
-  duplicateOf: string | null;
   /**
    * The golfers this spelling could mean, when more than one answers to it.
    * Set means nothing was resolved and the commit is blocked.
@@ -1025,7 +1018,7 @@ export type RoundImportRead =
        * The pool, so a name read as new can be swapped for somebody already
        * in it without leaving this screen.
        */
-      pool: { id: string; name: string }[];
+      pool: { id: string; name: string; nickname: string | null }[];
       /** Problems that would stop a commit, in the admin's words. */
       blockers: string[];
     }
@@ -1086,7 +1079,6 @@ export async function readRoundPhoto(
 
   // One entry per person across the whole card, so the same man under two
   // spellings is caught rather than seated twice.
-  const seenNames = new Map<string, string>();
 
   const out: RoundImportTeam[] = read.teams.map((t, index) => {
     // Bay 3 means team slot 3. Running order is the fallback ONLY for a row
@@ -1101,7 +1093,7 @@ export async function readRoundPhoto(
     if (team && taken.has(team.id)) team = null;
     if (team) taken.add(team.id);
 
-    const players = resolveNames(t.players, t.label, pool, seenNames);
+    const players = resolveNames(t.players, pool);
 
     return {
       label: t.label,
@@ -1135,17 +1127,6 @@ export async function readRoundPhoto(
         `A team needs at least ${MIN_TEAM_SIZE}.`,
       );
     }
-    for (const p of t.players) {
-      if (p.duplicateOf) {
-        blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${t.label}.`);
-      }
-      if (p.sharedBy) {
-        blockers.push(
-          `${p.read} on ${t.label} could be ${p.sharedBy.join(" or ")}. ` +
-          `Give one of them a nickname, or fix the sheet.`,
-        );
-      }
-    }
   }
   if (out.length > roundTeams.length) {
     blockers.push(
@@ -1164,9 +1145,7 @@ export async function readRoundPhoto(
     filledByTeam: Object.fromEntries(
       roundTeams.map((t) => [t.id, [...(filledByTeam.get(t.id) ?? [])].sort((a, b) => a - b)]),
     ),
-    pool: [...pool.byKey.values()]
-      .filter((g, i, all) => all.findIndex((x) => x.id === g.id) === i)
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    pool: pool.golfers,
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,
     confidence: read.confidence,
@@ -1420,6 +1399,7 @@ export async function applyRoundImport(
 // ------------------------------------------------------------
 
 type Pool = {
+  golfers: { id: string; name: string; nickname: string | null }[];
   byKey: Map<string, { id: string; name: string }>;
   /** Folds that more than one golfer answers to, so none of them is picked. */
   ambiguous: Map<string, string[]>;
@@ -1473,42 +1453,21 @@ async function golferPool(): Promise<Pool> {
       byKey.delete(key);
     }
   }
-  return { byKey, ambiguous };
+  return { byKey, ambiguous, golfers: rows.sort((a, b) => a.name.localeCompare(b.name)) };
 }
 
-/**
- * Resolves one bay's names against the pool.
- *
- * `seen` is shared across every bay on the card and keyed by the RESOLVED
- * golfer, falling back to the fold for a name the pool does not know. Keying
- * it on the spelling alone missed the case that matters: a man written by his
- * real name on one bay and his nickname on another is two spellings, one
- * golfer, and one golfer cannot play for two teams.
- */
-function resolveNames(
-  names: string[],
-  label: string,
-  pool: Pool,
-  seen: Map<string, string>,
-): ResolvedName[] {
+function resolveNames(names: string[], pool: Pool): ResolvedName[] {
   return names.map((read) => {
     const key = nameKey(read);
     const shared = pool.ambiguous.get(key) ?? null;
     const hit = shared ? null : pool.byKey.get(key) ?? null;
 
-    // One identity per person, so the same man under two spellings collides.
-    const identity = hit ? `id:${hit.id}` : `name:${key}`;
-    const already = seen.get(identity) ?? null;
-    if (!already) seen.set(identity, label);
-
     return {
       read,
       golferId: hit?.id ?? null,
-      matched: hit?.name ?? null,
       // An ambiguous name is not new. Creating another golfer under a name
       // two people already share would make it worse.
       isNew: !hit && !shared,
-      duplicateOf: already === label ? null : already,
       sharedBy: shared,
     };
   });
@@ -1559,7 +1518,7 @@ export type ReadRoundDetails =
        * The pool, so a name read as new can be swapped for somebody who is
        * already in it without leaving this screen.
        */
-      pool: { id: string; name: string }[];
+      pool: { id: string; name: string; nickname: string | null }[];
       scoreKind: "relative" | "gross";
       scoreKindAssumed: boolean;
       confidence: "high" | "medium" | "low";
@@ -1603,11 +1562,10 @@ export async function readRoundDetails(
   if (!read.ok) return read;
 
   const pool = await golferPool();
-  const seen = new Map<string, string>();
   const bays = read.teams.map((t) => ({
     label: t.label,
     number: t.number,
-    players: resolveNames(t.players, t.label, pool, seen),
+    players: resolveNames(t.players, pool),
     holes: t.holes,
   }));
 
@@ -1629,17 +1587,6 @@ export async function readRoundDetails(
         `${b.label} read only one player, so its name block was probably cut off. ` +
         `A team needs at least ${MIN_TEAM_SIZE}.`,
       );
-    }
-    for (const p of b.players) {
-      if (p.duplicateOf) {
-        blockers.push(`${p.read} was read on both ${p.duplicateOf} and ${b.label}.`);
-      }
-      if (p.sharedBy) {
-        blockers.push(
-          `${p.read} on ${b.label} could be ${p.sharedBy.join(" or ")}. ` +
-          `Give one of them a nickname, or fix the sheet.`,
-        );
-      }
     }
   }
 
@@ -1704,9 +1651,7 @@ export async function readRoundDetails(
       fb18Rates,
     },
     stakeNotes: read.stakes.notes,
-    pool: [...pool.byKey.values()]
-      .filter((g, i, all) => all.findIndex((x) => x.id === g.id) === i)
-      .sort((a, b) => a.name.localeCompare(b.name)),
+    pool: pool.golfers,
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,
     confidence: read.confidence,

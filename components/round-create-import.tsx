@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import { ImportPlayerRow, playerReviewErrors, useImportPlayers } from "./import-player-review";
 import { useRouter } from "next/navigation";
 import { createRoundFromImport, readRoundDetails } from "@/app/(app)/games/actions";
 import type { ReadRoundDetails } from "@/app/(app)/games/actions";
@@ -24,9 +25,6 @@ const HOLES = Array.from({ length: 18 }, (_, i) => i + 1);
 
 type Read = Extract<ReadRoundDetails, { ok: true }>;
 type Units = Record<number, number>;
-
-/** "Add as new" rather than an id, so a blank select means exactly that. */
-const AS_NEW = "";
 
 const POTS = [
   { key: "main" as const, label: "Match" },
@@ -77,15 +75,14 @@ export function RoundCreateImport() {
   const [units, setUnits] = useState<Record<string, Units>>({});
   const [segRates, setSegRates] = useState<Partial<Record<Fb18Segment, number>>>({});
 
-  // Who a name read as new actually is. Keyed "bay:player"; blank means add.
-  const [swap, setSwap] = useState<Record<string, string>>({});
+  const review = useImportPlayers();
 
   function reset() {
     setRead(null);
     setError(null);
     setUnits({});
     setSegRates({});
-    setSwap({});
+    review.reset();
   }
 
   async function onFile(file: File) {
@@ -120,7 +117,7 @@ export function RoundCreateImport() {
       setRoundType(s.roundType);
       setSetHoles(s.setHoles);
       setSegRates(s.fb18Rates);
-      setSwap({});
+      review.reset();
 
       // A pot the money block did not give up falls back to the league's
       // own shape FOR THAT POT, so the grid is never blank and never shows
@@ -146,47 +143,12 @@ export function RoundCreateImport() {
   const teamCount = read?.bays.length ?? 0;
   const positions = Array.from({ length: teamCount }, (_, i) => i + 1);
 
-  /** The golfer a read name will end up as, after any swap. */
-  const resolvedId = (bay: number, player: number, fallback: string | null) => {
-    const key = `${bay}:${player}`;
-    return key in swap ? swap[key] || null : fallback;
-  };
-
-  const newNames = read
-    ? read.bays.flatMap((b, bi) =>
-        b.players
-          .map((p, pi) => ({ p, bi, pi }))
-          .filter(({ p, bi: b2, pi }) => (p.isNew || p.sharedBy) && !resolvedId(b2, pi, p.golferId)),
-      )
-    : [];
 
   const blockers = (() => {
     if (!read) return [];
-    const out = [...read.blockers.filter((b) => !/could be /.test(b))];
-
-    // An ambiguous name is only a problem until somebody says who it is.
-    for (const [bi, b] of read.bays.entries()) {
-      for (const [pi, p] of b.players.entries()) {
-        if (p.sharedBy && !resolvedId(bi, pi, p.golferId)) {
-          out.push(`${p.read} on ${b.label} could be ${p.sharedBy.join(" or ")}. Pick one.`);
-        }
-      }
-    }
-
-    // A swap can seat one man on two bays, which no round can hold.
-    const seen = new Map<string, string>();
-    for (const [bi, b] of read.bays.entries()) {
-      for (const [pi, p] of b.players.entries()) {
-        const id = resolvedId(bi, pi, p.golferId);
-        if (!id) continue;
-        const where = seen.get(id);
-        if (where && where !== b.label) {
-          out.push(`${p.read} is now the same golfer on both ${where} and ${b.label}.`);
-        } else {
-          seen.set(id, b.label);
-        }
-      }
-    }
+    const out = [...read.blockers, ...playerReviewErrors(
+      read.bays.map((bay, index) => ({ ...bay, index })), review, read.pool,
+    )];
 
     for (const b of read.bays) {
       if (b.players.length > rosterSize) {
@@ -227,10 +189,7 @@ export function RoundCreateImport() {
           fb18Rates: segRates,
         },
         bays: read.bays.map((b, bi) => ({
-          players: b.players.map((p, pi) => ({
-            read: p.read,
-            golferId: resolvedId(bi, pi, p.golferId),
-          })),
+          players: b.players.map((p, pi) => review.reviewed(bi, pi, p)),
           holes: b.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
         })),
       });
@@ -274,8 +233,7 @@ export function RoundCreateImport() {
           <p className="mt-1 max-w-2xl text-sm text-muted">
             Upload the sheet and this fills the whole round in from it: the
             bays, who played, the card, the date, the rake, how the eighteen
-            was cut, and what a finishing position pays. Read it back, fix
-            anything the reader got wrong, and say who the new names are.
+            was cut, and what a finishing position pays. Review the scores and player assignments before saving.
           </p>
         </div>
         <button
@@ -535,11 +493,6 @@ export function RoundCreateImport() {
           <div>
             <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted">
               Bays
-              {newNames.length > 0 && (
-                <span className="ml-2 font-normal normal-case tracking-normal text-amber-700 dark:text-amber-200">
-                  {newNames.length} name{newNames.length === 1 ? "" : "s"} to confirm
-                </span>
-              )}
             </h4>
             <div className="space-y-3">
               {read.bays.map((b, bi) => (
@@ -551,11 +504,6 @@ export function RoundCreateImport() {
                       b.players.length > rosterSize ? "text-flag-500" : "text-muted"}`}>
                       {b.players.length} player{b.players.length === 1 ? "" : "s"}
                     </span>
-                    {b.players.length > 0 && (
-                      <span className="text-xs text-muted">
-                        captain: {b.players[0].read}
-                      </span>
-                    )}
                   </div>
 
                   {b.players.length === 0 ? (
@@ -565,50 +513,10 @@ export function RoundCreateImport() {
                     </p>
                   ) : (
                     <ul className="mb-3 space-y-1.5">
-                      {b.players.map((p, pi) => {
-                        const key = `${bi}:${pi}`;
-                        const needsAnswer = p.isNew || Boolean(p.sharedBy);
-                        const chosen = key in swap ? swap[key] : p.golferId ?? AS_NEW;
-                        return (
-                          <li key={`${pi}-${p.read}`} className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="w-6 text-xs text-muted">
-                              {pi === 0 ? "C" : pi + 1}
-                            </span>
-                            <span className="font-medium">{p.read}</span>
-
-                            {!needsAnswer && p.matched && (
-                              <span className="text-xs text-muted">
-                                {p.matched === p.read ? "already in the pool" : `= ${p.matched}`}
-                              </span>
-                            )}
-
-                            {needsAnswer && (
-                              <>
-                                <select
-                                  value={chosen}
-                                  onChange={(e) =>
-                                    setSwap((prev) => ({ ...prev, [key]: e.target.value }))
-                                  }
-                                  className="rounded-lg border border-line bg-surface px-2 py-1 text-xs outline-none focus:border-fairway-400"
-                                >
-                                  <option value={AS_NEW}>
-                                    {p.sharedBy ? "Pick who this is" : `Add ${p.read} as new`}
-                                  </option>
-                                  {read.pool.map((g) => (
-                                    <option key={g.id} value={g.id}>{g.name}</option>
-                                  ))}
-                                </select>
-                                {chosen === AS_NEW && (
-                                  <span className={`text-xs font-semibold uppercase tracking-wide ${
-                                    p.sharedBy ? "text-flag-500" : "text-amber-700 dark:text-amber-200"}`}>
-                                    {p.sharedBy ? "ambiguous" : "new"}
-                                  </span>
-                                )}
-                              </>
-                            )}
-                          </li>
-                        );
-                      })}
+                      {b.players.map((p, pi) => (
+                        <ImportPlayerRow key={pi} player={p} bay={bi} slot={pi} label={b.label}
+                          pool={read.pool} review={review} disabled={pending} />
+                      ))}
                     </ul>
                   )}
 
