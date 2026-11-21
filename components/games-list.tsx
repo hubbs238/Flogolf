@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createMatch } from "@/app/(app)/games/actions";
-import { MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import { FIVE_TEAM_STAKES, MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
 import { RoundCreateImport } from "@/components/round-create-import";
 import type { Match } from "@/lib/types";
 
@@ -41,7 +41,8 @@ export function GamesList({
   const [course, setCourse] = useState("");
   const [teamCount, setTeamCount] = useState(7);
   const [rosterSize, setRosterSize] = useState(4);
-  const [dollars, setDollars] = useState(5);
+  const [customRate, setDollars] = useState<number | null>(null);
+  const dollars = customRate ?? (teamCount === 5 ? FIVE_TEAM_STAKES.dollarsPerUnit : 5);
   const [tieDefault, setTieDefault] = useState<"hole" | "set">("hole");
   const [roundType, setRoundType] = useState<"season" | "major">("season");
   const [setHoles, setSetHoles] = useState<3 | 6>(3);

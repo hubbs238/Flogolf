@@ -6,6 +6,7 @@ import { requireAdmin, requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { computeMatch, getMatchBundle } from "@/lib/match-data";
 import {
+  FIVE_TEAM_STAKES,
   defaultFb18Payouts,
   defaultPayouts,
   FB18_SEGMENTS,
@@ -50,6 +51,15 @@ const revalidateMatch = revalidateMoney;
  */
 function revalidateScore(matchId: string) {
   revalidatePath(`/games/${matchId}`);
+}
+
+function fiveTeamStakeColumns() {
+  const { dollarsPerUnit, rakePerPlayer, rates } = FIVE_TEAM_STAKES;
+  return {
+    dollars_per_unit: dollarsPerUnit, dues_per_player: rakePerPlayer,
+    fb18_front_dollars_per_unit: rates.front, fb18_back_dollars_per_unit: rates.back,
+    fb18_total_dollars_per_unit: rates.total, fb18_second_dollars_per_unit: rates.second,
+  };
 }
 
 export type NewRound = {
@@ -108,6 +118,7 @@ async function insertRound(
     course: input.course.trim(),
     team_count: input.teamCount,
     roster_size: input.rosterSize,
+    ...(input.teamCount === 5 && fiveTeamStakeColumns()),
     dollars_per_unit: input.dollarsPerUnit,
     round_type: input.roundType ?? "season",
     set_holes: input.setHoles ?? (input.roundType === "major" ? 6 : 3),
@@ -127,7 +138,7 @@ async function insertRound(
     ["second", "fb18_second_dollars_per_unit"],
   ] as const) {
     const rate = input.fb18Rates?.[segment];
-    if (typeof rate === "number" && rate > 0) row[column] = rate;
+    if (typeof rate === "number" && rate >= 0) row[column] = rate;
   }
   // The second lowest eighteen is paid at half, so unless a rate was given
   // it is written out explicitly rather than left to inherit. Inheriting
@@ -155,6 +166,7 @@ async function insertRound(
     match_id: match.id,
     slot: i + 1,
     name: `Team ${i + 1}`,
+    ...(input.teamCount === 5 && { in_fb18: true }),
   }));
   await supabase.from("match_teams").insert(teams);
 
@@ -228,6 +240,7 @@ export async function updateMatchSettings(
     fb18FrontDollarsPerUnit?: number | null;
     fb18BackDollarsPerUnit?: number | null;
     fb18TotalDollarsPerUnit?: number | null;
+    fb18SecondDollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
     roundType?: RoundType;
     /** Re-segments the round. Locked once scoring opens, like team count. */
@@ -258,6 +271,7 @@ export async function updateMatchSettings(
     ["fb18FrontDollarsPerUnit", "fb18_front_dollars_per_unit"],
     ["fb18BackDollarsPerUnit", "fb18_back_dollars_per_unit"],
     ["fb18TotalDollarsPerUnit", "fb18_total_dollars_per_unit"],
+    ["fb18SecondDollarsPerUnit", "fb18_second_dollars_per_unit"],
   ] as const;
 
   for (const [key, column] of rateFields) {
@@ -774,6 +788,7 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
     .insert({
       name: draft.name,
       team_count: draftTeams.length,
+      ...(draftTeams.length === 5 && fiveTeamStakeColumns()),
       // Drafts run 2 to 20 on their own rules; a round's teams hold 6. Clamped
       // rather than copied, or a draft of eight makes a round whose own cap is
       // a number its teams can never reach.
@@ -823,6 +838,7 @@ export async function createRoundFromDraft(draftId: string): Promise<ActionResul
       .insert({
         match_id: match.id,
         slot: dt.slot,
+        ...(draftTeams.length === 5 && { in_fb18: true }),
         name: dt.name,
         captain_golfer_id: dt.captain_golfer_id,
         captain_user_id: dt.captain_user_id,
@@ -1644,13 +1660,13 @@ export async function readRoundDetails(
       isoDate: isoFromLooseDate(read.details.date),
       roundType,
       setHoles: read.details.setHoles ?? (roundType === "major" ? 6 : 3),
-      dollarsPerUnit: stakeRate ?? 5,
-      rakePerPlayer: read.details.rakePerPlayer ?? 0,
-      payouts: read.stakes.main,
-      fb18Payouts,
-      fb18Rates,
+      dollarsPerUnit: teamCount === 5 ? FIVE_TEAM_STAKES.dollarsPerUnit : stakeRate ?? 5,
+      rakePerPlayer: teamCount === 5 ? FIVE_TEAM_STAKES.rakePerPlayer : read.details.rakePerPlayer ?? 0,
+      payouts: teamCount === 5 ? defaultPayouts(5) : read.stakes.main,
+      fb18Payouts: teamCount === 5 ? {} : fb18Payouts,
+      fb18Rates: teamCount === 5 ? FIVE_TEAM_STAKES.rates : fb18Rates,
     },
-    stakeNotes: read.stakes.notes,
+    stakeNotes: teamCount === 5 ? [] : read.stakes.notes,
     pool: pool.golfers,
     scoreKind: read.scoreKind,
     scoreKindAssumed: read.scoreKindAssumed,

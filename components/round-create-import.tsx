@@ -8,6 +8,7 @@ import type { ReadRoundDetails } from "@/app/(app)/games/actions";
 import {
   defaultFb18Payouts,
   defaultPayouts,
+  FIVE_TEAM_STAKES,
   formatRelative,
   MAX_TEAM_SIZE,
   MIN_TEAM_SIZE,
@@ -462,7 +463,7 @@ export function RoundCreateImport() {
                           ) : (
                             <input
                               type="number" min={0} step="0.5"
-                              placeholder={`${dollars}`}
+                              placeholder={String(teamCount === 5 ? FIVE_TEAM_STAKES.rates[pot.key as Fb18Segment] : dollars)}
                               value={segRates[pot.key as Fb18Segment] ?? ""}
                               onChange={(e) => {
                                 const v = e.target.value;

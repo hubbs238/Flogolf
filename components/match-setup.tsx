@@ -107,7 +107,7 @@ export function MatchSetup({
 
       <section>
         <h2 className="mb-3 font-semibold">Stakes and payouts</h2>
-        <MatchStakes
+        <MatchStakes key={match.team_count}
           match={match} teams={teams}
           payouts={payouts} fb18Payouts={fb18Payouts}
         />

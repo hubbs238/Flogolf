@@ -897,6 +897,12 @@ export function nineTotals(holes: Record<number, number | undefined> | undefined
   };
 }
 
+export const FIVE_TEAM_STAKES = {
+  dollarsPerUnit: 25,
+  rakePerPlayer: 35,
+  rates: { front: 10, back: 10, total: 10, second: 5 },
+} as const;
+
 /**
  * What a finishing position pays in a match, the way the league actually
  * plays it.
