@@ -137,7 +137,7 @@ export function CupPodium({
 
               <span className={`mt-1.5 inline-flex items-center gap-1.5 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300 ${first ? "text-2xl" : "text-lg"}`}>
                 <TrophyIcon className={first ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
-                {place.points.toFixed(1)}
+                {place.points.toFixed(2)}
               </span>
 
               <div

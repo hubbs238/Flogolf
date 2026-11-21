@@ -63,7 +63,7 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                     season.points > 0 ? "text-fairway-600 dark:text-fairway-300"
                       : season.points < 0 ? "text-flag-500" : "text-muted"}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {season.points.toFixed(1)}
+                    {season.points.toFixed(2)}
                     <span className="text-xs font-normal text-muted">Total Points</span>
                   </span>
 

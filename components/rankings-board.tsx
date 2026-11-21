@@ -365,7 +365,7 @@ function GolferCard({
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-surface px-3 py-2.5">
           <div className={`${cellNumber} ${played ? tone(points) : "text-muted"}`}>
-            {played ? points.toFixed(1) : "—"}
+            {played ? points.toFixed(2) : "—"}
           </div>
           {/* The trophy rides the label, not the number: beside a four figure
               total it was the difference between fitting the cell and not. */}

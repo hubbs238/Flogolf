@@ -335,10 +335,10 @@ console.log("\n=== FB18 money does not move the Cup on a season round ===");
 
   check("the default is the season rule, so a caller who forgets cannot pay twice",
     awardMoneyAt(card)[0].cupDollars, 180);
-  check("a major counts everything, anything else the matches alone",
+  check("season rounds use exact gross winnings, majors keep their eligibility rules",
     [cupEligibleFor("season"), cupEligibleFor("major"),
      cupEligibleFor("season", true), cupEligibleFor("major", true)],
-    ["main", "all", "main", "main"]);
+    ["gross", "all", "gross", "main"]);
   check("and the helper agrees with both",
     [cupDollarsOf(bd(180, 40, 30, 50), "main"), cupDollarsOf(bd(180, 40, 30, 50), "all")],
     [180, 300]);
@@ -883,11 +883,11 @@ console.log("\n=== one major card, under the old rule and the new ===");
   check("474 on the round", later.total, 474);
 
   // And the same card as a plain season round, for the third point of
-  // comparison: single points, matches only, undoubled bonus.
+  // comparison: exact gross winnings, without a separate bonus.
   const season = awardMoneyAt({ ...card, cupEligible: cupEligibleFor("season") });
-  check("as a season round it is 91.7 + 35",
-    roundPoints({ money: season, bonusByTeam: { t1: 35, t2: 0 }, rosters })
-      .find((p) => p.golferId === "hubbs")!.total, 126.7);
+  check("season points use gross winnings to the cent",
+    roundPoints({ money: season, bonusByTeam: scoreBonusPoints([], {}, 1, "season").pointsByTeam, rosters })
+      .find((p) => p.golferId === "hubbs")!.total, 201.68);
 }
 
 console.log("\n=== rounding up belongs to the major rule alone ===");

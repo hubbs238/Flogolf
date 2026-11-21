@@ -27,15 +27,9 @@ export default async function FloCupPage() {
       {major && <MajorTile major={major} />}
 
       <p className="mb-4 text-sm text-muted">
-        {view.showMoney
-          ? "A dollar won is a point. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. On a season round FB18 winnings are money only and do not move the Cup, since the bonus points already cover that. On a major every dollar counts, FB18 included, taken as the total payout rounded up."
-          : "Winning a match earns Money Points, and a major pays double. A losing round is worth nothing rather than going negative, so a bad week costs you nothing and cannot wipe out a good one. Counted each round and added up. On a season round the FB18 side game does not move the Cup, since the bonus points already cover it. On a major it does, on top of those bonus points."}
-        {" "}Bonus Points go to the lowest front nine
-        (10), the lowest back nine (10) and the lowest eighteen (15), and every
-        player on the winning team collects them. A major doubles all of it,
-        points from matches included. One winner each: a front nine
-        tie carries to the back nine, and a tie after eighteen splits the
-        points. Rounds counts every finished round a golfer was rostered in.
+        Season rounds award one point per dollar of individual winnings before rake,
+        including side games. Losing rounds earn zero points. Majors use double
+        money points and award separate front-nine, back-nine and eighteen-hole bonuses.
       </p>
       <StandingsTable
         rows={rows}

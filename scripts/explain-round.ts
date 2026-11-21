@@ -89,10 +89,12 @@ const money = awardMoney({
   rakePerPlayer: ROUND.rakePerPlayer, cupEligible,
 });
 assert.deepEqual(teamIds.map(t => money.find(row => row.teamId === t)?.dollars), [105, -220, 47, -70, -53]);
-const bonus = scoreBonusPoints(teamIds, scores, multiplier);
+const bonus = scoreBonusPoints(teamIds, scores, multiplier, ROUND.roundType);
 const points = roundPoints({
   money, bonusByTeam: bonus.pointsByTeam, rosters: ROSTERS, multiplier,
 });
+
+assert.deepEqual(teamIds.map(team => points.find(p => p.teamId === team)?.total), [140, 0, 82, 0, 0]);
 
 // ------------------------------------------------------------------- printing
 const money2 = (n: number) => (n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`);

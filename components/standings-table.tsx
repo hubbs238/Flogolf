@@ -24,7 +24,7 @@ function Points({ n, strong }: { n: number; strong: boolean }) {
       } ${tone(n)}`}
     >
       <TrophyIcon className="h-4 w-4 shrink-0" />
-      {n.toFixed(1)}
+      {n.toFixed(2)}
     </span>
   );
 }
@@ -134,7 +134,7 @@ export function StandingsTable({
 
                 <td className={`p-3 text-right tabular-nums ${tone(row.pointsFromMoney)}`}>
                   {row.pointsFromMoney > 0 ? "+" : ""}
-                  {row.pointsFromMoney.toFixed(1)}
+                  {row.pointsFromMoney.toFixed(2)}
                 </td>
 
                 <td className="p-3 text-right tabular-nums text-muted">

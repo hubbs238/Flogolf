@@ -47,9 +47,9 @@ export function GolferRoundHistory({
     <section>
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
-        {showMoney
-          ? "Match Money is the matches themselves; Bonus Money is F9, B9 and all eighteen. On a season round only Match Money earns points; on a major every dollar does, taken as the total rounded up. A losing round scores 0 rather than going negative, so the money and points columns will often disagree."
-          : "Money Points come from the matches on a season round, and from everything won on a major. A losing round scores 0 rather than going negative. Bonus Points are the lowest front nine, back nine and eighteen. A major pays double on both."}
+        Season rounds award one point per dollar of individual winnings before rake,
+        including side games. Losing rounds earn zero points. Majors use double
+        money points and award separate front-nine, back-nine and eighteen-hole bonuses.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -101,7 +101,7 @@ export function GolferRoundHistory({
                 )}
                 <td className={`p-3 text-right tabular-nums ${tone(r.pointsFromMoney)}`}>
                   {r.pointsFromMoney > 0 ? "+" : ""}
-                  {r.pointsFromMoney.toFixed(1)}
+                  {r.pointsFromMoney.toFixed(2)}
                 </td>
                 <td className="p-3 text-right tabular-nums text-muted">
                   {r.pointsBonus > 0 ? `+${r.pointsBonus}` : "—"}
@@ -109,7 +109,7 @@ export function GolferRoundHistory({
                 <td className="p-3 text-right">
                   <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(r.points)}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {r.points.toFixed(1)}
+                    {r.points.toFixed(2)}
                   </span>
                 </td>
               </tr>
@@ -133,7 +133,7 @@ export function GolferRoundHistory({
               )}
               <td className={`p-3 text-right tabular-nums ${tone(totals.fromMoney)}`}>
                 {totals.fromMoney > 0 ? "+" : ""}
-                {totals.fromMoney.toFixed(1)}
+                {totals.fromMoney.toFixed(2)}
               </td>
               <td className="p-3 text-right tabular-nums text-muted">
                 {totals.bonus > 0 ? `+${totals.bonus}` : "—"}
@@ -141,7 +141,7 @@ export function GolferRoundHistory({
               <td className="p-3 text-right">
                 <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(totals.points)}`}>
                   <TrophyIcon className="h-4 w-4 shrink-0" />
-                  {totals.points.toFixed(1)}
+                  {totals.points.toFixed(2)}
                 </span>
               </td>
             </tr>

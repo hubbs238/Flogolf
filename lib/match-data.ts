@@ -191,13 +191,7 @@ export function computeMatch(b: MatchBundle) {
     ),
   };
 
-  // Per player figures, a unit paying its rate to each team member, and kept
-  // split by source so settlement can show where the money came from.
-  //
-  // What feeds the Cup follows the round. Usually the matches alone: the nine
-  // and eighteen hole results are already rewarded through the bonus points,
-  // so counting their money as well would pay twice for one performance. A
-  // major pays twice on purpose, so every dollar counts there.
+  // Keep both eighteen-hole pots in each player’s gross winnings.
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
@@ -227,7 +221,7 @@ export function computeMatch(b: MatchBundle) {
 
   const rakePerPlayer = Number(b.match.dues_per_player ?? 0);
   const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer, cupEligible });
-  const bonus = scoreBonusPoints(teamIds, b.scores, multiplier);
+  const bonus = scoreBonusPoints(teamIds, b.scores, multiplier, roundType);
 
   // Team level winnings, rolled up here rather than in the browser so a page
   // can show the state of the round without shipping a row per player.

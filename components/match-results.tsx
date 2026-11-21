@@ -116,7 +116,7 @@ export function MatchResults({
   // Where the FB18 winnings convert too, the column is no longer the matches
   // alone and must not keep calling itself Match Points.
   const allMoney = cupEligible === "all";
-  const moneyPointsLabel = allMoney ? "Money Points" : "Match Points";
+  const moneyPointsLabel = !major || allMoney ? "Money Points" : "Match Points";
 
   // Hide the three side game columns entirely when nobody played it, rather
   // than showing a wall of dashes.
@@ -258,7 +258,7 @@ export function MatchResults({
             Same scores, scored separately. Lowest front nine, lowest back nine,
             lowest eighteen. A tie nobody can break shares that prize evenly.
             {showMoney && " All three pay money."}
-            {allMoney
+            {!major ? " Side-game winnings count toward each player’s pre-rake points." : allMoney
               ? " Every dollar of it converts to FLO Cup points as well on this round, on top of the bonus points."
               : " None of it feeds FLO Cup points, since the bonus points already reward the same results."}
           </p>
@@ -415,17 +415,9 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            {showMoney
-              ? allMoney
-                ? `${moneyPointsLabel} come from every dollar won on the round, Bonus Money included, taken as the total rounded up to the dollar and then doubled. A losing round scores 0 rather than going negative.`
-                : `${moneyPointsLabel} come from Match Money, ${major ? "two points a dollar on a major" : "a dollar a point"}, with a losing round scoring 0 rather than going negative. Bonus Money earns nothing here.`
-              : allMoney
-                ? `${moneyPointsLabel} come from everything won across the ${matchesPhrase} and the FB18 side game, doubled. A losing round scores 0 rather than going negative.`
-                : `${moneyPointsLabel} come from the ${matchesPhrase}, with a losing round scoring 0 rather than going negative.`}
-            {` Bonus Points are ${bonusPts("front")} for the lowest front nine, ` +
-              `${bonusPts("back")} for the lowest back nine and ` +
-              `${bonusPts("total")} for the lowest eighteen.`}
-            {allMoney && " The nines and the eighteen are paid twice over here: their money converts to points, and the bonus points land on top."}
+            {!major
+              ? "Each player earns one point per dollar of total winnings before rake, including side games. Losing rounds earn zero points."
+              : `${moneyPointsLabel} are doubled. ${allMoney ? "Total winnings round up before doubling." : "Only match winnings count for this major."} Bonus points are ${bonusPts("front")} for the front nine, ${bonusPts("back")} for the back nine, and ${bonusPts("total")} for the eighteen.`}
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -446,7 +438,7 @@ export function MatchResults({
                     <td className={`p-3 text-right tabular-nums ${
                       p.fromMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
                         : p.fromMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                      {p.fromMoney > 0 ? "+" : ""}{p.fromMoney.toFixed(1)}
+                      {p.fromMoney > 0 ? "+" : ""}{p.fromMoney.toFixed(2)}
                     </td>
                     <td className="p-3 text-right tabular-nums text-muted">
                       {p.bonus > 0 ? `+${p.bonus}` : "—"}
@@ -456,7 +448,7 @@ export function MatchResults({
                         p.total > 0 ? "text-fairway-600 dark:text-fairway-300"
                           : p.total < 0 ? "text-flag-500" : "text-muted"}`}>
                         <TrophyIcon className="h-4 w-4 shrink-0" />
-                        {p.total.toFixed(1)}
+                        {p.total.toFixed(2)}
                       </span>
                     </td>
                   </tr>

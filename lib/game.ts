@@ -763,52 +763,19 @@ export type MoneyBreakdown = {
   eighteen: number;
 };
 
-/**
- * Which of a round's winnings convert to FLO Cup points.
- *
- * "main" counts the matches alone. The nine and eighteen hole results are
- * already rewarded through the bonus points, so counting their money as well
- * would pay twice for one performance.
- *
- * "all" counts every dollar won, the FB18 side game included, and the bonus
- * points are still paid on top. Those three results are deliberately rewarded
- * twice over.
- */
-export type CupEligible = "main" | "all";
+/** Season rounds use exact gross winnings. The first major used match money
+ * alone, while later majors round gross winnings up before doubling. */
+export type CupEligible = "gross" | "main" | "all";
 
-/**
- * Cup eligibility for a round.
- *
- * A major counts every dollar won, the FB18 side game included, whatever the
- * eighteen is cut into. The bonus points are still paid on top, so those
- * three results are deliberately rewarded twice over: that is what makes a
- * major worth chasing.
- *
- * Everything else counts the matches alone. There the nines and the eighteen
- * are already paid through the bonus points, so counting their money as well
- * would pay twice for one performance.
- *
- * `legacy` grandfathers the first major, which was played and settled before
- * this rule existed. Its standings are not reopened.
- */
 export function cupEligibleFor(roundType: RoundType, legacy = false): CupEligible {
-  return roundType === "major" && !legacy ? "all" : "main";
+  if (roundType === "season") return "gross";
+  return legacy ? "main" : "all";
 }
 
-/**
- * The slice of a breakdown that converts to points, before the multiplier.
- *
- * One place to ask the question, so the settlement table, the season
- * standings and the prose that explains them cannot drift apart.
- *
- * The every-dollar rule is the round's total payout rounded UP to the dollar,
- * which is how it was asked for: $201.68 won converts as $202 and doubles to
- * 404. Only that rule rounds. The matches-alone figure converts at its exact
- * value, the way it always has, so no season round moves by a cent.
- */
 export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
-  if (eligible !== "all") return b.main;
-  return Math.ceil(b.main + b.front + b.back + b.eighteen);
+  if (eligible === "main") return b.main;
+  const gross = b.main + b.front + b.back + b.eighteen;
+  return eligible === "all" ? Math.ceil(gross) : Math.round(gross * 100) / 100;
 }
 
 export type PlayerMoney = {
@@ -1091,7 +1058,9 @@ export function scoreBonusPoints(
   scores: HoleScores,
   /** 2 on a major. Applied here so the figures on screen are the real ones. */
   multiplier = 1,
+  roundType: RoundType = "major",
 ): { segments: BonusSegment[]; pointsByTeam: Record<string, number> } {
+  if (roundType === "season") return { segments: [], pointsByTeam: {} };
   const { results, unitsByTeam } = scoreFb18({
     teamIds,
     scores,
