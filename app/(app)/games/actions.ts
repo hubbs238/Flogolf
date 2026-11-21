@@ -1030,13 +1030,13 @@ export type RoundImportRead =
       dropped: string[];
       /** Every team's already-scored holes, keyed by team id. */
       filledByTeam: Record<string, number[]>;
+      rosterByTeam: Record<string, ResolvedName[]>;
+      rosterCap: number;
       /**
        * The pool, so a name read as new can be swapped for somebody already
        * in it without leaving this screen.
        */
       pool: { id: string; name: string; nickname: string | null }[];
-      /** Problems that would stop a commit, in the admin's words. */
-      blockers: string[];
     }
   | { ok: false; error: string };
 
@@ -1073,13 +1073,23 @@ export async function readRoundPhoto(
   if (!read.ok) return read;
 
   const supabase = await createClient();
-  const [{ data: round }, { data: teams }, pool, { data: scores }] = await Promise.all([
+  const [{ data: round }, { data: teams }, pool, { data: scores }, roster] = await Promise.all([
     supabase.from("matches").select("roster_size").eq("id", matchId).maybeSingle(),
     supabase.from("match_teams").select("id, slot, name").eq("match_id", matchId).order("slot"),
     golferPool(),
     supabase.from("hole_scores").select("team_id, hole").eq("match_id", matchId),
+    supabase.from("match_players").select("team_id, golfer_id, slot").eq("match_id", matchId).order("slot"),
   ]);
   if (!round) return { ok: false, error: "Round not found." };
+
+  if (roster.error) return { ok: false, error: "Could not read the current team rosters." };
+  const names = new Map(pool.golfers.map(g => [g.id, g.name]));
+  const rosterByTeam: Record<string, ResolvedName[]> = {};
+  for (const p of roster.data) {
+    (rosterByTeam[p.team_id] ??= []).push({
+      golferId: p.golfer_id, read: names.get(p.golfer_id) ?? "", isNew: false, sharedBy: null,
+    });
+  }
 
   const filledByTeam = new Map<string, Set<number>>();
   for (const s of (scores ?? []) as { team_id: string; hole: number }[]) {
@@ -1090,7 +1100,6 @@ export async function readRoundPhoto(
   const roundTeams = (teams ?? []) as { id: string; slot: number; name: string }[];
   const bySlot = new Map(roundTeams.map((t) => [t.slot, t]));
   const taken = new Set<string>();
-  const blockers: string[] = [];
   const cap = Math.min(Number(round.roster_size) || MAX_TEAM_SIZE, MAX_TEAM_SIZE);
 
   // One entry per person across the whole card, so the same man under two
@@ -1121,38 +1130,11 @@ export async function readRoundPhoto(
     };
   });
 
-  for (const t of out) {
-    if (!t.teamId) {
-      blockers.push(
-        t.number === null
-          ? `${t.label} does not line up with a team in this round.`
-          : `${t.label} wants team ${t.number}, which this round does not have. Point it at one.`,
-      );
-    }
-    if (t.players.length > cap) {
-      blockers.push(
-        `${t.label} read ${t.players.length} players, more than the ${cap} this round's teams hold.`,
-      );
-    }
-    // One legible name on a bay means the name block was cut off, not that a
-    // man played alone. Importing it would replace a full roster with one
-    // player, who would then collect the whole bay's winnings.
-    if (t.players.length === 1) {
-      blockers.push(
-        `${t.label} read only one player, so its name block was probably cut off. ` +
-        `A team needs at least ${MIN_TEAM_SIZE}.`,
-      );
-    }
-  }
-  if (out.length > roundTeams.length) {
-    blockers.push(
-      `The image has ${out.length} bays but this round has ${roundTeams.length} teams.`,
-    );
-  }
-
   return {
     ok: true,
     teams: out,
+    rosterByTeam,
+    rosterCap: cap,
     /**
      * Every team's filled holes, not just the auto-assigned one's. The review
      * screen lets an admin re-point a bay, and the strike-through has to
@@ -1168,7 +1150,6 @@ export async function readRoundPhoto(
     notes: read.notes,
     flags: read.flags,
     dropped: read.dropped,
-    blockers,
   };
 }
 
@@ -1329,6 +1310,13 @@ export async function applyRoundImport(
   // retry, so the importer could never undo its own damage.
   const filling = seating.filter((s) => s.ids.length > 0);
   if (filling.length > 0) {
+    // Check retained rosters before clearing any team being edited.
+    const targets = new Set(filling.map(s => s.teamId));
+    const current = await supabase.from("match_players").select("team_id, golfer_id").eq("match_id", matchId);
+    if (current.error) return { ok: false, error: "Could not check the current team rosters." };
+    const conflict = current.data.find(p => !targets.has(p.team_id) && owner.has(p.golfer_id));
+    if (conflict) return { ok: false, error: "A selected golfer is already on another team in this round. Review both rosters before importing." };
+
     const { error: cleared } = await supabase
       .from("match_players").delete()
       .eq("match_id", matchId)
@@ -1592,20 +1580,6 @@ export async function readRoundDetails(
   if (bays.length > 12) {
     blockers.push(`${bays.length} bays were read, more than the 12 a round holds.`);
   }
-  for (const b of bays) {
-    if (b.players.length > MAX_TEAM_SIZE) {
-      blockers.push(
-        `${b.label} read ${b.players.length} players, more than the ${MAX_TEAM_SIZE} a team holds.`,
-      );
-    }
-    if (b.players.length === 1) {
-      blockers.push(
-        `${b.label} read only one player, so its name block was probably cut off. ` +
-        `A team needs at least ${MIN_TEAM_SIZE}.`,
-      );
-    }
-  }
-
   const biggest = bays.reduce((n, b) => Math.max(n, b.players.length), 0);
   const teamCount = Math.min(Math.max(bays.length, 2), 12);
 
@@ -1654,7 +1628,7 @@ export async function readRoundDetails(
       teamCount,
       // The cap has to hold the fullest bay that was read, and never less
       // than the minimum a team can field.
-      rosterSize: Math.min(Math.max(biggest, MIN_TEAM_SIZE), MAX_TEAM_SIZE),
+      rosterSize: Math.min(Math.max(biggest || 4, MIN_TEAM_SIZE), MAX_TEAM_SIZE),
       name: title || read.details.date || "",
       course: read.details.course ?? "",
       isoDate: isoFromLooseDate(read.details.date),

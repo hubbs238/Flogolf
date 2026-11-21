@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { ImportPlayerRow, playerReviewErrors, useImportPlayers } from "./import-player-review";
+import { ImportRoster, reviewedPlayers, playerReviewErrors, useImportPlayers } from "./import-player-review";
 import { useRouter } from "next/navigation";
 import { createRoundFromImport, readRoundDetails } from "@/app/(app)/games/actions";
 import type { ReadRoundDetails } from "@/app/(app)/games/actions";
@@ -46,10 +46,7 @@ const POTS = [
  * and correcting what the reader got wrong, not filling a page in beside an
  * image of the same numbers.
  *
- * The one thing it will not decide for you is who a new name belongs to.
- * Every name the pool has not seen gets a control: add them, or say which
- * existing golfer it really is. Guessing that wrong pays one player's money
- * to another, so it is asked rather than inferred.
+ * Each roster can be completed by hand before the round is created.
  */
 export function RoundCreateImport() {
   const router = useRouter();
@@ -145,17 +142,13 @@ export function RoundCreateImport() {
   const positions = Array.from({ length: teamCount }, (_, i) => i + 1);
 
 
+  const bays = (read?.bays ?? []).map((bay, i) => ({
+    ...bay, rows: review.rows(String(i), bay.players),
+  }));
+
   const blockers = (() => {
     if (!read) return [];
-    const out = [...read.blockers, ...playerReviewErrors(
-      read.bays.map((bay, index) => ({ ...bay, index })), review, read.pool,
-    )];
-
-    for (const b of read.bays) {
-      if (b.players.length > rosterSize) {
-        out.push(`Players per team is set to ${rosterSize}, but ${b.label} has more.`);
-      }
-    }
+    const out = [...read.blockers, ...playerReviewErrors(bays, read.pool, rosterSize)];
     for (const pot of POTS) {
       const table = units[pot.key];
       if (!table) continue;
@@ -189,8 +182,8 @@ export function RoundCreateImport() {
           },
           fb18Rates: segRates,
         },
-        bays: read.bays.map((b, bi) => ({
-          players: b.players.map((p, pi) => review.reviewed(bi, pi, p)),
+        bays: bays.map(b => ({
+          players: reviewedPlayers(b.rows, read.pool),
           holes: b.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
         })),
       });
@@ -496,30 +489,23 @@ export function RoundCreateImport() {
               Bays
             </h4>
             <div className="space-y-3">
-              {read.bays.map((b, bi) => (
+              {bays.map((b, bi) => (
                 <div key={`${b.label}-${bi}`} className="rounded-xl border border-line p-4">
                   <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                     <span className="font-medium">{b.label}</span>
                     <span className="text-xs text-muted">becomes Team {bi + 1}</span>
                     <span className={`text-xs ${
-                      b.players.length > rosterSize ? "text-flag-500" : "text-muted"}`}>
-                      {b.players.length} player{b.players.length === 1 ? "" : "s"}
+                      b.rows.length > rosterSize ? "text-flag-500" : "text-muted"}`}>
+                      {b.rows.length} player{b.rows.length === 1 ? "" : "s"}
                     </span>
                   </div>
 
-                  {b.players.length === 0 ? (
-                    <p className="mb-3 text-xs text-flag-500">
-                      No names were legible for this bay. Its scores still
-                      import; add the players by hand afterwards.
-                    </p>
-                  ) : (
-                    <ul className="mb-3 space-y-1.5">
-                      {b.players.map((p, pi) => (
-                        <ImportPlayerRow key={pi} player={p} bay={bi} slot={pi} label={b.label}
-                          pool={read.pool} review={review} disabled={pending} />
-                      ))}
-                    </ul>
-                  )}
+                  <ImportRoster rows={b.rows} label={b.label} pool={read.pool} cap={MAX_TEAM_SIZE}
+                    disabled={pending} emptyText="Add the players who played in this bay."
+                    onChange={rows => {
+                      review.change(String(bi), rows);
+                      if (rows.length > b.rows.length && rows.length > rosterSize) setRosterSize(rows.length);
+                    }} />
 
                   <div className="overflow-x-auto rounded-lg border border-line">
                     <table className="w-full min-w-max text-sm">

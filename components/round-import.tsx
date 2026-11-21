@@ -1,11 +1,11 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { ImportPlayerRow, playerReviewErrors, useImportPlayers } from "./import-player-review";
+import { type PlayerChoice, ImportRoster, reviewedPlayers, playerReviewErrors, useImportPlayers } from "./import-player-review";
 import { useRouter } from "next/navigation";
 import { applyRoundImport, readRoundPhoto } from "@/app/(app)/games/actions";
 import type { RoundImportRead, RoundImportTeam } from "@/app/(app)/games/actions";
-import { formatRelative, MAX_TEAM_SIZE } from "@/lib/game";
+import { formatRelative } from "@/lib/game";
 import { describeDecodeFailure, downscale } from "@/lib/image-file";
 import type { MatchTeam } from "@/lib/types";
 
@@ -100,7 +100,15 @@ export function RoundImport({
   // correcting a bay on screen clears its objection immediately.
   const assignedFor = (i: number) => assign[i] ?? "";
   const isIgnored = (i: number) => ignored[i] === true;
-  const live = read ? read.teams.map((t, i) => ({ t, i })).filter(({ i }) => !isIgnored(i)) : [];
+  const bays = (read?.teams ?? []).map((t, i) => {
+    const target = assignedFor(i);
+    const hasNames = t.players.length > 0;
+    const key = hasNames ? String(i) : `${i}:${target}`;
+    const saved = read?.rosterByTeam[target] ?? [];
+    const rows = review.rows(key, hasNames ? t.players : saved);
+    return { t, i, key, rows, saved, writeRoster: rows.length > 0 && (hasNames || review.edited(key)) };
+  });
+  const live = bays.filter(({ i }) => !isIgnored(i));
 
   const clashes = (() => {
     const out: string[] = [];
@@ -122,19 +130,18 @@ export function RoundImport({
     return out;
   })();
 
-  // The server's objections are keyed to bays by label. Anything about a bay
-  // the admin has struck off no longer applies, and the ones about team
-  // assignment are replaced wholesale by the live check above.
-  const nameBlockers = read
-    ? read.blockers.filter((b) => {
-        if (/does not line up with a team|which this round does not have/.test(b)) return false;
-        return !read.teams.some((t, i) => isIgnored(i) && b.includes(t.label));
-      })
-    : [];
-
-  const blockers = [...nameBlockers, ...clashes, ...playerReviewErrors(
-    live.map(({ t, i }) => ({ ...t, index: i })), review, read?.pool ?? [],
+  const changingTeams = new Set(live.filter(b => b.writeRoster).map(b => assignedFor(b.i)));
+  const blockers = [...clashes, ...playerReviewErrors(
+    live.filter(b => b.writeRoster).map(b => ({ label: b.t.label, rows: b.rows })),
+    read?.pool ?? [], read?.rosterCap ?? 0,
   )];
+  for (const team of teams) {
+    if (changingTeams.has(team.id)) continue;
+    for (const player of read?.rosterByTeam[team.id] ?? []) {
+      const elsewhere = live.find(b => b.writeRoster && b.rows.some(row => row.choice === player.golferId));
+      if (elsewhere) blockers.push(`${player.read} is already on ${team.name} and is also selected for ${elsewhere.t.label}.`);
+    }
+  }
 
   function commit() {
     if (!read || blockers.length > 0) return;
@@ -142,9 +149,9 @@ export function RoundImport({
     startTransition(async () => {
       const r = await applyRoundImport(
         matchId,
-        live.map(({ t, i }) => ({
+        live.map(({ t, i, rows, writeRoster }) => ({
           teamId: assignedFor(i),
-          players: t.players.map((p, pi) => review.reviewed(i, pi, p)),
+          players: writeRoster ? reviewedPlayers(rows, read.pool) : [],
           holes: t.holes.map((h) => ({ hole: h.hole, relative: h.relative })),
         })),
         mode,
@@ -275,7 +282,7 @@ export function RoundImport({
             </p>
           )}
 
-          {read.teams.map((t, i) => (
+          {bays.map(({ t, i, key, rows, saved }) => (
             <BayCard
               key={`${t.label}-${i}`}
               bay={t}
@@ -286,7 +293,8 @@ export function RoundImport({
               ignored={isIgnored(i)}
               onIgnoredChange={(v) => setIgnored((prev) => ({ ...prev, [i]: v }))}
               pool={read.pool}
-              index={i} review={review} pending={pending}
+              rows={rows} cap={read.rosterCap} pending={pending}
+              savedCount={saved.length} onRowsChange={next => review.change(key, next)}
               /*
                 The filled set has to come from the team this bay is pointed at
                 RIGHT NOW, not the one it was auto-assigned to when the image
@@ -313,7 +321,7 @@ export function RoundImport({
 
 function BayCard({
   bay, teams, value, onChange, mode, filled, ignored, onIgnoredChange,
-  pool, index, review, pending,
+  pool, rows, cap, savedCount, onRowsChange, pending,
 }: {
   bay: RoundImportTeam;
   teams: MatchTeam[];
@@ -325,8 +333,10 @@ function BayCard({
   ignored: boolean;
   onIgnoredChange: (v: boolean) => void;
   pool: Read["pool"];
-  index: number;
-  review: ReturnType<typeof useImportPlayers>;
+  rows: PlayerChoice[];
+  cap: number;
+  savedCount: number;
+  onRowsChange: (rows: PlayerChoice[]) => void;
   pending: boolean;
 }) {
   const byHole = new Map(bay.holes.map((h) => [h.hole, h]));
@@ -348,8 +358,7 @@ function BayCard({
           {teams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <span className="text-xs text-muted">
-          {bay.players.length} player{bay.players.length === 1 ? "" : "s"}
-          {bay.players.length > MAX_TEAM_SIZE && ` (over the ${MAX_TEAM_SIZE} a team holds)`}
+          {rows.length} player{rows.length === 1 ? "" : "s"}
         </span>
         <label className="ml-auto flex items-center gap-1.5 text-xs text-muted">
           <input type="checkbox" checked={ignored}
@@ -358,19 +367,12 @@ function BayCard({
         </label>
       </div>
 
-      {bay.players.length === 0 ? (
-        <p className="mb-3 text-xs text-flag-500">
-          No names were legible for this bay. Its roster will be left as it is,
-          and only the scores get written.
-        </p>
-      ) : (
-        <ul className="mb-3 space-y-1.5">
-          {bay.players.map((p, i) => (
-            <ImportPlayerRow key={i} player={p} bay={index} slot={i} label={bay.label}
-              pool={pool} review={review} disabled={ignored || pending} />
-          ))}
-        </ul>
+      {bay.players.length === 0 && savedCount > 0 && rows.length > 0 && (
+        <p className="mb-2 text-sm text-muted">The image has no names for this bay. Its current roster is shown below.</p>
       )}
+      <ImportRoster rows={rows} label={bay.label} pool={pool} cap={cap}
+        disabled={ignored || pending} onChange={onRowsChange}
+        emptyText="Add players here, or leave the roster empty to import scores only." />
 
       <div className="overflow-x-auto rounded-lg border border-line">
         <table className="w-full min-w-max text-sm">
