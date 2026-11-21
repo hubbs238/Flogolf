@@ -135,7 +135,7 @@ export function MatchStakes({
             </span>
             {match.round_type === "major" && Number(match.set_holes) === 6 && (
               <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
-                Three matches instead of six, so the matches pay out over half as many decisions. That costs less than it looks on a major, since the FB18 winnings convert to points here too and take up the slack. Raise the rate above if you want the matches themselves to carry the round.
+                Six-hole sets pay out three matches per round.
               </span>
             )}
           </label>

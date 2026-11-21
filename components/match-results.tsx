@@ -346,7 +346,8 @@ export function MatchResults({
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
             Each player earns {major ? "two points" : "one point"} per dollar of
-            total winnings before rake, including side games. Losing rounds earn zero points.
+            positive winnings before rake. Match Points come from the matches and Bonus Points from FB18.
+            A loss in one reduces the points earned in the other.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -354,6 +355,8 @@ export function MatchResults({
                 <tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 text-left font-medium">Player</th>
                   <th className="p-3 text-left font-medium">Team</th>
+                  <th className="w-32 p-3 text-right font-medium">Match Points</th>
+                  <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
                   <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
                 </tr>
               </thead>
@@ -362,6 +365,8 @@ export function MatchResults({
                   <tr key={p.golferId} className="border-b border-line last:border-0">
                     <td className="p-3 font-medium">{golferName(p.golferId)}</td>
                     <td className="p-3 text-muted">{teamName(p.teamId)}</td>
+                    <td className="p-3 text-right tabular-nums">{p.fromMoney.toFixed(2)}</td>
+                    <td className="p-3 text-right tabular-nums">{p.bonus.toFixed(2)}</td>
                     <td className="p-3 text-right">
                       <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${
                         p.total > 0 ? "text-fairway-600 dark:text-fairway-300"

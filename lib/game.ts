@@ -1034,12 +1034,28 @@ export function roundPoints(opts: {
   });
 }
 
-/** Score each player's settled share before rake. Multipliers apply after
- * the bay's winnings have been divided among its actual roster. */
+/** The front nine, back nine and both 18-hole money pots, netted together. */
+export function bonusMoneyOf(b: MoneyBreakdown): number {
+  return Math.round((b.front + b.back + b.eighteen) * 100) / 100;
+}
+
+/** Divide the awarded pre-rake dollars between the two earning categories,
+ * then apply the round multiplier to both. Losses reduce the award first. */
 export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
-  return money.map(({ golferId, teamId, winnings }) => {
-    const cents = Math.round(winnings * 100);
-    const points = pointsForRound(cents, POINT_MULTIPLIER[roundType]) / 100;
-    return { golferId, teamId, fromMoney: points, bonus: 0, total: points };
+  const multiplier = POINT_MULTIPLIER[roundType];
+  return money.map(({ golferId, teamId, winnings, breakdown }) => {
+    const awarded = Math.max(0, winnings);
+    const matchCents = Math.max(0, Math.round(breakdown.main * 100));
+    const bonusCents = Math.max(0, Math.round(bonusMoneyOf(breakdown) * 100));
+    const positiveCents = matchCents + bonusCents;
+    // Allocate whole dollars once. Assign the remainder to bonus so the
+    // categories always add up, even when two fractional shares round up.
+    const matchDollars = positiveCents > 0 ? Math.round(awarded * matchCents / positiveCents) : 0;
+    return {
+      golferId, teamId,
+      fromMoney: matchDollars * multiplier,
+      bonus: (awarded - matchDollars) * multiplier,
+      total: awarded * multiplier,
+    };
   });
 }

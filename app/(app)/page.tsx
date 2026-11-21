@@ -23,15 +23,17 @@ export default async function RankingsPage() {
   const season = Object.fromEntries(
     standings.map((row) => [
       row.golferId,
-      view.showMoney
-        ? {
-            rounds: row.rounds,
-            points: row.points,
-            matchMoney: row.matchMoney,
-            bonusMoney: row.bonusMoney,
-            winnings: row.winnings,
-          }
-        : { rounds: row.rounds, points: row.points },
+      {
+        rounds: row.rounds,
+        points: row.points,
+        matchPoints: row.pointsFromMoney,
+        bonusPoints: row.pointsBonus,
+        ...(view.showMoney && {
+          matchMoney: row.matchMoney,
+          bonusMoney: row.bonusMoney,
+          winnings: row.winnings,
+        }),
+      },
     ]),
   );
 

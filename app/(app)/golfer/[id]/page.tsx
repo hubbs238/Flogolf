@@ -67,6 +67,13 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                     <span className="text-xs font-normal text-muted">Total Points</span>
                   </span>
 
+                  <span className="text-xs text-muted">
+                    Match Points <span className="font-semibold tabular-nums text-ink">{season.pointsFromMoney.toFixed(2)}</span>
+                  </span>
+                  <span className="text-xs text-muted">
+                    Bonus Points <span className="font-semibold tabular-nums text-ink">{season.pointsBonus.toFixed(2)}</span>
+                  </span>
+
                   {view.showMoney && (
                     <>
                       <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${

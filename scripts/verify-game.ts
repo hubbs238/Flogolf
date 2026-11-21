@@ -846,9 +846,25 @@ console.log("\n=== major points double individual gross winnings ===");
   const major = cupPointsForPlayers(money, "major");
   check("double the awarded gross; losses and ties earn zero",
     major.map(p => p.total), [404, 0, 0]);
-  check("side games count through winnings without extra bonus points", major.map(p => p.bonus), [0,0,0]);
+  check("both earning categories double for majors",
+    major.map(p => [p.fromMoney, p.bonus]), [[184,220],[0,0],[0,0]]);
   check("season and major differ only in multiplier",
     cupPointsForPlayers(money, "season").map(p => p.total * 2), major.map(p => p.total));
+}
+
+{
+  const values = [
+    bd(75, 40, -10, 35),  // 11/18 Bay 1, including both 18-hole pots.
+    bd(90, -20), bd(-20, 90), bd(30, -40), bd(-40, 30), bd(12.5, 12.5),
+  ];
+  const earned = values.map((b) => awardMoneyAt({
+    breakdownByTeam: { bay: b }, rosters: { bay: ["p1"] }, rakePerPlayer: 35,
+  })[0]);
+  const split = (round: "season" | "major") =>
+    cupPointsForPlayers(earned, round).map(p => [p.fromMoney, p.bonus, p.total]);
+  const expected = [[75,65,140],[70,0,70],[0,70,70],[0,0,0],[0,0,0],[13,12,25]];
+  check("match and bonus reconcile to pre-rake points after losses and rounding", split("season"), expected);
+  check("majors double both components of the same award", split("major"), expected.map(row => row.map(n => n * 2)));
 }
 
 console.log("\n=== rounding up belongs to the major rule alone ===");

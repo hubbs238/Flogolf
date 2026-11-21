@@ -176,7 +176,7 @@ assert.equal(netAll, -rakeAll);
 
 console.log("\n--- FLO Cup points, per player --------------------------------");
 console.log(
-  "\n  " + pad("team", 9) + rpad("cup $", 11) + rpad("from money", 13) +
+  "\n  " + pad("team", 9) + rpad("cup $", 11) + rpad("match points", 13) +
   rpad("bonus", 9) + rpad("total", 9),
 );
 for (const t of teamIds) {

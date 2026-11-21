@@ -27,8 +27,9 @@ export default async function FloCupPage() {
       {major && <MajorTile major={major} />}
 
       <p className="mb-4 text-sm text-muted">
-        Season rounds award one point per dollar of individual winnings before rake,
-        including side games. Losing rounds earn zero points. Majors earn two points per dollar under the same rule.
+        Points come from each player’s positive winnings before rake. Match Points and Bonus Points
+        divide that total between the matches and FB18. A loss in either reduces the points earned in the other.
+        Majors double both.
       </p>
       <StandingsTable
         rows={rows}

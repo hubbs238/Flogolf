@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
   cupPointsForPlayers,
+  bonusMoneyOf,
   cupDollarsOf,
   SECOND_EIGHTEEN_RATE_SHARE,
   POINT_MULTIPLIER,
@@ -239,7 +240,7 @@ export type SeasonRow = {
   rounds: number;
   /** The matches themselves. Earns points on every round. */
   matchMoney: number;
-  /** FB18 front nine, back nine and all eighteen. Earns points on a major. */
+  /** Combined front nine, back nine, and both 18-hole cash pots. */
   bonusMoney: number;
   /** Awarded gross, including the round’s settlement rounding. */
   winnings: number;
@@ -247,9 +248,9 @@ export type SeasonRow = {
   rake: number;
   /** What changed hands: match money plus bonus money, less rake. */
   dollars: number;
-  /** Points from Cup-eligible money: the matches, plus FB18 on a major. */
+  /** Earned points attributed to match money. */
   pointsFromMoney: number;
-  /** Bonus points: 10 front nine, 10 back nine, 15 for the eighteen. Doubled on a major. */
+  /** Earned points attributed to bonus money. */
   pointsBonus: number;
   points: number;
 };
@@ -320,8 +321,7 @@ async function scoreCompletedRounds(): Promise<
           teamName: teamName.get(row.teamId) ?? "",
           roundType: (m.round_type === "major" ? "major" : "season") as RoundType,
           matchMoney: row.breakdown.main,
-          bonusMoney:
-            row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,
+          bonusMoney: bonusMoneyOf(row.breakdown),
           winnings: row.winnings,
           rake: row.rake,
           dollars: row.dollars,

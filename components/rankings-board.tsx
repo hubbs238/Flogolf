@@ -13,7 +13,7 @@ type BoardGolfer = ScoredGolfer & { photo: string | null };
 /** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
+  { rounds: number; points: number; matchPoints: number; bonusPoints: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
 >;
 
 type SeasonEntry = SeasonByGolfer[string];
@@ -364,7 +364,7 @@ function GolferCard({
           <div className={`${cellLabel} ${sortBy === POINTS ? "text-ink" : "text-muted"}`}>
             {sortBy === POINTS && <SortMark />}
             <TrophyIcon className="h-3.5 w-3.5 shrink-0" />
-            Points
+            Total Points
           </div>
         </div>
 
@@ -379,6 +379,15 @@ function GolferCard({
             {sortBy === OVERALL && <SortMark />}
             Overall
           </div>
+        </div>
+
+        <div className="rounded-xl bg-surface px-3 py-2.5">
+          <div className={cellNumber}>{played ? season!.matchPoints.toFixed(2) : "—"}</div>
+          <div className={cellLabel}>Match Points</div>
+        </div>
+        <div className="rounded-xl bg-surface px-3 py-2.5">
+          <div className={cellNumber}>{played ? season!.bonusPoints.toFixed(2) : "—"}</div>
+          <div className={cellLabel}>Bonus Points</div>
         </div>
 
         {/* Money takes the full width beneath. A currency string never fits a

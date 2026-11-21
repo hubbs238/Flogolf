@@ -47,8 +47,9 @@ export function GolferRoundHistory({
     <section>
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
-        Season rounds award one point per dollar of individual winnings before rake,
-        including side games. Losing rounds earn zero points. Majors earn two points per dollar under the same rule.
+        Points come from each player’s positive winnings before rake. Match Points and Bonus Points
+        divide that total between the matches and FB18. A loss in either reduces the points earned in the other.
+        Majors double both.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -62,7 +63,7 @@ export function GolferRoundHistory({
                   <th className="w-32 p-3 text-right font-medium">Bonus Money</th>
                 </>
               )}
-              <th className="w-32 p-3 text-right font-medium">Money Points</th>
+              <th className="w-32 p-3 text-right font-medium">Match Points</th>
               <th className="w-32 p-3 text-right font-medium">Bonus Points</th>
               <th className="w-32 p-3 text-right font-medium text-ink">Total Points</th>
             </tr>
@@ -103,7 +104,7 @@ export function GolferRoundHistory({
                   {r.pointsFromMoney.toFixed(2)}
                 </td>
                 <td className="p-3 text-right tabular-nums text-muted">
-                  {r.pointsBonus > 0 ? `+${r.pointsBonus}` : "—"}
+                  {r.pointsBonus > 0 ? "+" : ""}{r.pointsBonus.toFixed(2)}
                 </td>
                 <td className="p-3 text-right">
                   <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(r.points)}`}>
@@ -135,7 +136,7 @@ export function GolferRoundHistory({
                 {totals.fromMoney.toFixed(2)}
               </td>
               <td className="p-3 text-right tabular-nums text-muted">
-                {totals.bonus > 0 ? `+${totals.bonus}` : "—"}
+                {totals.bonus > 0 ? "+" : ""}{totals.bonus.toFixed(2)}
               </td>
               <td className="p-3 text-right">
                 <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(totals.points)}`}>
