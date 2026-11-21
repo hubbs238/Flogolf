@@ -65,7 +65,7 @@ const teamIds = Object.keys(ROSTERS);
 const segments = segmentsFor(ROUND.setHoles);
 const main = scoreMainGame({
   teamIds, scores, payouts: PAYOUTS, decisions: {},
-  tieDefault: ROUND.tieDefault, segments, splitByPosition: true,
+  tieDefault: ROUND.tieDefault, segments,
 });
 const fb18 = scoreFb18({ teamIds, scores, payouts: FB18_PAYOUTS, overallMoneyOrder: ["Team 1", "Team 3"] });
 const fbDollars = fb18DollarsBySegment(fb18.results, {

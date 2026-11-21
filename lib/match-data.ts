@@ -137,7 +137,6 @@ export function computeMatch(b: MatchBundle) {
     payouts: b.payouts,
     decisions: b.decisions,
     tieDefault: b.match.tie_default,
-    splitByPosition: b.match.split_by_position,
     segments: segmentsFor(setHoles),
   });
 
@@ -243,6 +242,8 @@ export type SeasonRow = {
   matchMoney: number;
   /** FB18 front nine, back nine and all eighteen. Earns points on a major. */
   bonusMoney: number;
+  /** Awarded gross, including the round’s settlement rounding. */
+  winnings: number;
   /** Flat charges paid to play. Money only, never points. */
   rake: number;
   /** What changed hands: match money plus bonus money, less rake. */
@@ -264,6 +265,8 @@ export type GolferRoundRow = {
   roundType: RoundType;
   matchMoney: number;
   bonusMoney: number;
+  /** Awarded gross, including the round’s settlement rounding. */
+  winnings: number;
   rake: number;
   dollars: number;
   pointsFromMoney: number;
@@ -320,6 +323,7 @@ async function scoreCompletedRounds(): Promise<
           matchMoney: row.breakdown.main,
           bonusMoney:
             row.breakdown.front + row.breakdown.back + row.breakdown.eighteen,
+          winnings: row.winnings,
           rake: row.rake,
           dollars: row.dollars,
           pointsFromMoney: p?.fromMoney ?? 0,
@@ -347,12 +351,13 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
         golferId: row.golferId, rounds: 0,
-        matchMoney: 0, bonusMoney: 0, rake: 0, dollars: 0,
+        matchMoney: 0, bonusMoney: 0, winnings: 0, rake: 0, dollars: 0,
         pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
       cur.matchMoney += row.matchMoney;
       cur.bonusMoney += row.bonusMoney;
+      cur.winnings += row.winnings;
       cur.rake += row.rake;
       cur.dollars += row.dollars;
       cur.pointsFromMoney += row.pointsFromMoney;
@@ -367,6 +372,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     ...r,
     matchMoney: round2(r.matchMoney),
     bonusMoney: round2(r.bonusMoney),
+    winnings: round2(r.winnings),
     rake: round2(r.rake),
     dollars: round2(r.dollars),
     pointsFromMoney: round2(r.pointsFromMoney),

@@ -10,14 +10,10 @@ import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
 
-/** Match and bonus money together. Both absent means nothing to add up. */
-const winningsOf = (s: { matchMoney?: number; bonusMoney?: number }) =>
-  (s.matchMoney ?? 0) + (s.bonusMoney ?? 0);
-
 /** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; matchMoney?: number; bonusMoney?: number }
+  { rounds: number; points: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
 >;
 
 type SeasonEntry = SeasonByGolfer[string];
@@ -36,14 +32,10 @@ const ordinal = (n: number) => {
   return `${n}${suffix}`;
 };
 
-/** Whole dollars with a sign. Cents live on the standings and the profile. */
-const cash = (n: number) => {
-  // Sign from the rounded figure, not the raw one, or 40 cents renders as
-  // "+$0" in winning green and a small loss as "-$0" in red.
-  const rounded = Math.round(n);
-  const whole = Math.abs(rounded).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-  return `${rounded > 0 ? "+" : rounded < 0 ? "-" : ""}$${whole}`;
-};
+const formatDollars = new Intl.NumberFormat("en-US", {
+  style: "currency", currency: "USD", signDisplay: "exceptZero",
+  minimumFractionDigits: 0, maximumFractionDigits: 2,
+});
 
 const tone = (n: number) =>
   n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -86,7 +78,7 @@ export function RankingsBoard({
     return (g: BoardGolfer): number | null => {
       const played = season[g.id]?.rounds ? season[g.id] : null;
       if (sort === POINTS) return played ? played.points : null;
-      if (sort === WINNINGS) return played ? winningsOf(played) : null;
+      if (sort === WINNINGS) return played?.winnings ?? null;
       if (sort === MATCH_MONEY) return played ? (played.matchMoney ?? 0) : null;
       if (sort === BONUS_MONEY) return played ? (played.bonusMoney ?? 0) : null;
       if (sort === OVERALL) return g.overall;
@@ -277,7 +269,7 @@ function GolferCard({
   const moneyValue =
     sortBy === MATCH_MONEY ? (season?.matchMoney ?? 0)
       : sortBy === BONUS_MONEY ? (season?.bonusMoney ?? 0)
-        : winningsOf(season ?? {});
+        : (season?.winnings ?? 0);
   const moneyLabel =
     sortBy === MATCH_MONEY ? "Match $" : sortBy === BONUS_MONEY ? "Bonus $" : "Winnings";
 
@@ -394,7 +386,7 @@ function GolferCard({
         {showMoney && (
           <div className="col-span-full rounded-xl bg-surface px-3 py-2.5">
             <div className={`${cellNumber} ${played ? tone(moneyValue) : "text-muted"}`}>
-              {played ? cash(moneyValue) : "—"}
+              {played ? formatDollars.format(moneyValue) : "—"}
             </div>
             <div className={`${cellLabel} ${MONEY_SORTS.includes(sortBy) ? "text-ink" : "text-muted"}`}>
               {MONEY_SORTS.includes(sortBy) && <SortMark />}

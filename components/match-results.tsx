@@ -216,7 +216,7 @@ export function MatchResults({
 
                 {s.awards.some((a) => a.splitShare) && (
                   <p className="mt-2 rounded-lg bg-line/60 px-2.5 py-1.5 text-xs text-muted">
-                    Still level after 18. Those units shared evenly.
+                    Tied teams split the units for their finishing positions.
                   </p>
                 )}
               </div>
@@ -229,10 +229,8 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FB18</h3>
           <p className="mb-3 text-sm text-muted">
-            Same scores, scored separately. Lowest front nine, lowest back nine,
-            lowest eighteen. A tie nobody can break shares that prize evenly.
-            {showMoney && " All three pay money."}
-            {" Side-game winnings count toward pre-rake points."}
+            Front nine, back nine, lowest 18 and second-lowest 18 are scored separately.
+            Tied teams average the units for the places they share.
           </p>
           <div className="grid gap-3 sm:grid-cols-3">
             {fb18.map((r) => (
@@ -280,7 +278,7 @@ export function MatchResults({
                     })}
                 </ul>
                 {r.split.length > 0 && (
-                  <p className="mt-2 text-xs text-muted">Tied, prize shared evenly</p>
+                  <p className="mt-2 text-xs text-muted">Tied teams share the listed positions.</p>
                 )}
               </div>
             ))}

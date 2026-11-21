@@ -29,6 +29,7 @@ export default async function RankingsPage() {
             points: row.points,
             matchMoney: row.matchMoney,
             bonusMoney: row.bonusMoney,
+            winnings: row.winnings,
           }
         : { rounds: row.rounds, points: row.points },
     ]),

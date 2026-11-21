@@ -1802,7 +1802,7 @@ export async function exportRoundJson(
       teamCount: bundle.match.team_count,
       rosterCap: bundle.match.roster_size,
       tieDefault: bundle.match.tie_default,
-      splitByPosition: bundle.match.split_by_position ?? false,
+      splitByPosition: true,
       wholeDollarSettlement: bundle.match.whole_dollar_settlement ?? false,
       frontMoneyTiers: bundle.match.front_money_tiers?.map(tier =>
         tier.map(id => teamName.get(id) ?? id)) ?? [],
