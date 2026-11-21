@@ -145,6 +145,8 @@ export type Match = {
    * eighteen's rate, not to the side game rate, because the league pays that
    * pot at half. See segmentRate in lib/match-data.ts.
    */
+  split_by_position?: boolean;
+  overall_money_order?: string[] | null;
   fb18_second_dollars_per_unit: number | null;
   tie_default: "hole" | "set";
   status: MatchStatus;

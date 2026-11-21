@@ -154,6 +154,7 @@ export function computeMatch(b: MatchBundle) {
     payouts: b.payouts,
     decisions: b.decisions,
     tieDefault: b.match.tie_default,
+    splitByPosition: b.match.split_by_position,
     segments: segmentsFor(setHoles),
   });
 
@@ -161,6 +162,7 @@ export function computeMatch(b: MatchBundle) {
     teamIds: fb18TeamIds,
     scores: b.scores,
     payouts: b.fb18Payouts,
+    overallMoneyOrder: b.match.overall_money_order ?? undefined,
   });
 
   const unitsByTeam: Record<string, number> = {};
@@ -203,12 +205,12 @@ export function computeMatch(b: MatchBundle) {
   const cupDollarsPerPlayerByTeam: Record<string, number> = {};
 
   for (const id of teamIds) {
-    const fb = fb18Dollars[id] ?? { front: 0, back: 0, total: 0 };
+    const fb = fb18Dollars[id] ?? { front: 0, back: 0, total: 0, second: 0 };
     const b18: MoneyBreakdown = {
       main: (main.unitsByTeam[id] ?? 0) * mainRate,
       front: fb.front,
       back: fb.back,
-      eighteen: fb.total,
+      eighteen: fb.total + fb.second,
     };
     breakdownByTeam[id] = b18;
     dollarsPerPlayerByTeam[id] = b18.main + b18.front + b18.back + b18.eighteen;

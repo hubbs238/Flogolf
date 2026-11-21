@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MatchStakes } from "./match-stakes";
+import { SECOND_EIGHTEEN_RATE_SHARE } from "@/lib/game";
 import type { Fb18Segment, PayoutTable } from "@/lib/game";
 import type { Match, MatchTeam } from "@/lib/types";
 
@@ -22,6 +23,9 @@ export function MatchStakesEditor({
 }) {
   const [open, setOpen] = useState(false);
 
+  const eighteenRate = Number(match.fb18_total_dollars_per_unit ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit);
+  const secondRate = match.fb18_second_dollars_per_unit ?? Math.round(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE * 100) / 100;
+
   return (
     <section className="rounded-2xl border border-line bg-raised p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -33,7 +37,7 @@ export function MatchStakesEditor({
               ["F9", match.fb18_front_dollars_per_unit],
               ["B9", match.fb18_back_dollars_per_unit],
               ["18", match.fb18_total_dollars_per_unit],
-              ["2nd 18", match.fb18_second_dollars_per_unit],
+              ["2nd 18", secondRate],
             ]
               .map(([label, v]) =>
                 `${label} $${v ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit}`)

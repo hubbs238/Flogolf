@@ -8,6 +8,7 @@
  *
  *   npm run explain-round
  */
+import assert from "node:assert/strict";
 import {
   scoreMainGame,
   scoreFb18,
@@ -33,14 +34,15 @@ const ROUND = {
   setHoles: 3 as const,
   tieDefault: "hole" as const,
   rakePerPlayer: 35,
-  rates: { main: 25, front: 10, back: 10, total: 15, second: 7.5 },
+  rates: { main: 25, front: 10, back: 10, total: 10, second: 5 },
 };
 
 const PAYOUTS: PayoutTable = { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 };
-const FB18_PAYOUTS: Record<"front" | "back" | "total", PayoutTable> = {
+const FB18_PAYOUTS: Record<"front" | "back" | "total" | "second", PayoutTable> = {
   front: { 1: 4, 2: -1, 3: -1, 4: -1, 5: -1 },
   back: { 1: 4, 2: -1, 3: -1, 4: -1, 5: -1 },
-  total: { 1: 2.5, 2: 1.5, 3: -1.33, 4: -1.33, 5: -1.33 },
+  total: { 1: 4, 2: -1, 3: -1, 4: -1, 5: -1 },
+  second: { 1: -1, 2: 4, 3: -1, 4: -1, 5: -1 },
 };
 
 const ROSTERS: Record<string, string[]> = {
@@ -65,11 +67,11 @@ const teamIds = Object.keys(ROSTERS);
 const segments = segmentsFor(ROUND.setHoles);
 const main = scoreMainGame({
   teamIds, scores, payouts: PAYOUTS, decisions: {},
-  tieDefault: ROUND.tieDefault, segments,
+  tieDefault: ROUND.tieDefault, segments, splitByPosition: true,
 });
-const fb18 = scoreFb18({ teamIds, scores, payouts: FB18_PAYOUTS });
+const fb18 = scoreFb18({ teamIds, scores, payouts: FB18_PAYOUTS, overallMoneyOrder: ["Team 1", "Team 3"] });
 const fbDollars = fb18DollarsBySegment(fb18.results, {
-  front: ROUND.rates.front, back: ROUND.rates.back, total: ROUND.rates.total,
+  front: ROUND.rates.front, back: ROUND.rates.back, total: ROUND.rates.total, second: ROUND.rates.second,
 });
 const multiplier = POINT_MULTIPLIER[ROUND.roundType];
 const cupEligible = cupEligibleFor(ROUND.roundType);
@@ -79,13 +81,14 @@ const breakdownByTeam: Record<string, MoneyBreakdown> = Object.fromEntries(
     main: (main.unitsByTeam[t] ?? 0) * ROUND.rates.main,
     front: fbDollars[t]?.front ?? 0,
     back: fbDollars[t]?.back ?? 0,
-    eighteen: fbDollars[t]?.total ?? 0,
+    eighteen: (fbDollars[t]?.total ?? 0) + (fbDollars[t]?.second ?? 0),
   }]),
 );
 const money = awardMoney({
   breakdownByTeam, rosters: ROSTERS,
   rakePerPlayer: ROUND.rakePerPlayer, cupEligible,
 });
+assert.deepEqual(teamIds.map(t => money.find(row => row.teamId === t)?.dollars), [105, -220, 47, -70, -53]);
 const bonus = scoreBonusPoints(teamIds, scores, multiplier);
 const points = roundPoints({
   money, bonusByTeam: bonus.pointsByTeam, rosters: ROSTERS, multiplier,
@@ -140,7 +143,7 @@ console.log(pad(`at $${ROUND.rates.main}`, 13) +
 
 console.log("\n--- the side game ---------------------------------------------");
 for (const r of fb18.results) {
-  const label = r.segment === "total" ? "All 18" : `${r.segment} nine`;
+  const label = r.segment === "total" ? "All 18" : `${r.segment === "second" ? "Second 18" : r.segment + " nine"}`;
   const rate = ROUND.rates[r.segment === "total" ? "total" : r.segment];
   console.log(`\n${label}, at $${rate} a unit`);
   console.log(pad("  scores", 9) + teamIds.map((t) => rpad(formatRelative(r.totals[t] ?? null), 6)).join(""));
@@ -163,7 +166,7 @@ for (const b of bonus.segments) {
 }
 
 console.log("\n--- settlement, per player ------------------------------------");
-console.log("  a unit pays its full value to EVERY player on the bay");
+console.log("  each bay divides four shares among its players");
 console.log(
   "\n  " + pad("team", 9) + rpad("match", 11) + rpad("F9", 10) + rpad("B9", 10) +
   rpad("18", 11) + rpad("winnings", 12) + rpad("rake", 9) + rpad("net", 11),
@@ -181,7 +184,7 @@ const netAll = money.reduce((n, m) => n + m.dollars, 0);
 const rakeAll = money.reduce((n, m) => n + m.rake, 0);
 console.log(`\n  ${money.length} players, ${money2(rakeAll)} of rake leaves the group`);
 console.log(`  every player's net added up: ${money2(netAll)}`);
-console.log(`  it would be ${money2(-rakeAll)} on even bays; the gap is uneven rosters`);
+assert.equal(netAll, -rakeAll);
 
 console.log("\n--- FLO Cup points, per player --------------------------------");
 console.log(

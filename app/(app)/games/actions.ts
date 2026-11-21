@@ -1867,6 +1867,8 @@ export async function exportRoundJson(
       teamCount: bundle.match.team_count,
       rosterCap: bundle.match.roster_size,
       tieDefault: bundle.match.tie_default,
+      splitByPosition: bundle.match.split_by_position ?? false,
+      overallMoneyOrder: bundle.match.overall_money_order?.map(id => teamName.get(id) ?? id) ?? [],
       rakePerPlayer: computed.rakePerPlayer,
       rates: computed.rates,
     },
@@ -1875,6 +1877,7 @@ export async function exportRoundJson(
       front: bundle.fb18Payouts.front,
       back: bundle.fb18Payouts.back,
       total: bundle.fb18Payouts.total,
+      second: bundle.fb18Payouts.second,
     },
     tieDecisions: bundle.decisions,
     teams: bundle.teams.map((t) => ({

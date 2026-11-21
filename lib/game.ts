@@ -321,6 +321,7 @@ export function scoreMainGame(opts: {
   payouts: PayoutTable;
   decisions: TieDecisions;
   tieDefault: TieChoice;
+  splitByPosition?: boolean;
   /** Six threes or three sixes. Independent of the round type. */
   segments?: readonly (readonly number[])[];
 }): { segments: SegmentResult[]; unitsByTeam: Record<string, number> } {
@@ -519,7 +520,13 @@ export function scoreMainGame(opts: {
     // Every group is placed, so the prize pool and the number of bays funding
     // it are both known. A block that carried forward or is still pending was
     // never added to groups, so it keeps the zero it was awarded.
-    const settled = shareByPrize(groups, effective);
+    const settled = opts.splitByPosition
+      ? Object.fromEntries(groups.flatMap(({ teamIds, from, held }) => {
+          const sum = teamIds.reduce((n, _, i) => n + (effective[from + i] ?? 0), 0);
+          const units = held ? 0 : round3(sum / teamIds.length);
+          return teamIds.map((id) => [id, units]);
+        }))
+      : shareByPrize(groups, effective);
     for (const a of awards) a.units = settled[a.teamId] ?? 0;
 
     for (const a of awards) unitsByTeam[a.teamId] += a.units;
@@ -681,6 +688,7 @@ export function scoreFb18(opts: {
    * round created before the second eighteen existed has to keep doing.
    */
   payouts: Partial<Record<Fb18Segment, PayoutTable>>;
+  overallMoneyOrder?: readonly string[];
 }): { results: Fb18Result[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts } = opts;
 
@@ -695,11 +703,19 @@ export function scoreFb18(opts: {
     return blocksByScore(backTotals, block);
   };
 
+  // A recorded ruling applies only to a complete tied group in the two
+  // eighteen-hole money pots. Unruled groups continue to share.
+  const order = opts.overallMoneyOrder ?? [];
+  const overallRuling = (block: string[]) =>
+    block.every((id) => order.includes(id))
+      ? order.filter((id) => block.includes(id)).map((id) => [id])
+      : null;
+
   const results = [
     scoreFb18Segment("front", teamIds, scores, payouts.front ?? {}, byBackNine),
     scoreFb18Segment("back", teamIds, scores, payouts.back ?? {}),
-    scoreFb18Segment("total", teamIds, scores, payouts.total ?? {}),
-    scoreFb18Segment("second", teamIds, scores, payouts.second ?? {}),
+    scoreFb18Segment("total", teamIds, scores, payouts.total ?? {}, overallRuling),
+    scoreFb18Segment("second", teamIds, scores, payouts.second ?? {}, overallRuling),
   ];
 
   const unitsByTeam: Record<string, number> = {};
