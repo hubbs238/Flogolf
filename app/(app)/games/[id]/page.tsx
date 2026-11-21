@@ -89,7 +89,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
               : ""}
           </p>
         </div>
-        {isAdmin && match.status !== "setup" && <MatchAdminBar match={match} />}
+        {isAdmin && <MatchAdminBar match={match} />}
       </div>
 
       {match.status === "setup" &&
