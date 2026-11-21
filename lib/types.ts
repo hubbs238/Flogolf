@@ -146,6 +146,8 @@ export type Match = {
    * pot at half. See segmentRate in lib/match-data.ts.
    */
   split_by_position?: boolean;
+  front_money_tiers?: string[][] | null;
+  whole_dollar_settlement?: boolean;
   overall_money_order?: string[] | null;
   fb18_second_dollars_per_unit: number | null;
   tie_default: "hole" | "set";

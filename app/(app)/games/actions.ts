@@ -1829,6 +1829,9 @@ export async function exportRoundJson(
       rosterCap: bundle.match.roster_size,
       tieDefault: bundle.match.tie_default,
       splitByPosition: bundle.match.split_by_position ?? false,
+      wholeDollarSettlement: bundle.match.whole_dollar_settlement ?? false,
+      frontMoneyTiers: bundle.match.front_money_tiers?.map(tier =>
+        tier.map(id => teamName.get(id) ?? id)) ?? [],
       overallMoneyOrder: bundle.match.overall_money_order?.map(id => teamName.get(id) ?? id) ?? [],
       rakePerPlayer: computed.rakePerPlayer,
       rates: computed.rates,

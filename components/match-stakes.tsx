@@ -160,7 +160,7 @@ export function MatchStakes({
           <input type="number" min={0} step="0.5" defaultValue={mainRate}
             onBlur={(e) => run(() => updateMatchSettings(match.id, { dollarsPerUnit: Number(e.target.value) }))}
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
-          <span className="mt-1 block text-xs text-muted">Paid to each player</span>
+          <span className="mt-1 block text-xs text-muted">Per share. Each bay splits four shares among its players.</span>
         </label>
 
         <label>
@@ -215,7 +215,7 @@ export function MatchStakes({
       <div>
         <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
           <span className="text-sm font-medium">In the FB18 side game</span>
-          <span className="text-xs text-muted">Dollar figures below are per player</span>
+          <span className="text-xs text-muted">Dollar figures below are per share</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {teams.map((team) => (

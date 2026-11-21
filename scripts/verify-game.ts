@@ -1621,5 +1621,41 @@ console.log("\n=== who is shown money ===");
       .every((m) => m.showMoney === !m.asPlayer), true);
 }
 
+// November 11 card: Bays 3 and 5 shared the front, ahead of Bay 1.
+{
+  const teamIds = ["1", "2", "3", "4", "5"];
+  const holeRows = [
+    [-1,-1,-1, 0,-1,0, 0,-1,-1, -1,-1,-1, -1,-1,-1, 0,-1,-1],
+    [-1,0,-1, 0,0,0, 0,-2,-1, -1,-1,0, 0,-1,0, 0,1,-1],
+    [-1,-1,0, -1,-1,-1, 0,-1,0, -1,-1,0, 0,-1,-1, 1,-1,-2],
+    [0,-1,-1, -1,-1,0, 0,-1,0, -1,-1,-1, 0,-1,-1, 0,0,-2],
+    [-1,-1,0, -1,-1,0, 0,-1,-1, -1,-1,0, 0,-1,-1, 0,-1,0],
+  ];
+  const scores = Object.fromEntries(teamIds.map((id, i) =>
+    [id, Object.fromEntries(holeRows[i].map((score, j) => [j + 1, score]))]));
+  const main = scoreMainGame({ teamIds, scores, decisions: {}, tieDefault: "hole",
+    payouts: { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 }, splitByPosition: true, segments: segmentsFor(3) });
+  const first = { 1: 4, 2: -1, 3: -1, 4: -1, 5: -1 };
+  const payouts = { front: first, back: first, total: first, second: { ...first, 1: -1, 2: 4 } };
+  const fb18 = scoreFb18({ teamIds, scores, payouts,
+    frontMoneyTiers: [["3","5"],["1"]], overallMoneyOrder: ["4","3"] });
+  const side = fb18DollarsBySegment(fb18.results, { front: 10, back: 10, total: 10, second: 5 });
+  check("November 11 front nine per share", teamIds.map(id => side[id].front), [-10,-10,15,-10,15]);
+  const rosters = Object.fromEntries(teamIds.map(id => [id,
+    Array.from({ length: id === "1" ? 5 : 4 }, (_, i) => id + "-" + i)]));
+  const breakdownByTeam = Object.fromEntries(teamIds.map(id =>
+    [id, bd(main.unitsByTeam[id] * 25, side[id].front, side[id].back, side[id].total + side[id].second)]));
+  const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer: 35,
+    wholeDollarSettlement: true, cupEligible: "gross" });
+  const each = teamIds.map(id => money.find(player => player.teamId === id)!);
+  check("November 11 net per player", each.map(p => p.dollars), [150,-145,-28,-103,-95]);
+  check("November 11 pre-rake points", each.map(p => pointsForRound(p.cupDollars, 1)), [185,0,7,0,0]);
+  check("November 11 team settlements", teamIds.map(id =>
+    money.filter(p => p.teamId === id).reduce((sum, p) => sum + p.dollars, 0)), [750,-580,-112,-412,-380]);
+  const stale = scoreFb18({ teamIds, scores, payouts, frontMoneyTiers: [["3","5"]] });
+  check("a ruling for different tied bays does not override the countback",
+    stale.results[0].awards, scoreFb18({ teamIds, scores, payouts }).results[0].awards);
+}
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

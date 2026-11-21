@@ -32,7 +32,7 @@ export function MatchStakesEditor({
         <div>
           <h3 className="font-semibold">Stakes and payouts</h3>
           <p className="text-sm text-muted">
-            ${match.dollars_per_unit} a unit to each player. FB18 at{" "}
+            ${match.dollars_per_unit} a unit per share. Each bay splits four shares. FB18 at{" "}
             {[
               ["F9", match.fb18_front_dollars_per_unit],
               ["B9", match.fb18_back_dollars_per_unit],

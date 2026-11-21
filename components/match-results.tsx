@@ -292,7 +292,7 @@ export function MatchResults({
         <h3 className="mb-1 font-semibold">Where it stands</h3>
         <p className="mb-3 text-sm text-muted">
           {showMoney
-            ? "A unit pays its dollar value to every player on the roster, so the team total is the per player figure multiplied by the roster."
+            ? "Each bay gets four shares of its result. Five players split those four shares equally, so each gets 80% of one share."
             : `Units won and lost across the ${matchesPhrase} and the side game.`}
           {showMoney && anyRake &&
             ` These are winnings before rake: $${rake.toFixed(2)} a player` +
@@ -392,6 +392,7 @@ export function MatchResults({
             What each player owes or collects, and where it came from. Positive
             is money in, negative is money out.
             {anyRake && ` A rake of $${rake.toFixed(2)} a player comes off the total.`}
+            {match.whole_dollar_settlement && " This round rounds each player’s share to the nearest dollar before rake."}
             {" "}Only admins see this table.
           </p>
 
@@ -466,13 +467,8 @@ export function MatchResults({
           </div>
 
           <p className="mt-2 text-xs text-muted">
-            The round total is what the group is up or down overall. The
-            winnings part lands on zero when every team fields the same number
-            of players, and drifts when one plays a man short, since a unit pays
-            each player rather than being divided among them.
-            {anyRake &&
-              ` The rake takes a further $${(rake * money.length).toFixed(2)} out of the group,` +
-              " since it leaves the group rather than moving inside it."}
+            The total adds up every player’s settlement. Rounding individual shares can leave a difference.
+            {anyRake && ` The group paid $${(rake * money.length).toFixed(2)} in rake.`}
           </p>
         </section>
       )}

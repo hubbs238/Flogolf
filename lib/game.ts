@@ -301,6 +301,19 @@ function round3(n: number): number {
   return Math.round(n * 1000) / 1000;
 }
 
+function shareByPosition(
+  groups: { teamIds: string[]; from: number; held?: boolean }[],
+  table: PayoutTable,
+): Record<string, number> {
+  const units: Record<string, number> = {};
+  for (const { teamIds, from, held } of groups) {
+    const sum = teamIds.reduce((n, _, i) => n + (table[from + i] ?? 0), 0);
+    const each = held ? 0 : round3(sum / teamIds.length);
+    for (const id of teamIds) units[id] = each;
+  }
+  return units;
+}
+
 function addInto(target: PayoutTable, positions: number[], from: PayoutTable) {
   for (const p of positions) {
     target[p] = (target[p] ?? 0) + (from[p] ?? 0);
@@ -521,11 +534,7 @@ export function scoreMainGame(opts: {
     // it are both known. A block that carried forward or is still pending was
     // never added to groups, so it keeps the zero it was awarded.
     const settled = opts.splitByPosition
-      ? Object.fromEntries(groups.flatMap(({ teamIds, from, held }) => {
-          const sum = teamIds.reduce((n, _, i) => n + (effective[from + i] ?? 0), 0);
-          const units = held ? 0 : round3(sum / teamIds.length);
-          return teamIds.map((id) => [id, units]);
-        }))
+      ? shareByPosition(groups, effective)
       : shareByPrize(groups, effective);
     for (const a of awards) a.units = settled[a.teamId] ?? 0;
 
@@ -608,6 +617,7 @@ function scoreFb18Segment(
   scores: HoleScores,
   payouts: PayoutTable,
   tiebreak?: (block: string[]) => string[][] | null,
+  recordedTiers?: string[][],
 ): Fb18Result {
   const holes = FB18_HOLES[segment];
   const totals: Record<string, number | null> = {};
@@ -624,6 +634,12 @@ function scoreFb18Segment(
   }
 
   const blocks = blocksByScore(totals as Record<string, number>, teamIds);
+  // Apply a card ruling only while exactly those teams are still tied.
+  const ruledIds = recordedTiers?.flat() ?? [];
+  const ruledBlock = recordedTiers?.every(tier => tier.length > 0)
+    ? blocks.find(block => block.length > 1 && block.length === ruledIds.length
+        && block.every(id => ruledIds.includes(id)))
+    : undefined;
   const awards: TeamAward[] = [];
   const split: number[] = [];
   // Who finished where. The units come from shareByPrize once every group is
@@ -650,7 +666,7 @@ function scoreFb18Segment(
       continue;
     }
 
-    const tiers = tiebreak ? tiebreak(block) : null;
+    const tiers = block === ruledBlock ? recordedTiers : tiebreak?.(block);
 
     if (!tiers) {
       shareOut(block, position);
@@ -674,7 +690,7 @@ function scoreFb18Segment(
   // it are both known. Units are filled in here rather than as each group was
   // awarded, because what a losing bay pays depends on how many losers there
   // turned out to be.
-  const units = shareByPrize(groups, payouts);
+  const units = ruledBlock ? shareByPosition(groups, payouts) : shareByPrize(groups, payouts);
   for (const a of awards) a.units = units[a.teamId] ?? 0;
 
   return { segment, status: "complete", totals, awards, split };
@@ -689,6 +705,7 @@ export function scoreFb18(opts: {
    */
   payouts: Partial<Record<Fb18Segment, PayoutTable>>;
   overallMoneyOrder?: readonly string[];
+  frontMoneyTiers?: string[][];
 }): { results: Fb18Result[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts } = opts;
 
@@ -712,7 +729,7 @@ export function scoreFb18(opts: {
       : null;
 
   const results = [
-    scoreFb18Segment("front", teamIds, scores, payouts.front ?? {}, byBackNine),
+    scoreFb18Segment("front", teamIds, scores, payouts.front ?? {}, byBackNine, opts.frontMoneyTiers),
     scoreFb18Segment("back", teamIds, scores, payouts.back ?? {}),
     scoreFb18Segment("total", teamIds, scores, payouts.total ?? {}, overallRuling),
     scoreFb18Segment("second", teamIds, scores, payouts.second ?? {}, overallRuling),
@@ -793,40 +810,7 @@ export type PlayerMoney = {
   breakdown: MoneyBreakdown;
 };
 
-/**
- * Gives every player on a roster the team's full figure.
- *
- * A unit is worth its dollar value to each person, not divided among them.
- * Three units at $100 is $300 each, so a four man team collects $1,200
- * between them.
- *
- * One consequence worth knowing: units balance across a round, dollars only
- * balance when rosters are the same size. Four players beating three means
- * the winners collect more than the losers hand over.
- *
- * Takes dollars rather than units because the main game and FB18 can carry
- * different rates, which makes a single combined unit figure meaningless.
- * The conversion happens upstream where both rates are known.
- *
- * The rake comes off the end. It is the same for everyone on the card and is
- * money leaving the group rather than moving inside it, so it never reaches
- * cupDollars and a round carrying it will not net to zero.
- */
-/**
- * How many shares a bay's winnings are cut into, whoever turns up.
- *
- * The league's book settles a bay as a team: its winnings are the per-man
- * figure times four, split evenly among the men actually on the bay. A bay
- * of four takes the per-man figure each, exactly as before. A bay of five
- * splits four shares five ways, so each man takes four fifths of it; a bay
- * of three splits four shares three ways.
- *
- * This is what makes a night always net to exactly the rake. Paying every
- * man the full per-man figure meant a five-man bay collected more than a
- * four-man bay handed over, and uneven rounds never balanced. Checked against
- * both weeks of the sheet: 9/30 at -183 / 0 / 115 and 11/18 at
- * 105 / -220 / 47 / -70 / -53.
- */
+/** Every bay settles four shares, divided equally among its roster. */
 export const TEAM_SHARES = 4;
 
 export function awardMoney(opts: {
@@ -842,6 +826,7 @@ export function awardMoney(opts: {
    * twice.
    */
   cupEligible?: CupEligible;
+  wholeDollarSettlement?: boolean;
 }): PlayerMoney[] {
   const { breakdownByTeam, rosters, cupEligible = "main" } = opts;
   const shares = opts.shares && opts.shares > 0 ? opts.shares : TEAM_SHARES;
@@ -864,9 +849,9 @@ export function awardMoney(opts: {
       back: round2(b.back * scale),
       eighteen: round2(b.eighteen * scale),
     };
-    const winnings = round2(
-      breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen,
-    );
+    const winnings = opts.wholeDollarSettlement
+      ? Math.round((b.main + b.front + b.back + b.eighteen) * scale)
+      : round2(breakdown.main + breakdown.front + breakdown.back + breakdown.eighteen);
     const dollars = round2(winnings - rake);
 
     for (const golferId of golferIds) {
@@ -878,7 +863,7 @@ export function awardMoney(opts: {
         dollars,
         // Rounded like winnings: summing four already-rounded figures can
         // land on float noise, and this one is read out as a point total.
-        cupDollars: round2(cupDollarsOf(breakdown, cupEligible)),
+        cupDollars: cupEligible === "gross" ? winnings : round2(cupDollarsOf(breakdown, cupEligible)),
         breakdown,
       });
     }
