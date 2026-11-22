@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { replaceMatchPlayer } from "@/app/(app)/games/actions";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -253,9 +254,112 @@ export async function updateGolfer(
   return { ok: true };
 }
 
-export async function deleteGolfer(id: string): Promise<ActionResult> {
+export type GolferRound = {
+  matchId: string;
+  name: string;
+  date: string;
+  status: string;
+  teamName: string;
+  isCaptain: boolean;
+  /** Everyone already playing in that round, who cannot be swapped in. */
+  taken: string[];
+};
+
+/**
+ * Every round a golfer is rostered on, for the delete screen.
+ *
+ * Deleting a golfer cascades: their roster rows go with them. On a finished
+ * round that quietly shrinks a bay, which changes how its four shares are
+ * split and moves everyone's money and points. So before a golfer goes, the
+ * admin sees each round they played in and names who takes their place.
+ */
+export async function golferRounds(golferId: string): Promise<GolferRound[]> {
   await requireAdmin();
   const supabase = await createClient();
+
+  const { data: spots } = await supabase
+    .from("match_players").select("match_id, team_id").eq("golfer_id", golferId);
+  const rows = (spots ?? []) as { match_id: string; team_id: string }[];
+  if (rows.length === 0) return [];
+
+  const matchIds = [...new Set(rows.map((r) => r.match_id))];
+  const [{ data: matches }, { data: teams }, { data: everyone }] = await Promise.all([
+    supabase.from("matches").select("id, name, match_date, status").in("id", matchIds),
+    supabase.from("match_teams").select("id, name, captain_golfer_id").in("match_id", matchIds),
+    supabase.from("match_players").select("match_id, golfer_id").in("match_id", matchIds),
+  ]);
+
+  const matchById = new Map(
+    ((matches ?? []) as { id: string; name: string; match_date: string; status: string }[])
+      .map((m) => [m.id, m]),
+  );
+  const teamById = new Map(
+    ((teams ?? []) as { id: string; name: string; captain_golfer_id: string | null }[])
+      .map((t) => [t.id, t]),
+  );
+  const players = (everyone ?? []) as { match_id: string; golfer_id: string }[];
+
+  return rows
+    .map((r) => {
+      const m = matchById.get(r.match_id);
+      const t = teamById.get(r.team_id);
+      return {
+        matchId: r.match_id,
+        name: m?.name ?? "Round",
+        date: m?.match_date ?? "",
+        status: m?.status ?? "",
+        teamName: t?.name ?? "",
+        isCaptain: t?.captain_golfer_id === golferId,
+        taken: players.filter((p) => p.match_id === r.match_id).map((p) => p.golfer_id),
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+/**
+ * Deletes a golfer, swapping someone into every round they played first.
+ *
+ * `replacements` maps each round the golfer is on to the golfer taking their
+ * place. Every such round needs one: a golfer still on a round is refused
+ * rather than deleted, because the cascade would pull them off it silently.
+ * The list is read again here rather than trusted from the screen, so a round
+ * they were added to in the meantime is caught too.
+ *
+ * Each swap keeps the spot, the team and the captaincy, exactly as the roster
+ * editor's Swap does, because it IS that swap. If one fails part way, the
+ * swaps already made stand (each is a valid correction on its own) and the
+ * golfer is not deleted, so nothing is lost.
+ */
+export async function deleteGolfer(
+  id: string,
+  replacements: Record<string, string> = {},
+): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const rounds = await golferRounds(id);
+  const missing = rounds.filter((r) => !replacements[r.matchId]);
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      error:
+        `They still play in ${missing.length} round${missing.length === 1 ? "" : "s"} ` +
+        `(${missing.map((r) => r.name).join(", ")}). Pick who replaces them in each ` +
+        `before deleting, or the rounds would lose a player and their money would change.`,
+    };
+  }
+
+  for (const r of rounds) {
+    const into = replacements[r.matchId];
+    if (into === id) return { ok: false, error: "A golfer cannot replace themselves." };
+    if (r.taken.includes(into)) {
+      return { ok: false, error: `The replacement is already playing in ${r.name}.` };
+    }
+    const swapped = await replaceMatchPlayer(r.matchId, id, into);
+    if (!swapped.ok) {
+      return { ok: false, error: `Could not swap them out of ${r.name}: ${swapped.error}` };
+    }
+  }
 
   const { error } = await supabase.from("golfers").delete().eq("id", id);
   if (error) return { ok: false, error: error.message };

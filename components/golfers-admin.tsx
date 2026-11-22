@@ -9,8 +9,10 @@ import {
   bulkCreateGolfers,
   createGolfer,
   deleteGolfer,
+  golferRounds,
   updateGolfer,
 } from "@/app/(app)/admin/actions";
+import type { GolferRound } from "@/app/(app)/admin/actions";
 import type { Golfer } from "@/lib/types";
 
 type AdminGolfer = Golfer & { photo: string | null };
@@ -122,7 +124,7 @@ export function GolfersAdmin({ golfers }: { golfers: AdminGolfer[] }) {
 
       <ul className="mt-6 space-y-2">
         {golfers.map((golfer) => (
-          <GolferRow key={golfer.id} golfer={golfer} />
+          <GolferRow key={golfer.id} golfer={golfer} everyone={golfers} />
         ))}
       </ul>
 
@@ -231,12 +233,16 @@ function BulkImport({ onDone }: { onDone: () => void }) {
   );
 }
 
-function GolferRow({ golfer }: { golfer: AdminGolfer }) {
+function GolferRow({ golfer, everyone }: { golfer: AdminGolfer; everyone: AdminGolfer[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  // Rounds this golfer played in, looked up when Delete is pressed. Null
+  // until then, so the plain confirm only shows once the answer is none.
+  const [rounds, setRounds] = useState<GolferRound[] | null>(null);
+  const [replacements, setReplacements] = useState<Record<string, string>>({});
   const fileInput = useRef<HTMLInputElement>(null);
 
   function saveField(field: "name" | "nickname", value: string) {
@@ -286,13 +292,37 @@ function GolferRow({ golfer }: { golfer: AdminGolfer }) {
     });
   }
 
+  function startDelete() {
+    setError(null);
+    setConfirming(true);
+    setRounds(null);
+    setReplacements({});
+    startTransition(async () => {
+      setRounds(await golferRounds(golfer.id));
+    });
+  }
+
+  function cancelDelete() {
+    setConfirming(false);
+    setRounds(null);
+    setReplacements({});
+  }
+
   function remove() {
     startTransition(async () => {
-      const result = await deleteGolfer(golfer.id);
+      const result = await deleteGolfer(golfer.id, replacements);
       if (result.ok) router.refresh();
       else setError(result.error);
     });
   }
+
+  // Anyone else can step in, in the pool or not: a one-off sub who has since
+  // left the pool may well be exactly who played.
+  const others = everyone
+    .filter((g) => g.id !== golfer.id)
+    .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+  const playedIn = rounds ?? [];
+  const allChosen = playedIn.every((r) => replacements[r.matchId]);
 
   return (
     <li
@@ -356,27 +386,119 @@ function GolferRow({ golfer }: { golfer: AdminGolfer }) {
         </button>
 
         {confirming ? (
-          <span className="flex items-center gap-2 text-xs">
-            <button
-              onClick={remove}
-              disabled={pending}
-              className="rounded-lg bg-flag-500 px-3 py-1.5 font-medium text-white"
-            >
-              Delete for good
-            </button>
-            <button onClick={() => setConfirming(false)} className="text-muted">
-              Cancel
-            </button>
-          </span>
+          rounds === null ? (
+            <span className="px-2 text-xs text-muted">Checking their rounds…</span>
+          ) : rounds.length === 0 ? (
+            <span className="flex items-center gap-2 text-xs">
+              <button
+                onClick={remove}
+                disabled={pending}
+                className="rounded-lg bg-flag-500 px-3 py-1.5 font-medium text-white"
+              >
+                Delete for good
+              </button>
+              <button onClick={cancelDelete} className="text-muted">
+                Cancel
+              </button>
+            </span>
+          ) : null
         ) : (
           <button
-            onClick={() => setConfirming(true)}
+            onClick={startDelete}
             className="px-2 text-xs text-muted transition hover:text-flag-500"
           >
             Delete
           </button>
         )}
       </div>
+
+      {confirming && playedIn.length > 0 && (
+        <div className="mt-3 rounded-xl border border-flag-500/40 bg-flag-500/5 p-3 text-sm">
+          <p className="font-medium text-flag-500">
+            {displayName(golfer)} played in {playedIn.length} round
+            {playedIn.length === 1 ? "" : "s"}.
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            Deleting them would take them off{" "}
+            {playedIn.length === 1 ? "that round" : "those rounds"}, which shrinks
+            the bay and changes everyone&apos;s money and points. Pick who takes
+            their place in each. The replacement keeps their spot, team and
+            captaincy, and the scores stay exactly as entered.
+          </p>
+
+          {playedIn.length > 1 && (
+            <label className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted">Same person for every round:</span>
+              <select
+                value=""
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) return;
+                  // Only where they are free to play; a round they already
+                  // played in keeps whatever was chosen there.
+                  setReplacements((prev) => {
+                    const next = { ...prev };
+                    for (const r of playedIn) {
+                      if (!r.taken.includes(id)) next[r.matchId] = id;
+                    }
+                    return next;
+                  });
+                }}
+                className="rounded-lg border border-line bg-surface px-2 py-1 outline-none focus:border-fairway-400"
+              >
+                <option value="">Choose…</option>
+                {others.map((g) => (
+                  <option key={g.id} value={g.id}>{displayName(g)}</option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <ul className="mt-3 space-y-2">
+            {playedIn.map((r) => (
+              <li key={r.matchId} className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="min-w-0 flex-1 basis-48">
+                  <span className="font-medium text-ink">{r.name}</span>
+                  <span className="text-muted">
+                    {" · "}{r.teamName}{r.isCaptain && " (captain)"}
+                    {r.status === "complete" && " · final"}
+                  </span>
+                </span>
+                <select
+                  value={replacements[r.matchId] ?? ""}
+                  onChange={(e) =>
+                    setReplacements((prev) => ({ ...prev, [r.matchId]: e.target.value }))
+                  }
+                  className="rounded-lg border border-line bg-surface px-2 py-1 outline-none focus:border-fairway-400"
+                >
+                  <option value="">Swap in…</option>
+                  {others
+                    .filter((g) => !r.taken.includes(g.id))
+                    .map((g) => (
+                      <option key={g.id} value={g.id}>{displayName(g)}</option>
+                    ))}
+                </select>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+            <button
+              onClick={remove}
+              disabled={pending || !allChosen}
+              className="rounded-lg bg-flag-500 px-3 py-1.5 font-medium text-white disabled:opacity-50"
+            >
+              {pending ? "Swapping…" : "Swap them in and delete"}
+            </button>
+            <button onClick={cancelDelete} className="text-muted">
+              Cancel
+            </button>
+            {!allChosen && (
+              <span className="text-muted">Choose a replacement for every round first.</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && <p className="mt-2 text-xs text-flag-500">{error}</p>}
       {golfer.nickname && (
