@@ -25,6 +25,7 @@ import {
   setLengthOf,
 } from "../lib/game";
 import { modeFrom } from "../lib/view-mode";
+import { checkMoves, movedDecisionKey, movedScores, type ScoreRow } from "../lib/score-move";
 import { isoFromLooseDate } from "../lib/dates";
 import { convertReading, deriveStakes, type RawReading } from "../lib/round-reading";
 
@@ -1540,10 +1541,10 @@ console.log("\n=== shared finishes pay the same way in every cash pot ===");
 
 console.log("\n=== the order teams are listed in never changes what they win ===");
 {
-  // Teams can be dragged into a new order after the fact, which only rewrites
-  // their slots. That is safe only if nothing in the scoring reads the order,
-  // so this scores the 11/18 card, ties and all, in every one of the 120
-  // orders five teams can be listed in, and requires one answer.
+  // Nothing in the scoring may read the order teams are listed in, or a
+  // team's place on the page would change what it wins. This scores the 11/18
+  // card, ties and all, in every one of the 120 orders five teams can be
+  // listed in, and requires one answer.
   const h = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
   const card: HoleScores = {
     t1: h([-1,-1,-1, 0,-1,-1,-1,-1,-1,  -1,-1, 0,-1,-2,-1, 0,-1,-1]),
@@ -1581,6 +1582,82 @@ console.log("\n=== the order teams are listed in never changes what they win ===
   check("there are 120 ways to list five teams", every.length, 120);
   check("and every one of them pays exactly the same",
     new Set(every.map(outcome)).size, 1);
+}
+
+console.log("\n=== moving a card typed against the wrong team ===");
+{
+  const ids = ["A", "B", "C"];
+
+  check("a straight swap is fine",
+    checkMoves(ids, [{ from: "A", to: "B" }, { from: "B", to: "A" }]), null);
+  check("so is a three-way rotation",
+    checkMoves(ids, [{ from: "A", to: "B" }, { from: "B", to: "C" }, { from: "C", to: "A" }]), null);
+  check("but not a card copied onto a team that keeps its own",
+    checkMoves(ids, [{ from: "A", to: "B" }]) !== null, true);
+  check("nor two cards onto one team",
+    checkMoves(ids, [{ from: "A", to: "C" }, { from: "B", to: "C" }]) !== null, true);
+  check("nor a team from another round",
+    checkMoves(ids, [{ from: "A", to: "Z" }, { from: "Z", to: "A" }]) !== null, true);
+  check("and moving nothing is not a move", checkMoves(ids, []) !== null, true);
+
+  const row = (team_id: string, hole: number, strokes: number): ScoreRow =>
+    ({ team_id, hole, strokes });
+
+  // A has three holes, B has two: the cards are different lengths, so the
+  // hole A no longer has after the swap has to be cleared, not left behind.
+  const rows = [row("A", 1, -1), row("A", 2, 0), row("A", 3, -2), row("B", 1, 1), row("B", 2, 0)];
+  const swapped = movedScores(rows, [{ from: "A", to: "B" }, { from: "B", to: "A" }]);
+  const holesOf = (t: string) =>
+    swapped.upsert.filter((r) => r.team_id === t).map((r) => [r.hole, r.strokes]);
+  check("B takes A's card hole for hole", holesOf("B"), [[1, -1], [2, 0], [3, -2]]);
+  check("A takes B's", holesOf("A"), [[1, 1], [2, 0]]);
+  check("and A's third hole is cleared rather than left behind",
+    swapped.prune.find((p) => p.team_id === "A")!.keep, [1, 2]);
+
+  // A card moved onto a team that had none: that team's empty card moves back.
+  const ontoEmpty = movedScores([row("A", 1, -1)], [{ from: "A", to: "C" }, { from: "C", to: "A" }]);
+  check("a card moved onto an empty team arrives whole",
+    ontoEmpty.upsert.map((r) => [r.team_id, r.hole, r.strokes]), [["C", 1, -1]]);
+  check("and the team it left is cleared",
+    ontoEmpty.prune.find((p) => p.team_id === "A")!.keep, []);
+
+  // A tie ruling follows the scores it was made about.
+  const swap = [{ from: "A", to: "B" }, { from: "B", to: "A" }];
+  check("a ruling on A and C moves to B and C", movedDecisionKey("A+C", swap), "B+C");
+  check("a ruling between the two swapped teams stays theirs", movedDecisionKey("A+B", swap), "A+B");
+  check("a ruling the move does not touch is left alone", movedDecisionKey("C+D", swap), "C+D");
+  check("and keys stay sorted, the way the engine builds them",
+    movedDecisionKey("C+A", [{ from: "C", to: "Z" }, { from: "Z", to: "C" }]), "A+Z");
+
+  // End to end on the 11/18 card: swap Team 1's and Team 2's scores and the
+  // money swaps with them, because money follows the card, not the team.
+  const h = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
+  const card: HoleScores = {
+    t1: h([-1,-1,-1, 0,-1,-1,-1,-1,-1,  -1,-1, 0,-1,-2,-1, 0,-1,-1]),
+    t2: h([-1,-1, 0,-1,-1, 0,-1, 0,-1,   0,-1, 0, 0, 0, 0, 0,-1, 0]),
+    t3: h([-1,-1,-1, 0,-1, 0,-1,-1,-1,  -1,-1,-1, 0,-2,-1,-1,-1,-1]),
+    t4: h([-1, 0,-1,-2,-1,-1,-1, 0, 0,  -1,-2,-1, 0,-1,-1, 0,-1,-1]),
+    t5: h([-1,-1,-1,-1, 0, 0,-2,-1, 0,  -1,-1, 0,-1,-2, 0,-1,-1,-1]),
+  };
+  const teams = Object.keys(card);
+  const asRows = (c: HoleScores): ScoreRow[] =>
+    Object.entries(c).flatMap(([team_id, holes]) =>
+      Object.entries(holes).map(([hole, strokes]) =>
+        ({ team_id, hole: Number(hole), strokes: strokes as number })));
+  const moved = movedScores(asRows(card), [{ from: "t1", to: "t2" }, { from: "t2", to: "t1" }]);
+  const after: HoleScores = { ...card, t1: {}, t2: {} };
+  for (const r of moved.upsert) after[r.team_id][r.hole] = r.strokes;
+
+  const units = (c: HoleScores) => scoreMainGame({
+    teamIds: teams, scores: c, payouts: { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 },
+    decisions: {}, tieDefault: "hole", segments: segmentsFor(3),
+  }).unitsByTeam;
+  const before = units(card);
+  const now = units(after);
+  check("after the swap Team 2 wins what Team 1 used to",
+    [now.t1, now.t2], [before.t2, before.t1]);
+  check("and nobody else's money moves",
+    [now.t3, now.t4, now.t5], [before.t3, before.t4, before.t5]);
 }
 
 console.log("\n=== who is shown money ===");

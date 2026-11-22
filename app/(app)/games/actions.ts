@@ -17,6 +17,13 @@ import {
   nameKey,
 } from "@/lib/game";
 import { isoFromLooseDate } from "@/lib/dates";
+import {
+  checkMoves,
+  movedDecisionKey,
+  movedScores,
+  type CardMove,
+  type ScoreRow,
+} from "@/lib/score-move";
 import type { Fb18Segment, RoundType, SetLength, TieChoice } from "@/lib/game";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -385,87 +392,93 @@ export async function renameMatchTeam(
 }
 
 /**
- * Puts a round's teams in a new order, each keeping everything it owns.
+ * Moves scores off the team they were typed against onto the team that shot
+ * them. Players, captains, names and places all stay where they are.
  *
- * Scores, rosters, captains, side game entry and tie rulings all hang off the
- * team's id, never its slot, so moving a team moves all of that with it.
- * Fixing "Bay 1's card ended up as Team 2" is therefore just this: Team 2
- * becomes Team 1 and its scores come along. Money never depends on the order
- * either; scripts/verify-game.ts scores a card in every possible order and
- * checks they all pay the same.
+ * The rules live in lib/score-move.ts, where they are tested; this is the
+ * part that touches the database.
  *
- * A team still called by its default name, "Team 2", is renamed to follow
- * its new place, because that name is a position and would otherwise read
- * wrong. A name somebody chose is left alone.
+ * Scores are written first and pruned second. The upsert is one statement,
+ * so it lands whole or not at all, and only after it lands are the holes a
+ * team no longer has cleared. A refusal leaves every card as it was.
  *
- * match_teams has a plain unique constraint on (match_id, slot), checked row
- * by row, so two teams cannot simply trade places in one go. Every moving
- * team is parked on a negative slot first, then given its real one. If the
- * second step fails part way, the first is undone, so a refusal leaves the
- * order exactly as it was.
+ * Tie rulings move with the scores they were made about, so a ruling on
+ * whether two tied cards went to sudden death follows those cards.
  */
-export async function reorderMatchTeams(
+export async function moveScores(
   matchId: string,
-  orderedTeamIds: string[],
+  moves: CardMove[],
 ): Promise<ActionResult> {
   await requireAdmin();
   const supabase = await createClient();
 
-  const { data: rows, error: readError } = await supabase
-    .from("match_teams").select("id, slot, name").eq("match_id", matchId);
-  if (readError) return { ok: false, error: readError.message };
-  const teams = (rows ?? []) as { id: string; slot: number; name: string }[];
+  const { data: teamRows, error: teamError } = await supabase
+    .from("match_teams").select("id").eq("match_id", matchId);
+  if (teamError) return { ok: false, error: teamError.message };
+  const teamIds = ((teamRows ?? []) as { id: string }[]).map((t) => t.id);
 
-  // The new order has to be exactly this round's teams, each once. Anything
-  // else is a stale screen or a forged request, and both are refused.
-  const ids = new Set(teams.map((t) => t.id));
-  if (
-    orderedTeamIds.length !== teams.length ||
-    new Set(orderedTeamIds).size !== orderedTeamIds.length ||
-    !orderedTeamIds.every((id) => ids.has(id))
-  ) {
-    return { ok: false, error: "The team list changed. Reload the page and try again." };
+  const problem = checkMoves(teamIds, moves);
+  if (problem) return { ok: false, error: problem };
+
+  const { data: scoreRows, error: readError } = await supabase
+    .from("hole_scores").select("team_id, hole, strokes").eq("match_id", matchId);
+  if (readError) return { ok: false, error: readError.message };
+
+  const { upsert, prune } = movedScores((scoreRows ?? []) as ScoreRow[], moves);
+
+  if (upsert.length > 0) {
+    const { error } = await supabase
+      .from("hole_scores")
+      .upsert(
+        upsert.map((r) => ({ match_id: matchId, ...r })),
+        { onConflict: "match_id,team_id,hole" },
+      );
+    if (error) return { ok: false, error: describeScoreWriteError(error.message) };
   }
 
-  const byId = new Map(teams.map((t) => [t.id, t]));
-  const moves = orderedTeamIds
-    .map((id, i) => ({ team: byId.get(id)!, slot: i + 1 }))
-    .filter((m) => m.team.slot !== m.slot);
-  if (moves.length === 0) return { ok: true };
-
-  const followsSlot = (name: string, slot: number) => name.trim() === `Team ${slot}`;
-
-  // Step one: park every moving team where nothing can collide with it.
-  for (const [i, m] of moves.entries()) {
-    const { error } = await supabase
-      .from("match_teams").update({ slot: -(i + 1) }).eq("id", m.team.id);
+  for (const p of prune) {
+    const clear = supabase
+      .from("hole_scores").delete().eq("match_id", matchId).eq("team_id", p.team_id);
+    const { error } = await (p.keep.length
+      ? clear.not("hole", "in", "(" + p.keep.join(",") + ")")
+      : clear);
     if (error) return { ok: false, error: error.message };
   }
 
-  // Step two: the real slots, and default names that follow them.
-  for (const m of moves) {
-    const update: { slot: number; name?: string } = { slot: m.slot };
-    if (followsSlot(m.team.name, m.team.slot)) update.name = `Team ${m.slot}`;
+  // Tie rulings follow their scores. Every ruling whose key changes is taken
+  // out and put back under its new key in one pass, because a swap can turn
+  // one ruling's new key into another's old one.
+  const { data: rulings } = await supabase
+    .from("tie_decisions").select("id, segment, block_key, choice").eq("match_id", matchId);
+  const moving = ((rulings ?? []) as {
+    id: string; segment: number; block_key: string; choice: string;
+  }[]).filter((r) => movedDecisionKey(r.block_key, moves) !== r.block_key);
 
-    const { error } = await supabase.from("match_teams").update(update).eq("id", m.team.id);
+  if (moving.length > 0) {
+    await supabase.from("tie_decisions").delete().in("id", moving.map((r) => r.id));
+    const { error } = await supabase.from("tie_decisions").insert(
+      moving.map((r) => ({
+        match_id: matchId,
+        segment: r.segment,
+        block_key: movedDecisionKey(r.block_key, moves),
+        choice: r.choice,
+      })),
+    );
     if (error) {
-      // Put every team back where it started. Park them all again first:
-      // some already hold their new slot, which may be another team's old
-      // one, so restoring straight away could collide on the same constraint.
-      for (const [i, back] of moves.entries()) {
-        await supabase.from("match_teams").update({ slot: -(i + 1) }).eq("id", back.team.id);
-      }
-      for (const back of moves) {
-        await supabase
-          .from("match_teams")
-          .update({ slot: back.team.slot, name: back.team.name })
-          .eq("id", back.team.id);
-      }
-      return { ok: false, error: `Could not reorder the teams: ${error.message}` };
+      // Put the rulings back as they were rather than lose them.
+      await supabase.from("tie_decisions").insert(
+        moving.map((r) => ({
+          match_id: matchId, segment: r.segment, block_key: r.block_key, choice: r.choice,
+        })),
+      );
+      return {
+        ok: false,
+        error: `The scores moved, but the tie rulings could not follow them: ${error.message}`,
+      };
     }
   }
 
-  revalidateMatch(matchId);
+  revalidateMoney(matchId);
   return { ok: true };
 }
 
