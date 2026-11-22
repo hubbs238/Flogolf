@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { GolferAvatar } from "./golfer-avatar";
 import { createClient } from "@/lib/supabase/client";
@@ -331,11 +332,13 @@ function GolferRow({ golfer, everyone }: { golfer: AdminGolfer; everyone: AdminG
       }`}
     >
       <div className="flex flex-wrap items-center gap-3">
-        <GolferAvatar
-          name={displayName(golfer)}
-          url={golfer.photo}
-          size="sm"
-        />
+        <Link
+          href={`/golfer/${golfer.id}`}
+          aria-label={`View profile for ${displayName(golfer)}`}
+          className="shrink-0 rounded-full transition hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fairway-400"
+        >
+          <GolferAvatar name={displayName(golfer)} url={golfer.photo} size="sm" />
+        </Link>
 
         <div className="flex min-w-0 flex-1 flex-wrap gap-2">
           <input
