@@ -105,7 +105,7 @@ export function MatchStakes({
             <option value="major">Major — double points</option>
           </select>
           <span className="mt-1 block text-xs text-muted">
-            Majors earn two points per dollar of individual winnings before rake, including side games.
+            On majors, each dollar won or lost before rake adds or subtracts two points, including FB18.
           </span>
         </label>
 

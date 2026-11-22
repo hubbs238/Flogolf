@@ -89,7 +89,10 @@ const money = awardMoney({
 assert.deepEqual(teamIds.map(t => money.find(row => row.teamId === t)?.dollars), [105, -220, 47, -70, -53]);
 const points = cupPointsForPlayers(money, ROUND.roundType);
 
-assert.deepEqual(teamIds.map(team => points.find(p => p.teamId === team)?.total), [140, 0, 82, 0, 0]);
+assert.deepEqual(teamIds.map(team => {
+  const p = points.find(player => player.teamId === team)!;
+  return [p.fromMoney, p.bonus, p.total];
+}), [[75,65,140],[-150,-35,-185],[50,32,82],[0,-35,-35],[10,-28,-18]]);
 
 // ------------------------------------------------------------------- printing
 const money2 = (n: number) => (n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`);
@@ -100,7 +103,7 @@ console.log(`\n${"=".repeat(78)}`);
 console.log(`  ${ROUND.name}  ${ROUND.date}`);
 console.log(`  ${ROUND.roundType} round, six ${ROUND.setHoles}-hole matches, ` +
   `$${ROUND.rates.main} a unit, $${ROUND.rakePerPlayer} rake`);
-console.log(`  points: money x${multiplier}, cup-eligible money = ${cupEligible}`);
+console.log(`  points: signed match and FB18 dollars per player, each at ${multiplier}x before rake`);
 console.log("=".repeat(78));
 
 console.log("\n--- the card ---------------------------------------------------");
@@ -176,16 +179,14 @@ assert.equal(netAll, -rakeAll);
 
 console.log("\n--- FLO Cup points, per player --------------------------------");
 console.log(
-  "\n  " + pad("team", 9) + rpad("cup $", 11) + rpad("match points", 13) +
+  "\n  " + pad("team", 9) + rpad("match points", 13) +
   rpad("bonus", 9) + rpad("total", 9),
 );
 for (const t of teamIds) {
-  const m = money.find((x) => x.teamId === t)!;
   const p = points.find((x) => x.teamId === t)!;
   console.log(
-    "  " + pad(t, 9) + rpad(money2(m.cupDollars), 11) +
-    rpad(p.fromMoney.toFixed(1), 13) + rpad(p.bonus.toFixed(1), 9) +
-    rpad(p.total.toFixed(1), 9),
+    "  " + pad(t, 9) + rpad(p.fromMoney.toFixed(2), 13) +
+    rpad(p.bonus.toFixed(2), 9) + rpad(p.total.toFixed(2), 9),
   );
 }
 
@@ -195,7 +196,7 @@ for (const p of byTotal) {
   const m = money.find((x) => x.golferId === p.golferId)!;
   console.log(
     "  " + pad(p.golferId, 17) + pad(`(${p.teamId})`, 10) +
-    rpad(money2(m.dollars), 11) + rpad(`${p.total.toFixed(1)} pts`, 12),
+    rpad(money2(m.dollars), 11) + rpad(`${p.total.toFixed(2)} pts`, 12),
   );
 }
 console.log();

@@ -47,9 +47,8 @@ export function GolferRoundHistory({
     <section>
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
-        Points come from each player’s positive winnings before rake. Match Points and Bonus Points
-        divide that total between the matches and FB18. A loss in either reduces the points earned in the other.
-        Majors double both.
+        Each dollar won or lost before rake adds or subtracts one point. Match Points come from the
+        matches and Bonus Points from FB18. Majors double both. A negative round reduces the season total.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -103,7 +102,7 @@ export function GolferRoundHistory({
                   {r.pointsFromMoney > 0 ? "+" : ""}
                   {r.pointsFromMoney.toFixed(2)}
                 </td>
-                <td className="p-3 text-right tabular-nums text-muted">
+                <td className={`p-3 text-right tabular-nums ${tone(r.pointsBonus)}`}>
                   {r.pointsBonus > 0 ? "+" : ""}{r.pointsBonus.toFixed(2)}
                 </td>
                 <td className="p-3 text-right">
@@ -135,7 +134,7 @@ export function GolferRoundHistory({
                 {totals.fromMoney > 0 ? "+" : ""}
                 {totals.fromMoney.toFixed(2)}
               </td>
-              <td className="p-3 text-right tabular-nums text-muted">
+              <td className={`p-3 text-right tabular-nums ${tone(totals.bonus)}`}>
                 {totals.bonus > 0 ? "+" : ""}{totals.bonus.toFixed(2)}
               </td>
               <td className="p-3 text-right">

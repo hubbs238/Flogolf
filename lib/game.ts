@@ -714,12 +714,7 @@ export type PlayerMoney = {
   rake: number;
   /** What actually changes hands: winnings less rake. */
   dollars: number;
-  /**
-   * The portion that counts toward FLO Cup points: the matches alone, or on a
-   * major every dollar won, rounded up to the dollar. See
-   * cupDollarsOf. The rake never reaches it either way, since it leaves the
-   * group rather than changing hands.
-   */
+  /** Point-eligible pre-rake dollars, calculated from the player's category amounts. */
   cupDollars: number;
   breakdown: MoneyBreakdown;
 };
@@ -773,9 +768,7 @@ export function awardMoney(opts: {
         winnings,
         rake,
         dollars,
-        // Rounded like winnings: summing four already-rounded figures can
-        // land on float noise, and this one is read out as a point total.
-        cupDollars: cupEligible === "gross" ? winnings : round2(cupDollarsOf(breakdown, cupEligible)),
+        cupDollars: round2(cupDollarsOf(breakdown, cupEligible)),
         breakdown,
       });
     }
@@ -991,19 +984,7 @@ export function scoreBonusPoints(
   return { segments, pointsByTeam: unitsByTeam };
 }
 
-/**
- * FLO Cup points from a round's Cup-eligible winnings: a dollar won is a
- * point, and a losing round is worth nothing rather than going negative.
- *
- * Floored per round, not on the season total. A bad week costs you nothing,
- * it simply does not help, so it cannot wipe out weeks of good results. It
- * also keeps every figure on screen consistent: a round showing -200 beside
- * a season total of 0 reads as a bug.
- *
- * The old half-a-point-per-dollar-lost rule is deliberately gone. With every
- * losing round flooring to zero it never fired, so keeping it would have
- * been arithmetic nobody could ever observe.
- */
+/** Zero-floor calculation retained for the legacy fixed-bonus rules in roundPoints. */
 export function pointsForRound(dollars: number, multiplier = 1): number {
   return dollars > 0 ? dollars * multiplier : 0;
 }
@@ -1062,23 +1043,17 @@ export function bonusMoneyOf(b: MoneyBreakdown): number {
   return Math.round((b.front + b.back + b.eighteen) * 100) / 100;
 }
 
-/** Divide the awarded pre-rake dollars between the two earning categories,
- * then apply the round multiplier to both. Losses reduce the award first. */
+/** Each signed money category earns its own points before rake and cash settlement rounding. */
 export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
   const multiplier = POINT_MULTIPLIER[roundType];
-  return money.map(({ golferId, teamId, winnings, breakdown }) => {
-    const awarded = Math.max(0, winnings);
-    const matchCents = Math.max(0, Math.round(breakdown.main * 100));
-    const bonusCents = Math.max(0, Math.round(bonusMoneyOf(breakdown) * 100));
-    const positiveCents = matchCents + bonusCents;
-    // Allocate whole dollars once. Assign the remainder to bonus so the
-    // categories always add up, even when two fractional shares round up.
-    const matchDollars = positiveCents > 0 ? Math.round(awarded * matchCents / positiveCents) : 0;
+  return money.map(({ golferId, teamId, breakdown }) => {
+    const matchCents = Math.round(breakdown.main * 100);
+    const bonusCents = Math.round(bonusMoneyOf(breakdown) * 100);
     return {
       golferId, teamId,
-      fromMoney: matchDollars * multiplier,
-      bonus: (awarded - matchDollars) * multiplier,
-      total: awarded * multiplier,
+      fromMoney: matchCents * multiplier / 100,
+      bonus: bonusCents * multiplier / 100,
+      total: (matchCents + bonusCents) * multiplier / 100,
     };
   });
 }

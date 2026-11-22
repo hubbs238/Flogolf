@@ -858,17 +858,15 @@ console.log("\n=== the double is applied once, not twice ===");
     [money[0], money[5]].map(p => [p.winnings, p.dollars]), [[21, -14], [-20, -55]]);
 }
 
-console.log("\n=== major points double individual gross winnings ===");
+console.log("\n=== signed match and FB18 points ===");
 {
   const money = awardMoneyAt({
     breakdownByTeam: { win: bd(91.7, 40, 30, 39.98), loss: bd(-1,0,0,0), even: bd(0,0,0,0) },
     rosters: { win: ["a"], loss: ["b"], even: ["c"] }, rakePerPlayer: 35,
   });
   const major = cupPointsForPlayers(money, "major");
-  check("double the awarded gross; losses and ties earn zero",
-    major.map(p => p.total), [404, 0, 0]);
-  check("both earning categories double for majors",
-    major.map(p => [p.fromMoney, p.bonus]), [[184,220],[0,0],[0,0]]);
+  check("major points use signed category cents before cash rounding and rake",
+    major.map(p => [p.fromMoney, p.bonus, p.total]), [[183.4,219.96,403.36],[-2,0,-2],[0,0,0]]);
   check("season and major differ only in multiplier",
     cupPointsForPlayers(money, "season").map(p => p.total * 2), major.map(p => p.total));
 }
@@ -877,14 +875,18 @@ console.log("\n=== major points double individual gross winnings ===");
   const values = [
     bd(75, 40, -10, 35),  // 11/18 Bay 1, including both 18-hole pots.
     bd(90, -20), bd(-20, 90), bd(30, -40), bd(-40, 30), bd(12.5, 12.5),
+    bd(-20.01, 20.01), bd(-4.49, -0.50), bd(0.24, 0.25), bd(0.10, 0.20),
   ];
   const earned = values.map((b) => awardMoneyAt({
     breakdownByTeam: { bay: b }, rosters: { bay: ["p1"] }, rakePerPlayer: 35,
   })[0]);
   const split = (round: "season" | "major") =>
     cupPointsForPlayers(earned, round).map(p => [p.fromMoney, p.bonus, p.total]);
-  const expected = [[75,65,140],[70,0,70],[0,70,70],[0,0,0],[0,0,0],[13,12,25]];
-  check("match and bonus reconcile to pre-rake points after losses and rounding", split("season"), expected);
+  const expected = [
+    [75,65,140], [90,-20,70], [-20,90,70], [30,-40,-10], [-40,30,-10], [12.5,12.5,25],
+    [-20.01,20.01,0], [-4.49,-0.5,-4.99], [0.24,0.25,0.49], [0.1,0.2,0.3],
+  ];
+  check("regular match and FB18 points preserve signed cents and sum exactly", split("season"), expected);
   check("majors double both components of the same award", split("major"), expected.map(row => row.map(n => n * 2)));
 }
 
@@ -1778,7 +1780,9 @@ console.log("\n=== who is shown money ===");
     cupEligible: "gross" });
   const each = teamIds.map(id => money.find(player => player.teamId === id)!);
   check("November 11 net per player", each.map(p => p.dollars), [150,-145,-28,-103,-95]);
-  check("November 11 pre-rake points", each.map(p => pointsForRound(p.cupDollars, 1)), [185,0,7,0,0]);
+  check("November 11 signed category points per player before whole-dollar cash rounding",
+    cupPointsForPlayers(each, "season").map(p => [p.fromMoney, p.bonus, p.total]),
+    [[133.34,52,185.34],[-75,-35,-110],[16.68,-10,6.68],[-58.32,-10,-68.32],[-50,-10,-60]]);
   check("November 11 team settlements", teamIds.map(id =>
     money.filter(p => p.teamId === id).reduce((sum, p) => sum + p.dollars, 0)), [750,-580,-112,-412,-380]);
   const stale = scoreFb18({ teamIds, scores, payouts, frontMoneyTiers: [["3","5"]] });

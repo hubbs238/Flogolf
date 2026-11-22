@@ -137,7 +137,7 @@ export function StandingsTable({
                   {row.pointsFromMoney.toFixed(2)}
                 </td>
 
-                <td className="p-3 text-right tabular-nums text-muted">
+                <td className={`p-3 text-right tabular-nums ${tone(row.pointsBonus)}`}>
                   {row.pointsBonus > 0 ? "+" : ""}{row.pointsBonus.toFixed(2)}
                 </td>
 

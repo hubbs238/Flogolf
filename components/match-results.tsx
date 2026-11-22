@@ -345,9 +345,8 @@ export function MatchResults({
         <section>
           <h3 className="mb-1 font-semibold">FLO Cup points this round</h3>
           <p className="mb-3 text-sm text-muted">
-            Each player earns {major ? "two points" : "one point"} per dollar of
-            positive winnings before rake. Match Points come from the matches and Bonus Points from FB18.
-            A loss in one reduces the points earned in the other.
+            Each dollar won or lost before rake adds or subtracts {major ? "two points" : "one point"}.
+            Match Points come from the matches and Bonus Points from FB18. Their sum is the round total.
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">

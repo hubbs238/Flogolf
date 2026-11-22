@@ -382,11 +382,11 @@ function GolferCard({
         </div>
 
         <div className="rounded-xl bg-surface px-3 py-2.5">
-          <div className={cellNumber}>{played ? season!.matchPoints.toFixed(2) : "—"}</div>
+          <div className={`${cellNumber} ${tone(season?.matchPoints ?? 0)}`}>{played ? season!.matchPoints.toFixed(2) : "—"}</div>
           <div className={cellLabel}>Match Points</div>
         </div>
         <div className="rounded-xl bg-surface px-3 py-2.5">
-          <div className={cellNumber}>{played ? season!.bonusPoints.toFixed(2) : "—"}</div>
+          <div className={`${cellNumber} ${tone(season?.bonusPoints ?? 0)}`}>{played ? season!.bonusPoints.toFixed(2) : "—"}</div>
           <div className={cellLabel}>Bonus Points</div>
         </div>
 

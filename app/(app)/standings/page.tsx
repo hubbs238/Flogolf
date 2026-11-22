@@ -27,9 +27,8 @@ export default async function FloCupPage() {
       {major && <MajorTile major={major} />}
 
       <p className="mb-4 text-sm text-muted">
-        Points come from each player’s positive winnings before rake. Match Points and Bonus Points
-        divide that total between the matches and FB18. A loss in either reduces the points earned in the other.
-        Majors double both.
+        Each dollar won or lost before rake adds or subtracts one point. Match Points come from the
+        matches and Bonus Points from FB18. Majors double both. A negative round reduces the season total.
       </p>
       <StandingsTable
         rows={rows}
