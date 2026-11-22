@@ -199,7 +199,13 @@ console.log("\n=== a tie that never breaks splits evenly ===");
 console.log("\n=== FB18 ===");
 {
   // Front nine: A 36, B 36, C 38. A and B tie.
-  // Back nine:  A 35, B 38, C 36. So A takes the front on the back nine.
+  // Back nine:  A 35, B 38, C 36. A would win the front on the back nine.
+  //
+  // For MONEY it does not get the chance: the league's book splits a front
+  // nine tie, so A and B share the pot. On 10/28 Bay 1 and Bay 7 both went -5
+  // on the front and the sheet paid them $15 each, where settling it on the
+  // back nine handed Bay 1 the whole $40. The back nine rule belongs to the
+  // Cup bonus, and the same card shows it still applies there.
   const s: HoleScores = {
     A: card(4,4,4,4,4,4,4,4,4, 4,4,4,4,4,4,4,4,3),
     B: card(4,4,4,4,4,4,4,4,4, 5,4,4,4,4,4,4,4,5),
@@ -210,14 +216,28 @@ console.log("\n=== FB18 ===");
     payouts: { front: { 1: 2, 2: 0, 3: -2 }, back: { 1: 2, 2: 0, 3: -2 }, total: { 1: 2, 2: 0, 3: -2 } },
   });
   const front = results.find((r) => r.segment === "front")!;
+  const frontUnits = (t: string) => front.awards.find((a) => a.teamId === t)?.units;
   check("front nine totals", [front.totals.A, front.totals.B, front.totals.C], [36, 36, 38]);
-  check("front tie goes to A on back nine",
-    front.awards.find((a) => a.teamId === "A")?.position, 1);
-  check("B takes second on the front",
-    front.awards.find((a) => a.teamId === "B")?.position, 2);
+  check("a front nine money tie is split, not settled on the back nine",
+    [frontUnits("A"), frontUnits("B"), frontUnits("C")], [1, 1, -2]);
+  check("both tied bays share first place",
+    [front.awards.find((a) => a.teamId === "A")?.position,
+     front.awards.find((a) => a.teamId === "B")?.position], [1, 1]);
   const back = results.find((r) => r.segment === "back")!;
   check("back nine totals", [back.totals.A, back.totals.B, back.totals.C], [35, 38, 36]);
-  check("A wins all three segments", unitsByTeam.A, 6);
+  check("A wins the back and the eighteen and shares the front", unitsByTeam.A, 5);
+
+  const bonus = scoreBonusPoints(["A", "B", "C"], s, 1);
+  check("but the Cup bonus still settles that front nine tie on the back nine",
+    bonus.segments.find((b) => b.segment === "front")?.winners, ["A"]);
+
+  // Asking for the back nine explicitly still works, for anything that wants it.
+  const backNine = scoreFb18({
+    teamIds: ["A", "B", "C"], scores: s, frontTiebreak: "back-nine",
+    payouts: { front: { 1: 2, 2: 0, 3: -2 } },
+  });
+  check("the back nine rule is still there when asked for",
+    backNine.results[0].awards.find((a) => a.teamId === "A")?.units, 2);
 }
 {
   // Dead level over eighteen with nothing left to break it.
@@ -1658,6 +1678,45 @@ console.log("\n=== moving a card typed against the wrong team ===");
     [now.t1, now.t2], [before.t2, before.t1]);
   check("and nobody else's money moves",
     [now.t3, now.t4, now.t5], [before.t3, before.t4, before.t5]);
+}
+
+console.log("\n=== the 10/28 major, as the sheet settled it ===");
+{
+  // The live sheet's 10/28 block, hole by hole, scored as six three-hole
+  // matches with the league's tables at $25, $10, $10, $10 and $5. Every
+  // money column on the sheet has to come back, the tied front nine included.
+  const h = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
+  const ids = ["B1", "B2", "B4", "B5", "B7"];
+  const card1028: HoleScores = {
+    B1: h([ 0,-1, 0,  0,-1,-1, -1,-1, 0, -1,-1, 0, -1, 0, 0, -1,-1, 0]),
+    B2: h([ 0,-1, 0, -1,-1, 0, -1, 0, 0,  0,-1, 0, -1,-1, 0, -1, 0, 0]),
+    B4: h([-1, 0, 0, -1, 0, 0, -1,-1, 0,  0,-1, 0,  0, 0, 0,  0, 0,-1]),
+    B5: h([-1,-1, 0, -1, 0,-1, -1, 0, 1, -1,-1, 0,  0, 0, 0,  0,-1, 0]),
+    B7: h([ 0,-1,-1, -1, 0, 0,  0,-1,-1,  0,-1, 0,  0,-1, 0, -1,-1, 0]),
+  };
+  const main = scoreMainGame({
+    teamIds: ids, scores: card1028, payouts: { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 },
+    decisions: {}, tieDefault: "hole", segments: segmentsFor(3),
+  });
+  check("each bay's match money, at $25",
+    ids.map((t) => (main.unitsByTeam[t] ?? 0) * 25), [162.5, -25, -150, -25, 37.5]);
+
+  const side = scoreFb18({
+    teamIds: ids, scores: card1028,
+    payouts: {
+      front: defaultFb18Payouts(5, "front"), back: defaultFb18Payouts(5, "back"),
+      total: defaultFb18Payouts(5, "total"), second: defaultFb18Payouts(5, "second"),
+    },
+  });
+  const pot = (seg: string, rate: number) => {
+    const r = side.results.find((x) => x.segment === seg)!;
+    return ids.map((t) => (r.awards.find((a) => a.teamId === t)?.units ?? 0) * rate);
+  };
+  check("F9: Bay 1 and Bay 7 tied at -5 and split it, $15 each",
+    pot("front", 10), [15, -10, -10, -10, 15]);
+  check("B9", pot("back", 10), [40, -10, -10, -10, -10]);
+  check("1ST 18", pot("total", 10), [40, -10, -10, -10, -10]);
+  check("2ND 18", pot("second", 5), [-5, -5, -5, -5, 20]);
 }
 
 console.log("\n=== who is shown money ===");

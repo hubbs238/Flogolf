@@ -505,8 +505,9 @@ const FB18_HOLES: Record<Fb18Segment, readonly number[]> = {
  * Ranks and pays one FB18 segment.
  *
  * `tiebreak` returns an ordering for a tied block, or null when it cannot
- * separate them. Only the front nine has one: a front nine tie is settled on
- * back nine scores among the tied teams.
+ * separate them. Only the Cup bonus uses one, on the front nine, where a tie
+ * is settled on back nine scores among the tied teams. Money does not: the
+ * league's book splits a front nine tie, so the money pots leave it to share.
  *
  * A tie that cannot be separated shares the contested prize evenly among the
  * teams in it, matching the main game. Two teams level over eighteen split
@@ -600,10 +601,25 @@ export function scoreFb18(opts: {
   payouts: Partial<Record<Fb18Segment, PayoutTable>>;
   overallMoneyOrder?: readonly string[];
   frontMoneyTiers?: string[][];
+  /**
+   * How a front nine tie nobody has ruled on is settled.
+   *
+   * "split", the default, is the money rule and the league's own: bays level
+   * on the front nine share the pot. On 10/28 Bay 1 and Bay 7 both went -5
+   * and the sheet paid them $15 each.
+   *
+   * "back-nine" settles it on back nine scores among the tied bays, which is
+   * the rule set for the Cup bonus from the start. Only scoreBonusPoints asks
+   * for it. Settling money that way handed Bay 1 the whole $40.
+   *
+   * A recorded ruling (frontMoneyTiers) beats either.
+   */
+  frontTiebreak?: "split" | "back-nine";
 }): { results: Fb18Result[]; unitsByTeam: Record<string, number> } {
   const { teamIds, scores, payouts } = opts;
 
-  // A front nine tie is decided on back nine scores among the tied teams.
+  // For the Cup bonus only: a front nine tie decided on back nine scores
+  // among the tied teams.
   const byBackNine = (block: string[]): string[][] | null => {
     const backTotals: Record<string, number> = {};
     for (const id of block) {
@@ -623,7 +639,11 @@ export function scoreFb18(opts: {
       : null;
 
   const results = [
-    scoreFb18Segment("front", teamIds, scores, payouts.front ?? {}, byBackNine, opts.frontMoneyTiers),
+    scoreFb18Segment(
+      "front", teamIds, scores, payouts.front ?? {},
+      opts.frontTiebreak === "back-nine" ? byBackNine : undefined,
+      opts.frontMoneyTiers,
+    ),
     scoreFb18Segment("back", teamIds, scores, payouts.back ?? {}),
     scoreFb18Segment("total", teamIds, scores, payouts.total ?? {}, overallRuling),
     scoreFb18Segment("second", teamIds, scores, payouts.second ?? {}, overallRuling),
@@ -938,6 +958,9 @@ export function scoreBonusPoints(
 ): { segments: BonusSegment[]; pointsByTeam: Record<string, number> } {
   if (roundType === "season") return { segments: [], pointsByTeam: {} };
   const { results, unitsByTeam } = scoreFb18({
+    // The bonus keeps the rule it was given: a front nine tie goes to the
+    // back nine. Money splits instead.
+    frontTiebreak: "back-nine",
     teamIds,
     scores,
     payouts: {
