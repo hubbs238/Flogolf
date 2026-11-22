@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { moveScores } from "@/app/(app)/games/actions";
 import { formatRelative } from "@/lib/game";
@@ -9,7 +10,7 @@ export type CardRow = {
   id: string;
   name: string;
   /** Roster in slot order, captain first. */
-  players: string[];
+  players: { id: string; name: string | null }[];
   /** Holes with a score posted. */
   played: number;
   /** Total against par over the holes posted, or null before any. */
@@ -102,8 +103,13 @@ export function ScoreSwap({ matchId, teams }: { matchId: string; teams: CardRow[
               {/* The team: fixed. */}
               <div className="min-w-0 flex-1 basis-48">
                 <div className="font-medium">{team.name}</div>
-                <div className="truncate text-xs text-muted">
-                  {team.players.length ? team.players.join(", ") : "No players yet"}
+                <div className="text-xs text-muted">
+                  {team.players.length ? team.players.map((player, i) => (
+                    <Fragment key={player.id}>
+                      {i > 0 && ", "}
+                      {player.name ? <GolferProfileLink golferId={player.id} newTab={changed}>{player.name}</GolferProfileLink> : "Unknown"}
+                    </Fragment>
+                  )) : "No players yet"}
                 </div>
               </div>
 

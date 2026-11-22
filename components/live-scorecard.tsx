@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -134,7 +135,9 @@ function Nine({
                   <div className="flex flex-col">
                     <span className="truncate font-medium">{team.name}</span>
                     <span className="truncate text-xs text-muted">
-                      {captainNames[team.id] ?? "no captain"}
+                      {captainNames[team.id] ? (
+                        <GolferProfileLink golferId={team.captain_golfer_id}>{captainNames[team.id]}</GolferProfileLink>
+                      ) : "no captain"}
                       {editable && (
                         <span className="ml-1.5 font-semibold uppercase text-fairway-600 dark:text-fairway-300">
                           you
@@ -311,7 +314,11 @@ export function LiveScorecard({
               <tr key={team.id} className="border-b border-line last:border-0">
                 <td className="p-3">
                   <span className="font-medium">{team.name}</span>
-                  <span className="ml-2 text-xs text-muted">{captainNames[team.id] ?? ""}</span>
+                  {captainNames[team.id] && (
+                    <GolferProfileLink className="ml-2 text-xs text-muted" golferId={team.captain_golfer_id}>
+                      {captainNames[team.id]}
+                    </GolferProfileLink>
+                  )}
                   {team.in_fb18 && (
                     <span className="ml-2 rounded bg-fairway-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
                       FB18

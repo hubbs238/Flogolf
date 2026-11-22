@@ -4,6 +4,7 @@ import { getViewMode } from "@/lib/view-mode";
 import { SignOutButton } from "@/components/sign-out-button";
 import { Logo } from "@/components/logo";
 import { PlayerViewBanner } from "@/components/view-as-toggle";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const session = await requireUser();
@@ -40,9 +41,9 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
           </nav>
 
           <div className="ml-auto flex items-center gap-4">
-            <span className="hidden text-sm text-muted sm:inline">
+            <GolferProfileLink golferId={session.profile?.golfer_id} className="hidden text-sm text-muted sm:inline">
               {session.profile?.display_name ?? session.email}
-            </span>
+            </GolferProfileLink>
             <SignOutButton />
           </div>
         </div>

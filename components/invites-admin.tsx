@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -104,7 +105,9 @@ export function InvitesAdmin({
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">
-                    {profile.display_name ?? profile.email}
+                    <GolferProfileLink golferId={profile.golfer_id}>
+                      {profile.display_name ?? profile.email}
+                    </GolferProfileLink>
                   </p>
                   <p className="truncate text-xs text-muted">{profile.email}</p>
                 </div>
@@ -144,9 +147,11 @@ export function InvitesAdmin({
                       {entry.email}
                     </p>
                     <p className="text-xs text-muted">
-                      {profile
-                        ? `Signed in as ${profile.display_name ?? profile.email}`
-                        : "Has not signed in yet"}
+                      {profile ? (
+                        <>Signed in as <GolferProfileLink golferId={profile.golfer_id}>
+                          {profile.display_name ?? profile.email}
+                        </GolferProfileLink></>
+                      ) : "Has not signed in yet"}
                     </p>
                   </div>
                   <button

@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
+import { Fragment, useRef, useState, useTransition, type ReactNode } from "react";
 import { type PlayerChoice, ImportRoster, reviewedPlayers, playerReviewErrors, useImportPlayers } from "./import-player-review";
 import { useRouter } from "next/navigation";
 import { applyRoundImport, readRoundPhoto } from "@/app/(app)/games/actions";
-import type { RoundImportRead, RoundImportTeam } from "@/app/(app)/games/actions";
+import type { RoundImportApplied, RoundImportRead, RoundImportTeam } from "@/app/(app)/games/actions";
 import { formatRelative } from "@/lib/game";
 import { describeDecodeFailure, downscale } from "@/lib/image-file";
 import type { MatchTeam } from "@/lib/types";
@@ -41,7 +42,7 @@ export function RoundImport({
   // whole import.
   const [ignored, setIgnored] = useState<Record<number, boolean>>({});
   const review = useImportPlayers();
-  const [summary, setSummary] = useState<string | null>(null);
+  const [summary, setSummary] = useState<Extract<RoundImportApplied, { ok: true }> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -131,7 +132,7 @@ export function RoundImport({
   })();
 
   const changingTeams = new Set(live.filter(b => b.writeRoster).map(b => assignedFor(b.i)));
-  const blockers = [...clashes, ...playerReviewErrors(
+  const blockers: ReactNode[] = [...clashes, ...playerReviewErrors(
     live.filter(b => b.writeRoster).map(b => ({ label: b.t.label, rows: b.rows })),
     read?.pool ?? [], read?.rosterCap ?? 0,
   )];
@@ -139,7 +140,10 @@ export function RoundImport({
     if (changingTeams.has(team.id)) continue;
     for (const player of read?.rosterByTeam[team.id] ?? []) {
       const elsewhere = live.find(b => b.writeRoster && b.rows.some(row => row.choice === player.golferId));
-      if (elsewhere) blockers.push(`${player.read} is already on ${team.name} and is also selected for ${elsewhere.t.label}.`);
+      if (elsewhere) blockers.push(
+        <><GolferProfileLink golferId={player.golferId} newTab>{player.read}</GolferProfileLink>
+          {" "}is already on {team.name} and is also selected for {elsewhere.t.label}.</>,
+      );
     }
   }
 
@@ -160,14 +164,7 @@ export function RoundImport({
         setError(r.error);
         return;
       }
-      setSummary(
-        [
-          `Seated ${r.rostered} player${r.rostered === 1 ? "" : "s"}`,
-          r.created.length ? `added ${r.created.length} new to the pool (${r.created.join(", ")})` : null,
-          `wrote ${r.holesWritten} hole${r.holesWritten === 1 ? "" : "s"}`,
-          r.holesLeft ? `left ${r.holesLeft} already on the board alone` : null,
-        ].filter(Boolean).join(", ") + ".",
-      );
+      setSummary(r);
       reset();
       router.refresh();
     });
@@ -241,7 +238,16 @@ export function RoundImport({
       )}
       {summary && (
         <p className="mt-3 rounded-lg bg-fairway-50 px-3 py-2 text-sm text-fairway-700 dark:bg-fairway-900/40 dark:text-fairway-200">
-          {summary}
+          Seated {summary.rostered} player{summary.rostered === 1 ? "" : "s"}
+          {summary.createdGolfers.length > 0 && (
+            <>, added {summary.createdGolfers.length} new to the pool ({summary.createdGolfers.map((golfer, i) => (
+              <Fragment key={golfer.id}>
+                {i > 0 && ", "}<GolferProfileLink golferId={golfer.id}>{golfer.name}</GolferProfileLink>
+              </Fragment>
+            ))})</>
+          )}
+          {", "}wrote {summary.holesWritten} hole{summary.holesWritten === 1 ? "" : "s"}
+          {summary.holesLeft > 0 && `, left ${summary.holesLeft} already on the board alone`}.
         </p>
       )}
 
@@ -265,7 +271,7 @@ export function RoundImport({
               <p className="font-medium">Fix these first</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {/* Indexed: two bays can produce the same sentence. */}
-                {blockers.map((b, i) => <li key={`${i}-${b}`}>{b}</li>)}
+                {blockers.map((b, i) => <li key={i}>{b}</li>)}
               </ul>
             </div>
           )}

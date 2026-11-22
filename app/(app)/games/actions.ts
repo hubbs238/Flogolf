@@ -1289,6 +1289,7 @@ export type RoundImportApplied =
   | {
       ok: true;
       created: string[];
+      createdGolfers: { id: string; name: string }[];
       rostered: number;
       holesWritten: number;
       holesLeft: number;
@@ -1371,7 +1372,7 @@ export async function applyRoundImport(
     }
   }
 
-  const created: string[] = [];
+  const createdGolfers: { id: string; name: string }[] = [];
   const idByKey = new Map(pool.byKey);
 
   if (wanted.size > 0) {
@@ -1384,7 +1385,7 @@ export async function applyRoundImport(
     }
     for (const g of (inserted ?? []) as { id: string; name: string }[]) {
       idByKey.set(nameKey(g.name), { id: g.id, name: g.name });
-      created.push(g.name);
+      createdGolfers.push(g);
     }
   }
 
@@ -1526,7 +1527,7 @@ export async function applyRoundImport(
   }
 
   revalidateMoney(matchId);
-  return { ok: true, created, rostered, holesWritten, holesLeft };
+  return { ok: true, created: createdGolfers.map(g => g.name), createdGolfers, rostered, holesWritten, holesLeft };
 }
 
 

@@ -25,7 +25,7 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
 
   const [{ golfers, characteristics }, teamsResult, picksResult, poolResult] =
     await Promise.all([
-      getScoredGolfers({ poolOnly: true }),
+      getScoredGolfers(),
       supabase.from("draft_teams").select("*").eq("draft_id", id),
       supabase.from("draft_picks").select("*").eq("draft_id", id),
       supabase.from("draft_pool").select("golfer_id, available").eq("draft_id", id),
@@ -40,7 +40,16 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
     ),
   );
 
-  const withPhotos = golfers.map((g) => ({ ...g, photo: photoUrl(g.image_path) }));
+  const teams = (teamsResult.data ?? []) as DraftTeam[];
+  const picks = (picksResult.data ?? []) as DraftPick[];
+  // Keep the profiles of captains and picks who have since left the player pool.
+  const rosteredIds = new Set([
+    ...teams.map(t => t.captain_golfer_id),
+    ...picks.map(p => p.golfer_id),
+  ]);
+  const withPhotos = golfers
+    .filter(g => g.in_pool || rosteredIds.has(g.id))
+    .map(g => ({ ...g, photo: photoUrl(g.image_path) }));
   const isAdmin = session.profile?.is_admin ?? false;
   const typedDraft = draft as Draft;
 
@@ -70,7 +79,7 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
             <DeleteDraftButton
               draftId={typedDraft.id}
               draftName={typedDraft.name}
-              pickCount={(picksResult.data ?? []).length}
+              pickCount={picks.length}
             />
           </div>
         )}
@@ -79,7 +88,7 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
       {typedDraft.status === "setup" ? (
         <DraftSetup
           draft={typedDraft}
-          teams={(teamsResult.data ?? []) as DraftTeam[]}
+          teams={teams}
           golfers={withPhotos}
           availability={availability}
           characteristics={characteristics}
@@ -88,8 +97,8 @@ export default async function DraftPage({ params }: PageProps<"/draft/[id]">) {
       ) : (
         <DraftBoard
           draft={typedDraft}
-          teams={(teamsResult.data ?? []) as DraftTeam[]}
-          picks={(picksResult.data ?? []) as DraftPick[]}
+          teams={teams}
+          picks={picks}
           golfers={withPhotos}
           availability={availability}
           characteristics={characteristics}

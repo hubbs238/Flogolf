@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { GolferAvatar } from "./golfer-avatar";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { TeamColumns } from "./team-columns";
 import { autoDraft, totalPicks, type TeamState } from "@/lib/draft";
 import { displayName, sortGolfers } from "@/lib/scoring";
@@ -53,7 +54,8 @@ export function DraftSetup({
     teams.map((t) => t.captain_golfer_id).filter(Boolean) as string[],
   );
 
-  const available = golfers.filter((g) => availability[g.id] !== false);
+  const pool = golfers.filter((g) => g.in_pool);
+  const available = pool.filter((g) => availability[g.id] !== false);
   const draftable = available.filter((g) => !captainIds.has(g.id));
   const needed = totalPicks(draft.team_count, draft.roster_size);
   const short = needed - draftable.length;
@@ -174,47 +176,48 @@ export function DraftSetup({
         <div className="grid gap-2 sm:grid-cols-2">
           {[...teams]
             .sort((a, b) => a.slot - b.slot)
-            .map((team) => (
-              <div
-                key={team.id}
-                className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-fairway-100 text-xs font-semibold text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
-                  {team.slot}
-                </span>
-                <span className="w-20 shrink-0 truncate text-sm font-medium">
-                  {team.name}
-                </span>
-                <select
-                  value={team.captain_golfer_id ?? ""}
-                  disabled={pending}
-                  onChange={(event) => {
-                    setMock(null);
-                    run(() =>
-                      setTeamCaptain(
-                        draft.id,
-                        team.id,
-                        event.target.value || null,
-                      ),
-                    );
-                  }}
-                  className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-fairway-400"
+            .map((team) => {
+              const captain = team.captain_golfer_id ? byId.get(team.captain_golfer_id) : null;
+              return (
+                <div
+                  key={team.id}
+                  className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised p-3"
                 >
-                  <option value="">Choose a captain</option>
-                  {available
-                    .filter(
-                      (g) =>
-                        !captainIds.has(g.id) || g.id === team.captain_golfer_id,
-                    )
-                    .map((g) => (
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-fairway-100 text-xs font-semibold text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
+                    {team.slot}
+                  </span>
+                  <span className="min-w-0 truncate text-sm font-medium">{team.name}</span>
+                  {captain && (
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      <GolferProfileLink golferId={captain.id} newTab={!!mock}>
+                        {displayName(captain)}
+                      </GolferProfileLink>
+                      {captain.overall !== null && <span className="ml-1 text-muted">({captain.overall})</span>}
+                    </span>
+                  )}
+                  <select
+                    aria-label={`Captain for ${team.name}`}
+                    value=""
+                    disabled={pending}
+                    onChange={(event) => {
+                      const selected = event.currentTarget.value;
+                      setMock(null);
+                      run(() => setTeamCaptain(draft.id, team.id, selected === "remove" ? null : selected));
+                    }}
+                    className="min-w-28 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-fairway-400"
+                  >
+                    <option value="" disabled>{captain ? "Change captain" : "Choose a captain"}</option>
+                    {team.captain_golfer_id && <option value="remove">Remove captain</option>}
+                    {draftable.map((g) => (
                       <option key={g.id} value={g.id}>
                         {displayName(g)}{" "}
                         {g.overall !== null ? `(${g.overall})` : ""}
                       </option>
                     ))}
-                </select>
-              </div>
-            ))}
+                  </select>
+                </div>
+              );
+            })}
         </div>
       </section>
 
@@ -251,49 +254,47 @@ export function DraftSetup({
         </div>
 
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {sortGolfers(golfers, "overall").map((golfer) => {
+          {sortGolfers(pool, "overall").map((golfer) => {
             const isAvailable = availability[golfer.id] !== false;
             const isCaptain = captainIds.has(golfer.id);
             return (
-              <li key={golfer.id}>
+              <li
+                key={golfer.id}
+                className={`relative flex items-center gap-3 rounded-xl border p-2.5 transition ${
+                  isAvailable
+                    ? "border-fairway-300 bg-raised"
+                    : "border-line bg-surface opacity-55"
+                }`}
+              >
                 <button
+                  type="button"
+                  aria-label={`Available to play: ${displayName(golfer)}`}
+                  aria-pressed={isAvailable}
                   onClick={() => {
                     setMock(null);
-                    run(() =>
-                      setAvailability(draft.id, golfer.id, !isAvailable),
-                    );
+                    run(() => setAvailability(draft.id, golfer.id, !isAvailable));
                   }}
                   disabled={pending}
-                  className={`flex w-full items-center gap-3 rounded-xl border p-2.5 text-left transition ${
-                    isAvailable
-                      ? "border-fairway-300 bg-raised"
-                      : "border-line bg-surface opacity-55"
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[11px] after:absolute after:inset-0 after:z-[1] after:rounded-xl ${
+                    isAvailable ? "border-fairway-500 bg-fairway-500 text-white" : "border-line"
                   }`}
                 >
-                  <span
-                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[11px] ${
-                      isAvailable
-                        ? "border-fairway-500 bg-fairway-500 text-white"
-                        : "border-line"
-                    }`}
-                  >
-                    {isAvailable ? "✓" : ""}
-                  </span>
-                  <GolferAvatar
-                    name={displayName(golfer)}
-                    url={(golfer as PoolGolfer).photo}
-                    size="sm"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {displayName(golfer)}
-                    {isCaptain && (
-                      <span className="ml-1.5 text-xs text-muted">captain</span>
-                    )}
-                  </span>
-                  <span className="shrink-0 text-sm tabular-nums text-muted">
-                    {golfer.overall ?? "—"}
-                  </span>
+                  {isAvailable ? "✓" : ""}
                 </button>
+                <GolferAvatar
+                  name={displayName(golfer)}
+                  url={(golfer as PoolGolfer).photo}
+                  size="sm"
+                />
+                <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                  <GolferProfileLink golferId={golfer.id} className="relative z-10" newTab={!!mock}>
+                    {displayName(golfer)}
+                  </GolferProfileLink>
+                  {isCaptain && <span className="ml-1.5 text-xs text-muted">captain</span>}
+                </span>
+                <span className="shrink-0 text-sm tabular-nums text-muted">
+                  {golfer.overall ?? "—"}
+                </span>
               </li>
             );
           })}
@@ -340,6 +341,7 @@ export function DraftSetup({
           </p>
           <TeamColumns
             teams={mock}
+            openProfilesInNewTab
             characteristics={characteristics}
             rosterSize={draft.roster_size}
           />

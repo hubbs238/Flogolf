@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { createClient } from "@/lib/supabase/server";
-import { computeMatch, getAllGolfers, getMatchBundle, getPoolGolfers } from "@/lib/match-data";
+import { computeMatch, getAllGolfers, getMatchBundle } from "@/lib/match-data";
 import { MatchSetup } from "@/components/match-setup";
 import { RosterFill } from "@/components/roster-fill";
 import { RosterEditor } from "@/components/roster-editor";
@@ -29,14 +29,9 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
   // - including the one a score save triggers on its way back - paid for each
   // round trip end to end before starting the next.
   const isAdmin = session.profile?.is_admin ?? false;
-  // Two lists. The pool is who can be picked for a round. Every golfer is
-  // who can be swapped into one afterwards, because a one-off sub is often
-  // taken back out of the rating pool once their round is over, and they
-  // still have to stay correctable on the round they played.
-  const [bundle, golfers, allGolfers, view] = await Promise.all([
+  const [bundle, allGolfers, view] = await Promise.all([
     getMatchBundle(id),
-    getPoolGolfers(),
-    isAdmin ? getAllGolfers() : Promise.resolve([]),
+    getAllGolfers(),
     getViewMode(isAdmin),
   ]);
   if (!bundle) notFound();
@@ -49,19 +44,17 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
     ? teams
     : teams.filter((t) => t.captain_user_id === session.userId);
 
-  // Captain shown beside the team name so nobody posts on the wrong row.
-  const golferById = new Map(golfers.map((g) => [g.id, g]));
+  // Historical participants keep their names and profiles after leaving the pool.
+  const rosterIds = new Set(players.map(p => p.golfer_id));
+  const captainIds = new Set(teams.map(t => t.captain_golfer_id));
+  const roundGolfers = allGolfers.filter(g => rosterIds.has(g.id) || captainIds.has(g.id));
+  const nameOf = new Map(roundGolfers.map(g => [g.id, displayName(g)]));
   const captainNames: Record<string, string> = {};
-  for (const t of teams) {
-    const g = t.captain_golfer_id ? golferById.get(t.captain_golfer_id) : null;
-    if (g) captainNames[t.id] = displayName(g);
+  for (const team of teams) {
+    const name = team.captain_golfer_id && nameOf.get(team.captain_golfer_id);
+    if (name) captainNames[team.id] = name;
   }
 
-  // What the card mover shows on each row: who is on the team, which stays
-  // put, and what its card says so far, which is the part that moves.
-  // Every golfer rather than the pool, because a one-off sub is often out of
-  // the pool by the time a round is being corrected.
-  const nameOf = new Map(allGolfers.map((g) => [g.id, displayName(g)]));
   const cardRows: CardRow[] = teams.map((t) => {
     const holes = Object.values(scores[t.id] ?? {}).filter(
       (v): v is number => typeof v === "number",
@@ -72,7 +65,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
       players: players
         .filter((p) => p.team_id === t.id)
         .sort((a, b) => a.slot - b.slot)
-        .map((p) => nameOf.get(p.golfer_id) ?? "Unknown"),
+        .map((p) => ({ id: p.golfer_id, name: nameOf.get(p.golfer_id) ?? null })),
       played: holes.length,
       total: holes.length ? holes.reduce((n, v) => n + v, 0) : null,
     };
@@ -121,7 +114,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
       {match.status === "setup" &&
         (isAdmin ? (
           <MatchSetup
-            match={match} teams={teams} golfers={golfers} drafts={drafts}
+            match={match} teams={teams} golfers={allGolfers.filter(g => g.in_pool || captainIds.has(g.id))} drafts={drafts}
             payouts={bundle.payouts} fb18Payouts={bundle.fb18Payouts}
           />
         ) : (
@@ -142,7 +135,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             <RoundImport matchId={match.id} teams={teams} status={match.status} />
           )}
           <RosterFill
-            match={match} teams={teams} players={players} golfers={golfers}
+            match={match} teams={teams} players={players} golfers={allGolfers.filter(g => g.in_pool || rosterIds.has(g.id))}
             isAdmin={isAdmin} myUserId={session.userId}
           />
           {isAdmin && <ScoreSwap key={cardKey} matchId={match.id} teams={cardRows} />}
@@ -209,7 +202,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
                 ? computed.rates.segment
                 : { front: 0, back: 0, total: 0, second: 0 }
             }
-            golfers={golfers} isAdmin={isAdmin} showMoney={view.showMoney}
+            golfers={roundGolfers} isAdmin={isAdmin} showMoney={view.showMoney}
             roundType={computed.roundType}
           />
         </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useState } from "react";
 import { MIN_TEAM_SIZE, nameKey } from "@/lib/game";
 import type { ResolvedName } from "@/app/(app)/games/actions";
@@ -71,11 +72,19 @@ export function ImportRoster({ rows, label, pool, onChange, cap, disabled, empty
       <ul className="space-y-2">
         {rows.map((row, slot) => {
           const role = slot === 0 ? "Captain" : `Player ${slot + 1}`;
+          const selected = pool.find(golfer => golfer.id === row.choice);
+          const readMatches = selected && row.read && [selected.name, selected.nickname ?? ""]
+            .some(name => nameKey(name) === nameKey(row.read));
           const rowLabel = `${label}, ${role}`;
           return (
             <li key={slot} className="flex flex-wrap items-center gap-2 text-sm">
               <span className="text-xs text-muted">{role}</span>
-              {row.read && <span className="font-medium">{row.read}</span>}
+              {row.read && !readMatches && <span className="text-muted">Read as {row.read}</span>}
+              {selected && (
+                <GolferProfileLink golferId={selected.id} className="font-medium" newTab>
+                  {readMatches ? row.read : selected.nickname || selected.name}
+                </GolferProfileLink>
+              )}
               <select aria-label={`Golfer for ${rowLabel}`} value={row.choice} disabled={disabled}
                 onChange={e => change(slot, { choice: e.target.value })}
                 className="rounded-lg border border-line bg-surface px-2 py-1 text-sm">

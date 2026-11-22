@@ -1,20 +1,23 @@
 "use client";
 
 import { GolferAvatar } from "./golfer-avatar";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { displayName } from "@/lib/scoring";
 import { teamBestByCategory, teamStrength, type TeamState } from "@/lib/draft";
-import type { Characteristic } from "@/lib/types";
+import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 export function TeamColumns({
   teams,
   characteristics,
   activeSlot,
   rosterSize,
+  openProfilesInNewTab = false,
 }: {
   teams: TeamState[];
   characteristics: Characteristic[];
   activeSlot?: number;
   rosterSize: number;
+  openProfilesInNewTab?: boolean;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -52,6 +55,7 @@ export function TeamColumns({
               {team.captain && (
                 <MemberRow
                   golfer={team.captain}
+                  newTab={openProfilesInNewTab}
                   position={1}
                   isCaptain
                   photo={(team.captain as { photo?: string | null }).photo ?? null}
@@ -61,6 +65,7 @@ export function TeamColumns({
                 <MemberRow
                   key={pick.id}
                   golfer={pick}
+                  newTab={openProfilesInNewTab}
                   position={index + firstPickPosition}
                   photo={(pick as { photo?: string | null }).photo ?? null}
                 />
@@ -107,9 +112,11 @@ function MemberRow({
   golfer,
   position,
   isCaptain = false,
+  newTab,
   photo,
 }: {
-  golfer: { name: string; nickname?: string | null; overall: number | null };
+  golfer: ScoredGolfer;
+  newTab: boolean;
   position: number;
   isCaptain?: boolean;
   photo: string | null;
@@ -123,7 +130,7 @@ function MemberRow({
       </span>
       <GolferAvatar name={shown} url={photo} size="sm" />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">
-        {shown}
+        <GolferProfileLink golferId={golfer.id} newTab={newTab}>{shown}</GolferProfileLink>
         {isCaptain && (
           <span className="ml-1.5 rounded bg-fairway-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
             C

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
+import { Fragment, useState } from "react";
 import { RosterFill } from "./roster-fill";
 import { displayName } from "@/lib/scoring";
 import type { Golfer, Match, MatchPlayer, MatchTeam } from "@/lib/types";
@@ -29,18 +30,23 @@ export function RosterEditor({
   const [open, setOpen] = useState(false);
 
   const byId = new Map(golfers.map((g) => [g.id, g]));
-  const short = teams
-    .map((t) => {
-      const names = players
-        .filter((p) => p.team_id === t.id)
-        .sort((a, b) => a.slot - b.slot)
-        .map((p) => {
-          const g = byId.get(p.golfer_id);
-          return g ? displayName(g) : "?";
-        });
-      return `${t.name}: ${names.length ? names.join(", ") : "empty"}`;
-    })
-    .join(" · ");
+  const summary = teams.map((team, i) => {
+    const roster = players.filter(p => p.team_id === team.id).sort((a, b) => a.slot - b.slot);
+    return (
+      <Fragment key={team.id}>
+        {i > 0 && " · "}{team.name}: {roster.length === 0 && "empty"}
+        {roster.map((player, j) => {
+          const golfer = byId.get(player.golfer_id);
+          return (
+            <Fragment key={player.golfer_id}>
+              {j > 0 && ", "}
+              {golfer ? <GolferProfileLink golferId={golfer.id}>{displayName(golfer)}</GolferProfileLink> : "?"}
+            </Fragment>
+          );
+        })}
+      </Fragment>
+    );
+  });
 
   return (
     <section className="rounded-2xl border border-line bg-raised p-5">
@@ -50,7 +56,7 @@ export function RosterEditor({
           <p className="text-sm text-muted">
             {open
               ? "Swap keeps the slot and the captain, which is what you want when a sub played under a placeholder and you have their name now, or the wrong person went down on a team. Everything on this round is worked out from who was on which team, so a change here recalculates the round and the season table."
-              : short}
+              : summary}
           </p>
         </div>
         <button

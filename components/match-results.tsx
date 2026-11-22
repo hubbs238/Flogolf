@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { wholeDollars } from "@/lib/game";
 import { formatDollars } from "@/lib/currency";
 import { useState, useTransition } from "react";
@@ -64,9 +65,9 @@ export function MatchResults({
   const [error, setError] = useState<string | null>(null);
 
   const teamName = (id: string) => teams.find((t) => t.id === id)?.name ?? "?";
-  const golferName = (id: string) => {
+  const golferLink = (id: string) => {
     const g = golfers.find((x) => x.id === id);
-    return g ? displayName(g) : "Unknown";
+    return g ? <GolferProfileLink golferId={g.id}>{displayName(g)}</GolferProfileLink> : "Unknown";
   };
 
   function rule(segment: number, blockKey: string, choice: TieChoice) {
@@ -364,7 +365,7 @@ export function MatchResults({
               <tbody>
                 {[...points].sort((a, b) => b.total - a.total).map((p) => (
                   <tr key={p.golferId} className="border-b border-line last:border-0">
-                    <td className="p-3 font-medium">{golferName(p.golferId)}</td>
+                    <td className="p-3 font-medium">{golferLink(p.golferId)}</td>
                     <td className="p-3 text-muted">{teamName(p.teamId)}</td>
                     <td className="p-3 text-right tabular-nums">{p.fromMoney.toLocaleString("en-US")}</td>
                     <td className="p-3 text-right tabular-nums">{p.bonus.toLocaleString("en-US")}</td>
@@ -430,7 +431,7 @@ export function MatchResults({
               <tbody>
                 {[...money].sort((a, b) => b.dollars - a.dollars).map((m) => (
                   <tr key={m.golferId} className="border-b border-line last:border-0">
-                    <td className="p-3 font-medium">{golferName(m.golferId)}</td>
+                    <td className="p-3 font-medium">{golferLink(m.golferId)}</td>
                     <td className="p-3 text-muted">{teamName(m.teamId)}</td>
                     <td className="p-3 text-right"><Cash n={m.breakdown.main} /></td>
                     {anyFb18 && (

@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -108,7 +109,9 @@ function PersonRow({
     <li className="flex flex-wrap items-center gap-3 rounded-xl border border-line bg-raised p-3">
       <div className="min-w-0 flex-1">
         <p className="truncate font-medium">
-          {profile.display_name ?? profile.email}
+          <GolferProfileLink golferId={profile.golfer_id}>
+            {profile.display_name ?? profile.email}
+          </GolferProfileLink>
           {isSelf && <span className="ml-2 text-xs text-muted">you</span>}
         </p>
         <p className="truncate text-xs text-muted">{profile.email}</p>

@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { GolferAvatar } from "./golfer-avatar";
@@ -100,7 +101,7 @@ export function RosterFill({
                       <span className="w-4 shrink-0 text-xs font-semibold text-muted">{p.slot}</span>
                       <GolferAvatar name={g ? displayName(g) : "?"} url={null} size="sm" />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {g ? displayName(g) : "Unknown"}
+                        {g ? <GolferProfileLink golferId={g.id}>{displayName(g)}</GolferProfileLink> : "Unknown"}
                         {p.slot === 1 && (
                           <span className="ml-1.5 rounded bg-fairway-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">C</span>
                         )}
@@ -149,22 +150,14 @@ export function RosterFill({
                         </li>
                       )}
                       {available.map((g) => (
-                        <li key={g.id}>
-                          <button
-                            onClick={() =>
-                              run(async () => {
-                                const r = await replaceMatchPlayer(match.id, swapping, g.id);
-                                if (r.ok) setSwapping(null);
-                                return r;
-                              })
-                            }
-                            disabled={pending}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-surface disabled:opacity-50"
-                          >
-                            <GolferAvatar name={displayName(g)} url={null} size="sm" />
-                            <span className="min-w-0 flex-1 truncate">{displayName(g)}</span>
-                          </button>
-                        </li>
+                        <RosterCandidate
+                          key={g.id} golfer={g} action="Swap in" pending={pending}
+                          onPick={() => run(async () => {
+                            const r = await replaceMatchPlayer(match.id, swapping, g.id);
+                            if (r.ok) setSwapping(null);
+                            return r;
+                          })}
+                        />
                       ))}
                     </ul>
                   </li>
@@ -190,15 +183,10 @@ export function RosterFill({
                         <li className="p-2 text-center text-xs text-muted">Nobody left</li>
                       )}
                       {available.map((g) => (
-                        <li key={g.id}>
-                          <button
-                            onClick={() => run(() => addMatchPlayer(match.id, team.id, g.id))}
-                            disabled={pending}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-surface disabled:opacity-50">
-                            <GolferAvatar name={displayName(g)} url={null} size="sm" />
-                            <span className="min-w-0 flex-1 truncate">{displayName(g)}</span>
-                          </button>
-                        </li>
+                        <RosterCandidate
+                          key={g.id} golfer={g} action="Add" pending={pending}
+                          onPick={() => run(() => addMatchPlayer(match.id, team.id, g.id))}
+                        />
                       ))}
                     </ul>
                   )}
@@ -209,5 +197,26 @@ export function RosterFill({
         })}
       </div>
     </div>
+  );
+}
+
+function RosterCandidate({ golfer, action, pending, onPick }: {
+  golfer: Golfer;
+  action: "Add" | "Swap in";
+  pending: boolean;
+  onPick: () => void;
+}) {
+  const name = displayName(golfer);
+  return (
+    <li className="flex items-center gap-2 px-2 py-1.5 text-sm">
+      <GolferAvatar name={name} url={null} size="sm" />
+      <GolferProfileLink golferId={golfer.id} className="min-w-0 flex-1 truncate">{name}</GolferProfileLink>
+      <button
+        type="button" onClick={onPick} disabled={pending} aria-label={`${action} ${name}`}
+        className="shrink-0 rounded-md border border-line px-2 py-1 text-xs font-medium hover:border-fairway-300 disabled:opacity-50"
+      >
+        {action}
+      </button>
+    </li>
   );
 }

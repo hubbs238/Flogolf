@@ -1,5 +1,6 @@
 "use client";
 
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MatchStakes } from "./match-stakes";
@@ -88,20 +89,32 @@ export function MatchSetup({
       <section>
         <h2 className="mb-3 font-semibold">Captains</h2>
         <div className="grid gap-2 sm:grid-cols-2">
-          {teams.map((team) => (
-            <div key={team.id} className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-fairway-100 text-xs font-semibold text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
-                {team.slot}
-              </span>
-              <select value={team.captain_golfer_id ?? ""} disabled={pending}
-                onChange={(e) => run(() => setMatchCaptain(match.id, team.id, e.target.value || null))}
-                className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-fairway-400">
-                <option value="">Choose a captain</option>
-                {golfers.filter((g) => !captainIds.has(g.id) || g.id === team.captain_golfer_id)
-                  .map((g) => <option key={g.id} value={g.id}>{displayName(g)}</option>)}
-              </select>
-            </div>
-          ))}
+          {teams.map((team) => {
+            const captain = golfers.find(g => g.id === team.captain_golfer_id);
+            return (
+              <div key={team.id} className="flex items-center gap-3 rounded-xl border border-line bg-raised p-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-fairway-100 text-xs font-semibold text-fairway-700 dark:bg-fairway-800 dark:text-fairway-100">
+                  {team.slot}
+                </span>
+                {captain && (
+                  <GolferProfileLink golferId={captain.id} className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {displayName(captain)}
+                  </GolferProfileLink>
+                )}
+                <select value="" disabled={pending} aria-label={`Choose a captain for ${team.name}`}
+                  onChange={(e) => {
+                    const selected = e.currentTarget.value;
+                    run(() => setMatchCaptain(match.id, team.id, selected === "remove" ? null : selected));
+                  }}
+                  className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-fairway-400">
+                  <option value="" disabled>{captain ? "Change captain" : "Choose a captain"}</option>
+                  {team.captain_golfer_id && <option value="remove">Remove captain</option>}
+                  {golfers.filter(g => g.in_pool && !captainIds.has(g.id))
+                    .map(g => <option key={g.id} value={g.id}>{displayName(g)}</option>)}
+                </select>
+              </div>
+            );
+          })}
         </div>
       </section>
 

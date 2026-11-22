@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { GolferAvatar } from "./golfer-avatar";
+import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { TeamColumns } from "./team-columns";
 import { createClient } from "@/lib/supabase/client";
 import { displayName } from "@/lib/scoring";
@@ -126,7 +127,7 @@ export function DraftBoard({
 
   const available = golfers.filter(
     (g) =>
-      availability[g.id] !== false &&
+      g.in_pool && availability[g.id] !== false &&
       !pickedIds.has(g.id) &&
       !captainIds.has(g.id),
   );
@@ -184,7 +185,12 @@ export function DraftBoard({
                 {isMyTurn
                   ? "Your pick. Choose from the list below."
                   : currentState?.captain
-                    ? `Captain ${displayName(currentState.captain)}`
+                    ? <>
+                        Captain{" "}
+                        <GolferProfileLink golferId={currentState.captain.id}>
+                          {displayName(currentState.captain)}
+                        </GolferProfileLink>
+                      </>
                     : "Waiting"}
               </p>
             </div>
@@ -258,7 +264,7 @@ export function DraftBoard({
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">
-                    {displayName(golfer)}
+                    <GolferProfileLink golferId={golfer.id}>{displayName(golfer)}</GolferProfileLink>
                   </p>
                   <p className="truncate text-xs text-muted">
                     {index === 0 && canPick ? "Suggested · " : ""}
