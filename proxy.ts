@@ -14,6 +14,10 @@ const PUBLIC_PATHS = ["/login", "/auth"];
  * and the database enforces the real rules through row level security.
  */
 export async function proxy(request: NextRequest) {
+  const host = request.nextUrl.hostname;
+  if (process.env.FLO_APP_ENV === "staging" && (host === "www.flogolfdraft.com" || host === "flogolfdraft.com")) {
+    return new NextResponse("This staging build cannot serve the production domain.", { status: 503 });
+  }
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

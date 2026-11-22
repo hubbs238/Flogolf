@@ -7,6 +7,7 @@ const MESSAGES: Record<string, string> = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
+  const staging = process.env.FLO_APP_ENV === "staging";
   const params = await searchParams;
   const next = typeof params.next === "string" ? params.next : "/";
   const errorKey = typeof params.error === "string" ? params.error : null;
@@ -27,13 +28,16 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
           </p>
         </div>
 
-        <GoogleSignIn next={next} />
-
-        <div className="my-5 flex items-center gap-3">
-          <span className="h-px flex-1 bg-line" />
-          <span className="text-xs uppercase tracking-wide text-muted">or</span>
-          <span className="h-px flex-1 bg-line" />
-        </div>
+        {!staging && (
+          <>
+            <GoogleSignIn next={next} />
+            <div className="my-5 flex items-center gap-3">
+              <span className="h-px flex-1 bg-line" />
+              <span className="text-xs uppercase tracking-wide text-muted">or</span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
+          </>
+        )}
 
         <MagicLinkForm />
 
