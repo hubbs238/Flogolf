@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useRef, useState, useTransition } from "react";
 import { ImportRoster, reviewedPlayers, playerReviewErrors, useImportPlayers } from "./import-player-review";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,8 @@ import {
   defaultFb18Payouts,
   defaultPayouts,
   FIVE_TEAM_STAKES,
+  SECOND_EIGHTEEN_RATE_SHARE,
+  wholeDollars,
   formatRelative,
   MAX_TEAM_SIZE,
   MIN_TEAM_SIZE,
@@ -110,11 +113,11 @@ export function RoundCreateImport() {
       setCourse(s.course);
       setMatchDate(s.isoDate ?? "");
       setRosterSize(s.rosterSize);
-      setDollars(s.dollarsPerUnit);
-      setRake(s.rakePerPlayer);
+      setDollars(wholeDollars(s.dollarsPerUnit));
+      setRake(wholeDollars(s.rakePerPlayer));
       setRoundType(s.roundType);
       setSetHoles(s.setHoles);
-      setSegRates(s.fb18Rates);
+      setSegRates(Object.fromEntries(Object.entries(s.fb18Rates).map(([pot, rate]) => [pot, wholeDollars(rate)])));
       review.reset();
 
       // A pot the money block did not give up falls back to the league's
@@ -140,6 +143,10 @@ export function RoundCreateImport() {
 
   const teamCount = read?.bays.length ?? 0;
   const positions = Array.from({ length: teamCount }, (_, i) => i + 1);
+  const fallbackRates = teamCount === 5 ? FIVE_TEAM_STAKES.rates : {
+    front: dollars, back: dollars, total: dollars,
+    second: wholeDollars((segRates.total ?? dollars) * SECOND_EIGHTEEN_RATE_SHARE),
+  };
 
 
   const bays = (read?.bays ?? []).map((bay, i) => ({
@@ -392,13 +399,13 @@ export function RoundCreateImport() {
             <div className="mb-4 grid gap-4 sm:grid-cols-2">
               <label>
                 <span className={legend}>Dollars per unit</span>
-                <input type="number" min={0} step="0.5" value={dollars}
-                  onChange={(e) => setDollars(Number(e.target.value))} className={field} />
+                <input type="number" min={0} step="1" value={dollars}
+                  onChange={(e) => setDollars(Math.max(0, wholeDollars(Number(e.target.value))))} className={field} />
               </label>
               <label>
                 <span className={legend}>Rake</span>
                 <input type="number" min={0} step="1" value={rake}
-                  onChange={(e) => setRake(Number(e.target.value))} className={field} />
+                  onChange={(e) => setRake(Math.max(0, wholeDollars(Number(e.target.value))))} className={field} />
                 <span className="mt-1 block text-xs text-muted">
                   Charged to every player, off settlement. Never touches points.
                 </span>
@@ -452,18 +459,18 @@ export function RoundCreateImport() {
                         ))}
                         <td className="p-1">
                           {pot.key === "main" ? (
-                            <span className="px-1.5 text-xs text-muted">${dollars}</span>
+                            <span className="px-1.5 text-xs text-muted">{formatDollars(dollars)}</span>
                           ) : (
                             <input
-                              type="number" min={0} step="0.5"
-                              placeholder={String(teamCount === 5 ? FIVE_TEAM_STAKES.rates[pot.key as Fb18Segment] : dollars)}
+                              type="number" min={0} step="1"
+                              placeholder={String(fallbackRates[pot.key as Fb18Segment])}
                               value={segRates[pot.key as Fb18Segment] ?? ""}
                               onChange={(e) => {
                                 const v = e.target.value;
                                 setSegRates((prev) => {
                                   const next = { ...prev };
                                   if (v === "") delete next[pot.key as Fb18Segment];
-                                  else next[pot.key as Fb18Segment] = Number(v);
+                                  else next[pot.key as Fb18Segment] = Math.max(0, wholeDollars(Number(v)));
                                   return next;
                                 });
                               }}
@@ -479,7 +486,7 @@ export function RoundCreateImport() {
             </div>
             <p className="mt-2 text-xs text-muted">
               Each row has to come to zero: the money moves between bays rather
-              than coming from anywhere. A blank rate follows the main one.
+              than coming from anywhere. An empty rate uses the amount shown in its field.
             </p>
           </div>
 

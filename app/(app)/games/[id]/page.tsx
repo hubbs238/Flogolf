@@ -1,3 +1,4 @@
+import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -110,7 +111,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
               </span>
             )}
             {view.showMoney && Number(match.dollars_per_unit) > 0
-              ? ` · $${match.dollars_per_unit} a unit`
+              ? ` · ${formatDollars(Number(match.dollars_per_unit))} a unit`
               : ""}
           </p>
         </div>

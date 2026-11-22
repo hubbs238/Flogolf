@@ -1,3 +1,4 @@
+import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
 import { TrophyIcon } from "./trophy-icon";
@@ -24,7 +25,7 @@ function Points({ n, strong }: { n: number; strong: boolean }) {
       } ${tone(n)}`}
     >
       <TrophyIcon className="h-4 w-4 shrink-0" />
-      {n.toFixed(2)}
+      {n.toLocaleString("en-US")}
     </span>
   );
 }
@@ -32,7 +33,7 @@ function Points({ n, strong }: { n: number; strong: boolean }) {
 function Money({ n, strong }: { n: number; strong: boolean }) {
   return (
     <span className={`tabular-nums ${strong ? "font-semibold" : ""} ${tone(n)}`}>
-      {n > 0 ? "+" : n < 0 ? "-" : ""}${Math.abs(n).toFixed(2)}
+      {formatDollars(n, true)}
     </span>
   );
 }
@@ -134,11 +135,11 @@ export function StandingsTable({
 
                 <td className={`p-3 text-right tabular-nums ${tone(row.pointsFromMoney)}`}>
                   {row.pointsFromMoney > 0 ? "+" : ""}
-                  {row.pointsFromMoney.toFixed(2)}
+                  {row.pointsFromMoney.toLocaleString("en-US")}
                 </td>
 
                 <td className={`p-3 text-right tabular-nums ${tone(row.pointsBonus)}`}>
-                  {row.pointsBonus > 0 ? "+" : ""}{row.pointsBonus.toFixed(2)}
+                  {row.pointsBonus > 0 ? "+" : ""}{row.pointsBonus.toLocaleString("en-US")}
                 </td>
 
                 <td className="p-3 text-right">

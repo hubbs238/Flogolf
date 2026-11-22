@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
@@ -31,11 +32,6 @@ const ordinal = (n: number) => {
   const suffix = mod > 10 && mod < 14 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
   return `${n}${suffix}`;
 };
-
-const formatDollars = new Intl.NumberFormat("en-US", {
-  style: "currency", currency: "USD", signDisplay: "exceptZero",
-  minimumFractionDigits: 0, maximumFractionDigits: 2,
-});
 
 const tone = (n: number) =>
   n > 0 ? "text-fairway-600 dark:text-fairway-300"
@@ -357,7 +353,7 @@ function GolferCard({
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-surface px-3 py-2.5">
           <div className={`${cellNumber} ${played ? tone(points) : "text-muted"}`}>
-            {played ? points.toFixed(2) : "—"}
+            {played ? points.toLocaleString("en-US") : "—"}
           </div>
           {/* The trophy rides the label, not the number: beside a four figure
               total it was the difference between fitting the cell and not. */}
@@ -382,11 +378,11 @@ function GolferCard({
         </div>
 
         <div className="rounded-xl bg-surface px-3 py-2.5">
-          <div className={`${cellNumber} ${tone(season?.matchPoints ?? 0)}`}>{played ? season!.matchPoints.toFixed(2) : "—"}</div>
+          <div className={`${cellNumber} ${tone(season?.matchPoints ?? 0)}`}>{played ? season!.matchPoints.toLocaleString("en-US") : "—"}</div>
           <div className={cellLabel}>Match Points</div>
         </div>
         <div className="rounded-xl bg-surface px-3 py-2.5">
-          <div className={`${cellNumber} ${tone(season?.bonusPoints ?? 0)}`}>{played ? season!.bonusPoints.toFixed(2) : "—"}</div>
+          <div className={`${cellNumber} ${tone(season?.bonusPoints ?? 0)}`}>{played ? season!.bonusPoints.toLocaleString("en-US") : "—"}</div>
           <div className={cellLabel}>Bonus Points</div>
         </div>
 
@@ -395,7 +391,7 @@ function GolferCard({
         {showMoney && (
           <div className="col-span-full rounded-xl bg-surface px-3 py-2.5">
             <div className={`${cellNumber} ${played ? tone(moneyValue) : "text-muted"}`}>
-              {played ? formatDollars.format(moneyValue) : "—"}
+              {played ? formatDollars(moneyValue, true) : "—"}
             </div>
             <div className={`${cellLabel} ${MONEY_SORTS.includes(sortBy) ? "text-ink" : "text-muted"}`}>
               {MONEY_SORTS.includes(sortBy) && <SortMark />}

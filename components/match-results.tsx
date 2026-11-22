@@ -1,5 +1,7 @@
 "use client";
 
+import { wholeDollars } from "@/lib/game";
+import { formatDollars } from "@/lib/currency";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { displayName } from "@/lib/scoring";
@@ -17,7 +19,7 @@ function Cash({ n, strong = false }: { n: number; strong?: boolean }) {
   if (n === 0) return <span className="tabular-nums text-muted">—</span>;
   return (
     <span className={`tabular-nums ${strong ? "font-semibold" : ""} ${cls}`}>
-      {n > 0 ? "+" : "-"}${Math.abs(n).toFixed(2)}
+      {formatDollars(n, true)}
     </span>
   );
 }
@@ -104,7 +106,7 @@ export function MatchResults({
   // Rounded the way awardMoney rounds it, so the prose below cannot disagree
   // with the column it describes. Nothing to show on a round that is free.
   const rake = Number.isFinite(rakePerPlayer)
-    ? Math.max(0, Math.round(rakePerPlayer * 100) / 100)
+    ? Math.max(0, wholeDollars(rakePerPlayer))
     : 0;
   const anyRake = rake > 0;
 
@@ -244,7 +246,7 @@ export function MatchResults({
                         : `${r.segment} nine`}
                     {showMoney && (
                       <span className="ml-2 text-xs font-normal text-muted">
-                        ${segmentRates[r.segment]}/unit
+                        {formatDollars(segmentRates[r.segment])}/unit
                       </span>
                     )}
                   </h4>
@@ -270,7 +272,7 @@ export function MatchResults({
                             <span className={`w-16 shrink-0 text-right text-xs tabular-nums ${
                               cash > 0 ? "text-fairway-600 dark:text-fairway-300"
                                 : cash < 0 ? "text-flag-500" : "text-muted"}`}>
-                              {award ? `${cash > 0 ? "+" : cash < 0 ? "-" : ""}$${Math.abs(cash).toFixed(2)}` : "—"}
+                              {award ? formatDollars(cash, true) : "—"}
                             </span>
                           )}
                         </li>
@@ -293,7 +295,7 @@ export function MatchResults({
             ? "Each bay gets four shares of its result. Five players split those four shares equally, so each gets 80% of one share."
             : `Units won and lost across the ${matchesPhrase} and the side game.`}
           {showMoney && anyRake &&
-            ` These are winnings before rake: $${rake.toFixed(2)} a player` +
+            ` These are winnings before rake: ${formatDollars(rake)} a player` +
             " comes off what anyone actually collects."}
         </p>
         <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -326,10 +328,10 @@ export function MatchResults({
                       {showMoney && (
                         <>
                           <td className="p-3 text-right font-semibold tabular-nums">
-                            {per >= 0 ? "+" : "-"}${Math.abs(per).toFixed(2)}
+                            {formatDollars(per, true)}
                           </td>
                           <td className="p-3 text-right tabular-nums text-muted">
-                            {teamTotal >= 0 ? "+" : "-"}${Math.abs(teamTotal).toFixed(2)}
+                            {formatDollars(teamTotal, true)}
                           </td>
                         </>
                       )}
@@ -364,14 +366,14 @@ export function MatchResults({
                   <tr key={p.golferId} className="border-b border-line last:border-0">
                     <td className="p-3 font-medium">{golferName(p.golferId)}</td>
                     <td className="p-3 text-muted">{teamName(p.teamId)}</td>
-                    <td className="p-3 text-right tabular-nums">{p.fromMoney.toFixed(2)}</td>
-                    <td className="p-3 text-right tabular-nums">{p.bonus.toFixed(2)}</td>
+                    <td className="p-3 text-right tabular-nums">{p.fromMoney.toLocaleString("en-US")}</td>
+                    <td className="p-3 text-right tabular-nums">{p.bonus.toLocaleString("en-US")}</td>
                     <td className="p-3 text-right">
                       <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${
                         p.total > 0 ? "text-fairway-600 dark:text-fairway-300"
                           : p.total < 0 ? "text-flag-500" : "text-muted"}`}>
                         <TrophyIcon className="h-4 w-4 shrink-0" />
-                        {p.total.toFixed(2)}
+                        {p.total.toLocaleString("en-US")}
                       </span>
                     </td>
                   </tr>
@@ -393,8 +395,8 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             What each player owes or collects, and where it came from. Positive
             is money in, negative is money out.
-            {anyRake && ` A rake of $${rake.toFixed(2)} a player comes off the total.`}
-            {" "}Each player’s share is rounded to the nearest dollar before rake.
+            {anyRake && ` A rake of ${formatDollars(rake)} a player comes off the total.`}
+            {" "}Each player’s gross is rounded to the nearest dollar before rake. The match and side-game amounts add up to that gross.
             {" "}Only admins see this table.
           </p>
 
@@ -470,7 +472,7 @@ export function MatchResults({
 
           <p className="mt-2 text-xs text-muted">
             The total adds up every player’s settlement. Rounding individual shares can leave a difference.
-            {anyRake && ` The group paid $${(rake * money.length).toFixed(2)} in rake.`}
+            {anyRake && ` The group paid ${formatDollars(rake * money.length)} in rake.`}
           </p>
         </section>
       )}

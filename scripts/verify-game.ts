@@ -628,7 +628,7 @@ console.log("\n=== rake come off settlement, never off points ===");
     rosters: { t1: ["p1"] },
     rakePerPlayer: 12.5,
   });
-  check("rake survive a half dollar", money[0].dollars, -12.5);
+  check("a fractional rake rounds to the nearest whole dollar", [money[0].rake, money[0].dollars], [13, -13]);
 }
 {
   // A cleared input reaches Number() as NaN. Math.max(0, NaN) is NaN, so the
@@ -858,6 +858,25 @@ console.log("\n=== the double is applied once, not twice ===");
     [money[0], money[5]].map(p => [p.winnings, p.dollars]), [[21, -14], [-20, -55]]);
 }
 
+{
+  const cases = [
+    { label: "equal category remainders favor the match", raw: bd(12.5, 12.5), expected: bd(13, 12) },
+    { label: "negative category remainders use the same tie order", raw: bd(-12.5, -12.5), expected: bd(-12, -13) },
+    { label: "the combined side game wins a larger remainder", raw: bd(0.49, 0.26, 0.26), expected: bd(0, 1, 0) },
+    { label: "negative side ties are resolved front then back then eighteen",
+      raw: bd(0, -0.5, -0.5, -0.5), expected: bd(0, 0, 0, -1) },
+    { label: "unequal remainders determine mixed-sign payouts",
+      raw: bd(-7.4, 2.1, -5.2, 3.8), expected: bd(-8, 2, -5, 4) },
+  ];
+  for (const { label, raw, expected } of cases) {
+    const [player] = awardMoneyAt({ breakdownByTeam: { bay: raw }, rosters: { bay: ["a"] }, rakePerPlayer: 35 });
+    check(label, player.breakdown, expected);
+    check(`${label}: categories sum to gross`, Object.values(player.breakdown).reduce((sum, v) => sum + v, 0), player.winnings);
+    check(`${label}: cash rounds once before rake`,
+      player.dollars, Math.round(raw.main + raw.front + raw.back + raw.eighteen) - 35);
+  }
+}
+
 console.log("\n=== independent match and FB18 point awards ===");
 {
   const money = awardMoneyAt({
@@ -865,8 +884,8 @@ console.log("\n=== independent match and FB18 point awards ===");
     rosters: { win: ["a"], loss: ["b"], even: ["c"] }, rakePerPlayer: 35,
   });
   const major = cupPointsForPlayers(money, "major");
-  check("major points double positive category cents before cash rounding and rake",
-    major.map(p => [p.fromMoney, p.bonus, p.total]), [[183.4,219.96,403.36],[0,0,0],[0,0,0]]);
+  check("major points double eligible whole-dollar categories before rake",
+    major.map(p => [p.fromMoney, p.bonus, p.total]), [[184,220,404],[0,0,0],[0,0,0]]);
   check("season and major differ only in multiplier",
     cupPointsForPlayers(money, "season").map(p => p.total * 2), major.map(p => p.total));
 }
@@ -884,8 +903,8 @@ console.log("\n=== independent match and FB18 point awards ===");
   const split = (round: "season" | "major") =>
     cupPointsForPlayers(earned, round).map(p => [p.fromMoney, p.bonus, p.total]);
   const expected = [
-    [75,65,140], [90,0,90], [0,90,90], [30,0,30], [0,30,30], [12.5,12.5,25],
-    [0,20.01,20.01], [0,0,0], [0.24,0.25,0.49], [0.1,0.2,0.3], [10,0,10],
+    [75,65,140], [90,0,90], [0,90,90], [30,0,30], [0,30,30], [13,12,25],
+    [0,20,20], [0,0,0], [0,0,0], [0,0,0], [10,0,10],
   ];
   check("gross Cup dollars equal both independently eligible categories before the multiplier",
     earned.map(player => player.cupDollars), expected.map(row => row[2]));
@@ -893,16 +912,16 @@ console.log("\n=== independent match and FB18 point awards ===");
   check("majors double both components of the same award", split("major"), expected.map(row => row.map(n => n * 2)));
 }
 
-console.log("\n=== rounding up belongs to the major rule alone ===");
+console.log("\n=== whole-dollar Cup eligibility ===");
 {
-  check("a major rounds the total up to the dollar",
+  check("the all-money option uses the nearest gross dollar",
     cupDollarsOf(bd(91.7, 40, 30, 39.98), "all"), 202);
-  check("a single cent over still takes the whole dollar",
-    cupDollarsOf(bd(0.01, 0, 0, 0), "all"), 1);
+  check("a single cent rounds to zero",
+    cupDollarsOf(bd(0.01, 0, 0, 0), "all"), 0);
   check("a figure already whole is left alone",
     cupDollarsOf(bd(100, 50, 0, 0), "all"), 150);
-  check("the matches-alone figure keeps its cents",
-    cupDollarsOf(bd(91.7, 40, 30, 39.98), "main"), 91.7);
+  check("the matches-alone option uses whole dollars",
+    cupDollarsOf(bd(91.7, 40, 30, 39.98), "main"), 92);
   check("and a losing total is still floored at zero, not rounded into points",
     roundPoints({
       money: [{ golferId: "p1", teamId: "t1", winnings: -150.3, rake: 0,
@@ -1236,6 +1255,12 @@ console.log("\n=== working the stakes back out of a money block ===");
   };
 
   const got = deriveStakes(teams, money, 6);
+  const fractional = deriveStakes(teams, {
+    ...money,
+    rows: money.rows.map(row => ({ ...row, sets: row.sets.map(dollars => dollars / 16) })),
+  }, 6);
+  check("fractional sheet payouts survive import at a whole-dollar rate",
+    [fractional.rates.main, fractional.main], [1, { 1: 12.5, 2: 0, 3: -12.5 }]);
   check("the matches come back as one unit, first to last",
     got.main, { 1: 1, 2: 0, 3: -1 });
   check("at two hundred dollars a unit", got.rates.main, 200);
@@ -1783,9 +1808,9 @@ console.log("\n=== who is shown money ===");
     cupEligible: "gross" });
   const each = teamIds.map(id => money.find(player => player.teamId === id)!);
   check("November 11 net per player", each.map(p => p.dollars), [150,-145,-28,-103,-95]);
-  check("November 11 category points per player before whole-dollar cash rounding",
+  check("November 11 points from settled whole-dollar categories",
     cupPointsForPlayers(each, "season").map(p => [p.fromMoney, p.bonus, p.total]),
-    [[133.34,52,185.34],[0,0,0],[16.68,0,16.68],[0,0,0],[0,0,0]]);
+    [[133,52,185],[0,0,0],[17,0,17],[0,0,0],[0,0,0]]);
   check("November 11 team settlements", teamIds.map(id =>
     money.filter(p => p.teamId === id).reduce((sum, p) => sum + p.dollars, 0)), [750,-580,-112,-412,-380]);
   const stale = scoreFb18({ teamIds, scores, payouts, frontMoneyTiers: [["3","5"]] });

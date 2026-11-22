@@ -12,6 +12,7 @@ import {
   FB18_SEGMENTS,
   SECOND_EIGHTEEN_RATE_SHARE,
   bonusMoneyOf,
+  wholeDollars,
   MAX_TEAM_SIZE,
   MIN_TEAM_SIZE,
   nameKey,
@@ -121,13 +122,17 @@ async function insertRound(
     };
   }
 
+  const stakeAmounts = [input.dollarsPerUnit, input.rakePerPlayer, ...Object.values(input.fb18Rates ?? {})];
+  if (stakeAmounts.some(rate => rate != null && (!Number.isFinite(rate) || rate < 0))) {
+    return { ok: false, error: "Stakes and rake must be numbers, zero or more." };
+  }
   const row: Record<string, unknown> = {
     name: input.name.trim() || `Round ${new Date().toLocaleDateString()}`,
     course: input.course.trim(),
     team_count: input.teamCount,
     roster_size: input.rosterSize,
     ...(input.teamCount === 5 && fiveTeamStakeColumns()),
-    dollars_per_unit: input.dollarsPerUnit,
+    dollars_per_unit: wholeDollars(input.dollarsPerUnit),
     round_type: input.roundType ?? "season",
     set_holes: input.setHoles ?? (input.roundType === "major" ? 6 : 3),
     tie_default: input.tieDefault,
@@ -135,7 +140,7 @@ async function insertRound(
   };
   if (input.matchDate) row.match_date = input.matchDate;
   if (input.rakePerPlayer !== undefined && input.rakePerPlayer >= 0) {
-    row.dues_per_player = input.rakePerPlayer;
+    row.dues_per_player = wholeDollars(input.rakePerPlayer);
   }
   // A segment rate of null means "follow the side game rate", which itself
   // falls back to the main rate, so only a real number is worth writing.
@@ -146,17 +151,15 @@ async function insertRound(
     ["second", "fb18_second_dollars_per_unit"],
   ] as const) {
     const rate = input.fb18Rates?.[segment];
-    if (typeof rate === "number" && rate >= 0) row[column] = rate;
+    if (typeof rate === "number" && rate >= 0) row[column] = wholeDollars(rate);
   }
   // The second lowest eighteen is paid at half, so unless a rate was given
   // it is written out explicitly rather than left to inherit. Inheriting
   // would pay the second lowest the same as the lowest, which is a different
   // game and the one that was wrong before.
   if (row.fb18_second_dollars_per_unit === undefined) {
-    const eighteen =
-      (typeof input.fb18Rates?.total === "number" ? input.fb18Rates.total : null) ??
-      input.dollarsPerUnit;
-    const half = Math.round(eighteen * SECOND_EIGHTEEN_RATE_SHARE * 100) / 100;
+    const eighteen = wholeDollars(input.fb18Rates?.total ?? input.dollarsPerUnit);
+    const half = wholeDollars(eighteen * SECOND_EIGHTEEN_RATE_SHARE);
     if (half > 0) row.fb18_second_dollars_per_unit = half;
   }
 
@@ -267,8 +270,10 @@ export async function updateMatchSettings(
   if (fields.name !== undefined) update.name = fields.name.trim();
   if (fields.course !== undefined) update.course = fields.course.trim();
   if (fields.dollarsPerUnit !== undefined) {
-    if (fields.dollarsPerUnit < 0) return { ok: false, error: "Dollars per unit cannot be negative." };
-    update.dollars_per_unit = fields.dollarsPerUnit;
+    if (!Number.isFinite(fields.dollarsPerUnit) || fields.dollarsPerUnit < 0) {
+      return { ok: false, error: "Dollars per unit must be a number, zero or more." };
+    }
+    update.dollars_per_unit = wholeDollars(fields.dollarsPerUnit);
   }
   if (fields.rakePerPlayer !== undefined) {
     // A cleared input sends NaN, which slips past a < 0 test and would come
@@ -276,7 +281,7 @@ export async function updateMatchSettings(
     if (!Number.isFinite(fields.rakePerPlayer) || fields.rakePerPlayer < 0) {
       return { ok: false, error: "Rake must be a number, zero or more." };
     }
-    update.dues_per_player = fields.rakePerPlayer;
+    update.dues_per_player = wholeDollars(fields.rakePerPlayer);
   }
   const rateFields = [
     ["fb18DollarsPerUnit", "fb18_dollars_per_unit"],
@@ -289,10 +294,10 @@ export async function updateMatchSettings(
   for (const [key, column] of rateFields) {
     const value = fields[key];
     if (value === undefined) continue;
-    if (value !== null && value < 0) {
-      return { ok: false, error: "A dollar rate cannot be negative." };
+    if (value !== null && (!Number.isFinite(value) || value < 0)) {
+      return { ok: false, error: "A dollar rate must be a number, zero or more." };
     }
-    update[column] = value;
+    update[column] = value === null ? null : wholeDollars(value);
   }
   if (fields.tieDefault !== undefined) update.tie_default = fields.tieDefault;
 
@@ -1729,9 +1734,8 @@ export async function readRoundDetails(
   const fb18Rates: Partial<Record<Fb18Segment, number>> = {};
   for (const segment of FB18_SEGMENTS) {
     const rate = read.stakes.rates[segment];
-    // Only worth recording where it differs from the main rate; otherwise it
-    // inherits, which is what the column's null already means.
-    if (rate && rate !== stakeRate) fb18Rates[segment] = rate;
+    // The second eighteen inherits half the lowest-eighteen rate, so keep its explicit rate.
+    if (rate && (segment === "second" || rate !== stakeRate)) fb18Rates[segment] = rate;
   }
 
   const fb18Payouts: Partial<Record<Fb18Segment, Record<number, number>>> = {};
@@ -1762,7 +1766,7 @@ export async function readRoundDetails(
       roundType,
       setHoles: read.details.setHoles ?? (roundType === "major" ? 6 : 3),
       dollarsPerUnit: teamCount === 5 ? FIVE_TEAM_STAKES.dollarsPerUnit : stakeRate ?? 5,
-      rakePerPlayer: teamCount === 5 ? FIVE_TEAM_STAKES.rakePerPlayer : read.details.rakePerPlayer ?? 0,
+      rakePerPlayer: teamCount === 5 ? FIVE_TEAM_STAKES.rakePerPlayer : wholeDollars(read.details.rakePerPlayer ?? 0),
       payouts: teamCount === 5 ? defaultPayouts(5) : read.stakes.main,
       fb18Payouts: teamCount === 5 ? {} : fb18Payouts,
       fb18Rates: teamCount === 5 ? FIVE_TEAM_STAKES.rates : fb18Rates,

@@ -4,7 +4,7 @@ import {
   fb18DollarsBySegment,
   cupPointsForPlayers,
   bonusMoneyOf,
-  cupDollarsOf,
+  wholeDollars,
   SECOND_EIGHTEEN_RATE_SHARE,
   POINT_MULTIPLIER,
   scoreFb18,
@@ -117,9 +117,6 @@ export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
   };
 }
 
-/** Cents, not fractions of one: a half rate of 7.5 is a real rate. */
-const toCents = (n: number) => Math.round(n * 100) / 100;
-
 /** Runs the engine over a bundle. Everything on screen comes from here. */
 export function computeMatch(b: MatchBundle) {
   const teamIds = b.teams.map((t) => t.id);
@@ -156,9 +153,9 @@ export function computeMatch(b: MatchBundle) {
 
   // Rates fall back down a chain: a segment override, then the side game
   // rate, then the round's main rate. Null anywhere means "inherit".
-  const mainRate = Number(b.match.dollars_per_unit);
+  const mainRate = wholeDollars(Number(b.match.dollars_per_unit));
   const pick = (v: number | null | undefined, fallback: number) =>
-    v === null || v === undefined ? fallback : Number(v);
+    v === null || v === undefined ? fallback : wholeDollars(Number(v));
 
   const fb18Rate = pick(b.match.fb18_dollars_per_unit, mainRate);
   const eighteenRate = pick(b.match.fb18_total_dollars_per_unit, fb18Rate);
@@ -171,7 +168,7 @@ export function computeMatch(b: MatchBundle) {
     // it: a half pot. A round that sets it explicitly overrides this.
     second: pick(
       b.match.fb18_second_dollars_per_unit,
-      toCents(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE),
+      wholeDollars(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE),
     ),
   };
 
@@ -179,20 +176,15 @@ export function computeMatch(b: MatchBundle) {
   const fb18Dollars = fb18DollarsBySegment(fb18.results, segmentRate);
 
   const breakdownByTeam: Record<string, MoneyBreakdown> = {};
-  const dollarsPerPlayerByTeam: Record<string, number> = {};
-  const cupDollarsPerPlayerByTeam: Record<string, number> = {};
 
   for (const id of teamIds) {
     const fb = fb18Dollars[id] ?? { front: 0, back: 0, total: 0, second: 0 };
-    const b18: MoneyBreakdown = {
+    breakdownByTeam[id] = {
       main: (main.unitsByTeam[id] ?? 0) * mainRate,
       front: fb.front,
       back: fb.back,
       eighteen: fb.total + fb.second,
     };
-    breakdownByTeam[id] = b18;
-    dollarsPerPlayerByTeam[id] = b18.main + b18.front + b18.back + b18.eighteen;
-    cupDollarsPerPlayerByTeam[id] = cupDollarsOf(b18, cupEligible);
   }
 
   const rosters: Record<string, string[]> = {};
@@ -203,7 +195,7 @@ export function computeMatch(b: MatchBundle) {
       .map((p) => p.golfer_id);
   }
 
-  const rakePerPlayer = Number(b.match.dues_per_player ?? 0);
+  const rakePerPlayer = wholeDollars(Number(b.match.dues_per_player ?? 0));
   const money = awardMoney({
     breakdownByTeam, rosters, rakePerPlayer, cupEligible,
   });
@@ -211,7 +203,11 @@ export function computeMatch(b: MatchBundle) {
   // Team level winnings, rolled up here rather than in the browser so a page
   // can show the state of the round without shipping a row per player.
   const teamMoney: Record<string, { perPlayer: number; total: number }> = {};
+  const dollarsPerPlayerByTeam = Object.fromEntries(teamIds.map(id => [id, 0]));
+  const cupDollarsPerPlayerByTeam = { ...dollarsPerPlayerByTeam };
   for (const m of money) {
+    dollarsPerPlayerByTeam[m.teamId] = m.winnings;
+    cupDollarsPerPlayerByTeam[m.teamId] = m.cupDollars;
     const cur = teamMoney[m.teamId] ?? { perPlayer: m.winnings, total: 0 };
     teamMoney[m.teamId] = { perPlayer: m.winnings, total: cur.total + m.winnings };
   }
@@ -366,18 +362,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
     }
   }
 
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  return [...totals.values()].map((r) => ({
-    ...r,
-    matchMoney: round2(r.matchMoney),
-    bonusMoney: round2(r.bonusMoney),
-    winnings: round2(r.winnings),
-    rake: round2(r.rake),
-    dollars: round2(r.dollars),
-    pointsFromMoney: round2(r.pointsFromMoney),
-    pointsBonus: round2(r.pointsBonus),
-    points: round2(r.points),
-  }));
+  return [...totals.values()];
 }
 
 /**

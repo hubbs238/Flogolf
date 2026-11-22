@@ -1,3 +1,4 @@
+import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { TrophyIcon } from "./trophy-icon";
 import type { GolferRoundRow } from "@/lib/match-data";
@@ -8,10 +9,6 @@ function tone(n: number) {
     : n < 0
       ? "text-flag-500"
       : "text-muted";
-}
-
-function money(n: number) {
-  return `${n > 0 ? "+" : n < 0 ? "-" : ""}$${Math.abs(n).toFixed(2)}`;
 }
 
 export function GolferRoundHistory({
@@ -91,24 +88,24 @@ export function GolferRoundHistory({
                 {showMoney && (
                   <>
                     <td className={`p-3 text-right tabular-nums ${tone(r.matchMoney)}`}>
-                      {money(r.matchMoney)}
+                      {formatDollars(r.matchMoney, true)}
                     </td>
                     <td className={`p-3 text-right tabular-nums ${tone(r.bonusMoney)}`}>
-                      {money(r.bonusMoney)}
+                      {formatDollars(r.bonusMoney, true)}
                     </td>
                   </>
                 )}
                 <td className={`p-3 text-right tabular-nums ${tone(r.pointsFromMoney)}`}>
                   {r.pointsFromMoney > 0 ? "+" : ""}
-                  {r.pointsFromMoney.toFixed(2)}
+                  {r.pointsFromMoney.toLocaleString("en-US")}
                 </td>
                 <td className={`p-3 text-right tabular-nums ${tone(r.pointsBonus)}`}>
-                  {r.pointsBonus > 0 ? "+" : ""}{r.pointsBonus.toFixed(2)}
+                  {r.pointsBonus > 0 ? "+" : ""}{r.pointsBonus.toLocaleString("en-US")}
                 </td>
                 <td className="p-3 text-right">
                   <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(r.points)}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {r.points.toFixed(2)}
+                    {r.points.toLocaleString("en-US")}
                   </span>
                 </td>
               </tr>
@@ -123,24 +120,24 @@ export function GolferRoundHistory({
               {showMoney && (
                 <>
                   <td className={`p-3 text-right tabular-nums ${tone(totals.matchMoney)}`}>
-                    {money(totals.matchMoney)}
+                    {formatDollars(totals.matchMoney, true)}
                   </td>
                   <td className={`p-3 text-right tabular-nums ${tone(totals.bonusMoney)}`}>
-                    {money(totals.bonusMoney)}
+                    {formatDollars(totals.bonusMoney, true)}
                   </td>
                 </>
               )}
               <td className={`p-3 text-right tabular-nums ${tone(totals.fromMoney)}`}>
                 {totals.fromMoney > 0 ? "+" : ""}
-                {totals.fromMoney.toFixed(2)}
+                {totals.fromMoney.toLocaleString("en-US")}
               </td>
               <td className={`p-3 text-right tabular-nums ${tone(totals.bonus)}`}>
-                {totals.bonus > 0 ? "+" : ""}{totals.bonus.toFixed(2)}
+                {totals.bonus > 0 ? "+" : ""}{totals.bonus.toLocaleString("en-US")}
               </td>
               <td className="p-3 text-right">
                 <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(totals.points)}`}>
                   <TrophyIcon className="h-4 w-4 shrink-0" />
-                  {totals.points.toFixed(2)}
+                  {totals.points.toLocaleString("en-US")}
                 </span>
               </td>
             </tr>

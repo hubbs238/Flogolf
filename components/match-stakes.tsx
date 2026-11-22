@@ -1,9 +1,10 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { savePayouts, setFb18, updateMatchSettings } from "@/app/(app)/games/actions";
-import { SECOND_EIGHTEEN_RATE_SHARE } from "@/lib/game";
+import { SECOND_EIGHTEEN_RATE_SHARE, wholeDollars } from "@/lib/game";
 import type { Fb18Segment, PayoutTable } from "@/lib/game";
 import type { Match, MatchTeam } from "@/lib/types";
 
@@ -49,23 +50,27 @@ export function MatchStakes({
   });
 
   const positions = Array.from({ length: match.team_count }, (_, i) => i + 1);
-  const mainRate = Number(match.dollars_per_unit);
-  const fb18Rate = Number(match.fb18_dollars_per_unit ?? match.dollars_per_unit);
+  const mainRate = wholeDollars(Number(match.dollars_per_unit));
+  const fb18Rate = wholeDollars(Number(match.fb18_dollars_per_unit ?? mainRate));
+  const eighteenRate = wholeDollars(Number(match.fb18_total_dollars_per_unit ?? fb18Rate));
   // Each FB18 segment can be worth its own money; null inherits the row above.
   const rateFor: Record<keyof Tables, number> = {
     main: mainRate,
-    front: Number(match.fb18_front_dollars_per_unit ?? fb18Rate),
-    back: Number(match.fb18_back_dollars_per_unit ?? fb18Rate),
-    total: Number(match.fb18_total_dollars_per_unit ?? fb18Rate),
+    front: wholeDollars(Number(match.fb18_front_dollars_per_unit ?? fb18Rate)),
+    back: wholeDollars(Number(match.fb18_back_dollars_per_unit ?? fb18Rate)),
+    total: eighteenRate,
     // Falls back to HALF the eighteen's rate, not to the side game rate,
     // because that is what the league pays it. Same chain as the server's.
-    second: Number(
-      match.fb18_second_dollars_per_unit ??
-      Number(match.fb18_total_dollars_per_unit ?? fb18Rate) * SECOND_EIGHTEEN_RATE_SHARE,
-    ),
+    second: wholeDollars(Number(match.fb18_second_dollars_per_unit ?? eighteenRate * SECOND_EIGHTEEN_RATE_SHARE)),
   };
   const mainSum = positions.reduce((n, p) => n + (tables.main[p] ?? 0), 0);
-  const rake = Number(match.dues_per_player ?? 0);
+  const rake = wholeDollars(Number(match.dues_per_player ?? 0));
+
+  function saveRate(input: HTMLInputElement, field: keyof Parameters<typeof updateMatchSettings>[1]) {
+    const value = Math.max(0, wholeDollars(Number(input.value)));
+    input.value = String(value);
+    run(() => updateMatchSettings(match.id, { [field]: value }));
+  }
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
@@ -159,8 +164,8 @@ export function MatchStakes({
       <div className="grid gap-4 sm:grid-cols-3">
         <label>
           <span className="mb-1.5 block text-sm font-medium">$ per unit</span>
-          <input type="number" min={0} step="0.5" defaultValue={mainRate}
-            onBlur={(e) => run(() => updateMatchSettings(match.id, { dollarsPerUnit: Number(e.target.value) }))}
+          <input type="number" min={0} step="1" defaultValue={mainRate}
+            onBlur={(e) => saveRate(e.currentTarget, "dollarsPerUnit")}
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
           <span className="mt-1 block text-xs text-muted">Per share. Each bay splits four shares among its players.</span>
         </label>
@@ -168,7 +173,7 @@ export function MatchStakes({
         <label>
           <span className="mb-1.5 block text-sm font-medium">Rake</span>
           <input type="number" min={0} step="1" defaultValue={rake}
-            onBlur={(e) => run(() => updateMatchSettings(match.id, { rakePerPlayer: Number(e.target.value) }))}
+            onBlur={(e) => saveRate(e.currentTarget, "rakePerPlayer")}
             className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
           <span className="mt-1 block text-xs text-muted">
             Charged to every player, taken off settlement. Never touches points.
@@ -204,10 +209,8 @@ export function MatchStakes({
               <span className="mb-1.5 block text-xs font-medium text-muted">
                 $ per unit, {label}
               </span>
-              <input type="number" min={0} step="0.5" defaultValue={rateFor[seg]}
-                onBlur={(e) =>
-                  run(() => updateMatchSettings(match.id, { [field]: Number(e.target.value) }))
-                }
+              <input type="number" min={0} step="1" defaultValue={rateFor[seg]}
+                onBlur={(e) => saveRate(e.currentTarget, field)}
                 className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400" />
             </label>
           ))}
@@ -269,8 +272,7 @@ export function MatchStakes({
                         <span className={`mt-1 block text-[11px] tabular-nums ${
                           dollars > 0 ? "text-fairway-600 dark:text-fairway-300"
                             : dollars < 0 ? "text-flag-500" : "text-muted"}`}>
-                          {dollars > 0 ? "+" : dollars < 0 ? "-" : ""}
-                          ${Math.abs(dollars).toFixed(2)}
+                          {formatDollars(dollars, true)}
                         </span>
                       </td>
                     );

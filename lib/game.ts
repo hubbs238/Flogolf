@@ -21,10 +21,7 @@ export type RoundType = "season" | "major";
  * round carries a cap rather than a quota: every bay needs at least two to be
  * a team at all, and no bay takes more than six.
  *
- * Worth knowing what uneven bays do to the money. A unit pays its full
- * dollar value to each player on the roster, so a bay of five collects more
- * between them than a bay of three hands over, and the round does not net to
- * zero. That is a real consequence of the rule, not a rounding artifact.
+ * Each bay divides four shares among its roster before settling per player.
  */
 export const MIN_TEAM_SIZE = 2;
 export const MAX_TEAM_SIZE = 6;
@@ -696,24 +693,34 @@ export type MoneyBreakdown = {
 
 export type CupEligible = "gross" | "main" | "all";
 
-/** The front nine, back nine and both 18-hole money pots, netted together. */
-export function bonusMoneyOf(b: MoneyBreakdown): number {
-  return Math.round((b.front + b.back + b.eighteen) * 100) / 100;
+/** Exact half dollars go to the higher integer, as in the league's cash settlements. */
+export function wholeDollars(amount: number): number {
+  const rounded = Math.round(amount);
+  return rounded === 0 ? 0 : rounded;
 }
 
-/** Apply the zero floor separately to match money and combined FB18 bonus money. */
-function eligibleCategoryCents(b: MoneyBreakdown) {
-  return {
-    matchCents: Math.max(0, Math.round(b.main * 100)),
-    bonusCents: Math.max(0, Math.round(bonusMoneyOf(b) * 100)),
-  };
+/** Allocate a rounded total to its parts, giving leftover dollars to the largest remainders. */
+function allocateWholeDollars(parts: number[], total: number): number[] {
+  const dollars = parts.map(Math.floor);
+  const remaining = total - dollars.reduce((sum, value) => sum + value, 0);
+  const order = parts.map((value, index) => ({
+    index,
+    // Treat equivalent fractions from different roster divisions as ties.
+    remainder: Math.round((value - dollars[index]) * 1e9),
+  })).sort((a, b) => b.remainder - a.remainder || a.index - b.index);
+  for (const { index } of order.slice(0, remaining)) dollars[index] += 1;
+  return dollars;
+}
+
+/** The front nine, back nine and both 18-hole money pots, netted together. */
+export function bonusMoneyOf(b: MoneyBreakdown): number {
+  return wholeDollars(b.front + b.back + b.eighteen);
 }
 
 export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
-  if (eligible === "main") return b.main;
-  if (eligible === "all") return Math.ceil(b.main + b.front + b.back + b.eighteen);
-  const { matchCents, bonusCents } = eligibleCategoryCents(b);
-  return (matchCents + bonusCents) / 100;
+  if (eligible === "main") return wholeDollars(b.main);
+  if (eligible === "all") return wholeDollars(b.main + b.front + b.back + b.eighteen);
+  return Math.max(0, wholeDollars(b.main)) + Math.max(0, bonusMoneyOf(b));
 }
 
 export type PlayerMoney = {
@@ -755,25 +762,21 @@ export function awardMoney(opts: {
   // Math.max(0, NaN) is NaN, so the clamp alone would let a bad figure
   // through and poison every settlement row on the round.
   const raw = opts.rakePerPlayer ?? 0;
-  const rake = Number.isFinite(raw) ? Math.max(0, Math.round(raw * 100) / 100) : 0;
-  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const rake = Number.isFinite(raw) ? Math.max(0, wholeDollars(raw)) : 0;
   const out: PlayerMoney[] = [];
 
   for (const [teamId, golferIds] of Object.entries(rosters)) {
     const b = breakdownByTeam[teamId] ?? { main: 0, front: 0, back: 0, eighteen: 0 };
-    // The per-man figures scaled to this bay's share of a four-man pot. Every
-    // part of the breakdown scales, so the Cup points follow the money each
-    // man actually takes home.
-    const scale = golferIds.length > 0 ? shares / golferIds.length : 1;
-    const breakdown: MoneyBreakdown = {
-      main: round2(b.main * scale),
-      front: round2(b.front * scale),
-      back: round2(b.back * scale),
-      eighteen: round2(b.eighteen * scale),
-    };
-    // Round the combined share once. Exact halves go to the higher dollar.
-    const winnings = Math.round((b.main + b.front + b.back + b.eighteen) * scale);
-    const dollars = round2(winnings - rake);
+    if (golferIds.length === 0) continue;
+    const scale = shares / golferIds.length;
+    const rawBonus = b.front + b.back + b.eighteen;
+    const winnings = wholeDollars((b.main + rawBonus) * scale);
+    const [main, bonus] = allocateWholeDollars([b.main * scale, rawBonus * scale], winnings);
+    const [front, back, eighteen] = allocateWholeDollars(
+      [b.front * scale, b.back * scale, b.eighteen * scale], bonus,
+    );
+    const breakdown = { main, front, back, eighteen };
+    const dollars = winnings - rake;
 
     for (const golferId of golferIds) {
       out.push({
@@ -782,7 +785,7 @@ export function awardMoney(opts: {
         winnings,
         rake,
         dollars,
-        cupDollars: round2(cupDollarsOf(breakdown, cupEligible)),
+        cupDollars: cupDollarsOf(breakdown, cupEligible),
         breakdown,
       });
     }
@@ -1052,16 +1055,12 @@ export function roundPoints(opts: {
   });
 }
 
-/** Each category earns points on positive dollars before rake and cash settlement rounding. */
+/** Each category earns points on its positive whole-dollar amount before rake. */
 export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
   const multiplier = POINT_MULTIPLIER[roundType];
   return money.map(({ golferId, teamId, breakdown }) => {
-    const { matchCents, bonusCents } = eligibleCategoryCents(breakdown);
-    return {
-      golferId, teamId,
-      fromMoney: matchCents * multiplier / 100,
-      bonus: bonusCents * multiplier / 100,
-      total: (matchCents + bonusCents) * multiplier / 100,
-    };
+    const fromMoney = Math.max(0, breakdown.main) * multiplier;
+    const bonus = Math.max(0, bonusMoneyOf(breakdown)) * multiplier;
+    return { golferId, teamId, fromMoney, bonus, total: fromMoney + bonus };
   });
 }

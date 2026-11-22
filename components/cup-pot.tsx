@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useEffect, useRef, useState } from "react";
 import type { CupPot as CupPotData } from "@/lib/match-data";
 
@@ -54,7 +55,7 @@ export function CupPot({ pot }: { pot: CupPotData }) {
       <Trophy />
 
       <p className="mt-4 text-6xl font-semibold leading-none tabular-nums sm:text-7xl">
-        ${shown.toLocaleString()}
+        {formatDollars(shown)}
       </p>
 
       <p className="mt-3 text-xs font-medium tracking-wide text-fairway-200/80">

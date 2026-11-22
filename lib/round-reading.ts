@@ -369,8 +369,10 @@ function invertPot(
   const cents = rows.map((r) => Math.round(r.dollars * 100));
   if (cents.reduce((n, c) => n + c, 0) !== 0) return null;       // does not balance
 
-  const rate = cents.filter((c) => c !== 0).reduce((g, c) => gcd(g, c), 0);
-  if (!rate) return null;
+  const divisor = cents.filter((c) => c !== 0).reduce((g, c) => gcd(g, c), 0);
+  if (!divisor) return null;
+  // If the inferred unit rate has cents, represent the same payout with fractional units at $1.
+  const rateInCents = divisor % 100 === 0 ? divisor : 100;
 
   const order = rows
     .map((r, i) => ({ i, score: r.score as number }))
@@ -378,9 +380,9 @@ function invertPot(
 
   const table: UnitTable = {};
   order.forEach((o, rank) => {
-    table[rank + 1] = cents[o.i] / rate;
+    table[rank + 1] = cents[o.i] / rateInCents;
   });
-  return { table, rate: rate / 100 };
+  return { table, rate: rateInCents / 100 };
 }
 
 /**

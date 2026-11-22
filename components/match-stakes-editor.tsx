@@ -1,8 +1,9 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useState } from "react";
 import { MatchStakes } from "./match-stakes";
-import { SECOND_EIGHTEEN_RATE_SHARE } from "@/lib/game";
+import { SECOND_EIGHTEEN_RATE_SHARE, wholeDollars } from "@/lib/game";
 import type { Fb18Segment, PayoutTable } from "@/lib/game";
 import type { Match, MatchTeam } from "@/lib/types";
 
@@ -23,8 +24,8 @@ export function MatchStakesEditor({
 }) {
   const [open, setOpen] = useState(false);
 
-  const eighteenRate = Number(match.fb18_total_dollars_per_unit ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit);
-  const secondRate = match.fb18_second_dollars_per_unit ?? Math.round(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE * 100) / 100;
+  const eighteenRate = wholeDollars(Number(match.fb18_total_dollars_per_unit ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit));
+  const secondRate = match.fb18_second_dollars_per_unit ?? wholeDollars(eighteenRate * SECOND_EIGHTEEN_RATE_SHARE);
 
   return (
     <section className="rounded-2xl border border-line bg-raised p-5">
@@ -32,7 +33,7 @@ export function MatchStakesEditor({
         <div>
           <h3 className="font-semibold">Stakes and payouts</h3>
           <p className="text-sm text-muted">
-            ${match.dollars_per_unit} a unit per share. Each bay splits four shares. FB18 at{" "}
+            {formatDollars(Number(match.dollars_per_unit))} a unit per share. Each bay splits four shares. FB18 at{" "}
             {[
               ["F9", match.fb18_front_dollars_per_unit],
               ["B9", match.fb18_back_dollars_per_unit],
@@ -40,10 +41,10 @@ export function MatchStakesEditor({
               ["2nd 18", secondRate],
             ]
               .map(([label, v]) =>
-                `${label} $${v ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit}`)
+                `${label} ${formatDollars(Number(v ?? match.fb18_dollars_per_unit ?? match.dollars_per_unit))}`)
               .join(", ")}
             {Number(match.dues_per_player) > 0
-              ? `. Rake $${Number(match.dues_per_player)} a player`
+              ? `. Rake ${formatDollars(Number(match.dues_per_player))} a player`
               : ""}
             . Changing anything here recalculates this round and the season table.
           </p>

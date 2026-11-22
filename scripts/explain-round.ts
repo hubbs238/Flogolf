@@ -87,6 +87,11 @@ const money = awardMoney({
   rakePerPlayer: ROUND.rakePerPlayer, cupEligible,
 });
 assert.deepEqual(teamIds.map(t => money.find(row => row.teamId === t)?.dollars), [105, -220, 47, -70, -53]);
+for (const player of money) {
+  const amounts = Object.values(player.breakdown);
+  assert.ok(amounts.every(Number.isInteger));
+  assert.equal(amounts.reduce((sum, value) => sum + value, 0), player.winnings);
+}
 const points = cupPointsForPlayers(money, ROUND.roundType);
 
 assert.deepEqual(teamIds.map(team => {
@@ -95,7 +100,9 @@ assert.deepEqual(teamIds.map(team => {
 }), [[75,65,140],[0,0,0],[50,32,82],[0,0,0],[10,0,10]]);
 
 // ------------------------------------------------------------------- printing
-const money2 = (n: number) => (n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`);
+const formatMoney = (n: number) => n.toLocaleString("en-US", {
+  style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2,
+});
 const pad = (s: string, n: number) => s.padEnd(n);
 const rpad = (s: string, n: number) => s.padStart(n);
 
@@ -103,7 +110,7 @@ console.log(`\n${"=".repeat(78)}`);
 console.log(`  ${ROUND.name}  ${ROUND.date}`);
 console.log(`  ${ROUND.roundType} round, six ${ROUND.setHoles}-hole matches, ` +
   `$${ROUND.rates.main} a unit, $${ROUND.rakePerPlayer} rake`);
-console.log(`  points: positive match and net FB18 dollars each earn ${multiplier}x before rake`);
+console.log(`  points: positive whole-dollar match and net FB18 payouts each earn ${multiplier}x before rake`);
 console.log("=".repeat(78));
 
 console.log("\n--- the card ---------------------------------------------------");
@@ -139,7 +146,7 @@ for (const s of main.segments) {
 console.log("\n" + pad("TOTAL units", 13) +
   teamIds.map((t) => rpad(String(main.unitsByTeam[t] ?? 0), 6)).join(""));
 console.log(pad(`at $${ROUND.rates.main}`, 13) +
-  teamIds.map((t) => rpad(money2((main.unitsByTeam[t] ?? 0) * ROUND.rates.main), 11)).join(""));
+  teamIds.map((t) => rpad(formatMoney((main.unitsByTeam[t] ?? 0) * ROUND.rates.main), 11)).join(""));
 
 console.log("\n--- the side game ---------------------------------------------");
 for (const r of fb18.results) {
@@ -150,10 +157,10 @@ for (const r of fb18.results) {
   console.log(pad("  units", 9) +
     teamIds.map((t) => rpad(String(r.awards.find((a) => a.teamId === t)?.units ?? 0), 6)).join(""));
   console.log(pad("  money", 9) +
-    teamIds.map((t) => rpad(money2((r.awards.find((a) => a.teamId === t)?.units ?? 0) * rate), 11)).join(""));
+    teamIds.map((t) => rpad(formatMoney((r.awards.find((a) => a.teamId === t)?.units ?? 0) * rate), 11)).join(""));
   const pot = teamIds.reduce(
     (n, t) => n + (r.awards.find((a) => a.teamId === t)?.units ?? 0) * rate, 0);
-  if (Math.abs(pot) > 0.004) console.log(`  !! this pot is ${money2(pot)} out of balance`);
+  if (Math.abs(pot) > 0.004) console.log(`  !! this pot is ${formatMoney(pot)} out of balance`);
 }
 
 console.log("\n--- settlement, per player ------------------------------------");
@@ -166,15 +173,15 @@ for (const t of teamIds) {
   const m = money.find((x) => x.teamId === t)!;
   console.log(
     "  " + pad(t, 9) +
-    rpad(money2(m.breakdown.main), 11) + rpad(money2(m.breakdown.front), 10) +
-    rpad(money2(m.breakdown.back), 10) + rpad(money2(m.breakdown.eighteen), 11) +
-    rpad(money2(m.winnings), 12) + rpad(money2(-m.rake), 9) + rpad(money2(m.dollars), 11),
+    rpad(formatMoney(m.breakdown.main), 11) + rpad(formatMoney(m.breakdown.front), 10) +
+    rpad(formatMoney(m.breakdown.back), 10) + rpad(formatMoney(m.breakdown.eighteen), 11) +
+    rpad(formatMoney(m.winnings), 12) + rpad(formatMoney(-m.rake), 9) + rpad(formatMoney(m.dollars), 11),
   );
 }
 const netAll = money.reduce((n, m) => n + m.dollars, 0);
 const rakeAll = money.reduce((n, m) => n + m.rake, 0);
-console.log(`\n  ${money.length} players, ${money2(rakeAll)} of rake leaves the group`);
-console.log(`  every player's net added up: ${money2(netAll)}`);
+console.log(`\n  ${money.length} players, ${formatMoney(rakeAll)} of rake leaves the group`);
+console.log(`  every player's net added up: ${formatMoney(netAll)}`);
 assert.equal(netAll, -rakeAll);
 
 console.log("\n--- FLO Cup points, per player --------------------------------");
@@ -185,8 +192,8 @@ console.log(
 for (const t of teamIds) {
   const p = points.find((x) => x.teamId === t)!;
   console.log(
-    "  " + pad(t, 9) + rpad(p.fromMoney.toFixed(2), 13) +
-    rpad(p.bonus.toFixed(2), 9) + rpad(p.total.toFixed(2), 9),
+    "  " + pad(t, 9) + rpad(String(p.fromMoney), 13) +
+    rpad(String(p.bonus), 9) + rpad(String(p.total), 9),
   );
 }
 
@@ -196,7 +203,7 @@ for (const p of byTotal) {
   const m = money.find((x) => x.golferId === p.golferId)!;
   console.log(
     "  " + pad(p.golferId, 17) + pad(`(${p.teamId})`, 10) +
-    rpad(money2(m.dollars), 11) + rpad(`${p.total.toFixed(2)} pts`, 12),
+    rpad(formatMoney(m.dollars), 11) + rpad(`${String(p.total)} pts`, 12),
   );
 }
 console.log();

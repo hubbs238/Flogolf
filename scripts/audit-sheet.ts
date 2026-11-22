@@ -16,6 +16,7 @@ import {
   defaultPayouts,
   defaultFb18Payouts,
   SIX_HOLE_SETS,
+  TEAM_SHARES,
   scoreMainGame,
   scoreFb18,
   fb18DollarsBySegment,
@@ -106,14 +107,13 @@ eq("1ST 18", [-40, 0, 40], teamIds.map((t) => fb(t).total));
 eq("2ND 18", [-20, 20, 0], teamIds.map((t) => fb(t).second));
 
 console.log("\n=== settlement, with the $35 rake ===");
+// This card lists dollars for the entire bay. The settlement engine accepts dollars per share.
 const breakdownByTeam: Record<string, MoneyBreakdown> = Object.fromEntries(
   teamIds.map((t) => [t, {
-    main: (main.unitsByTeam[t] ?? 0) * 200,
-    front: fb(t).front,
-    back: fb(t).back,
-    // The breakdown keeps one eighteen figure, so the two pots are added
-    // here. That is presentation; the scoring kept them apart.
-    eighteen: fb(t).total + fb(t).second,
+    main: (main.unitsByTeam[t] ?? 0) * 200 / TEAM_SHARES,
+    front: fb(t).front / TEAM_SHARES,
+    back: fb(t).back / TEAM_SHARES,
+    eighteen: (fb(t).total + fb(t).second) / TEAM_SHARES,
   }]),
 );
 const money = awardMoney({ breakdownByTeam, rosters, rakePerPlayer: RAKE });
@@ -123,50 +123,11 @@ eq("the FB18 TOTAL column", [-140, -60, 200],
   teamIds.map((t) => fb(t).front + fb(t).back + fb(t).total + fb(t).second));
 eq("the RAKE column, which is the rake times the roster",
   [-175, -140, -140], teamIds.map((t) => -RAKE * size(t)));
-eq("BALANCE TEAM", [-915, 0, 460], teamIds.map((t) => {
-  const b = breakdownByTeam[t];
-  return b.main + b.front + b.back + b.eighteen - RAKE * size(t);
-}));
-
-console.log("\n=== team-settled against player-settled ===");
-// This is the one place the two books part company, and it is a convention
-// rather than an error, so it is reported rather than failed. Everything
-// above it is a hard check: if any of those start differing, something has
-// actually drifted.
-//
-// The sheet settles at the TEAM and divides: a bay clears $460 between them
-// and each of its four players takes $115. The app settles per PLAYER and
-// rolls up: a unit is worth its full dollar value to everyone on the roster,
-// so the same bay pays $460 to each of four players and the team figure
-// becomes $1,840.
-//
-// Both are internally consistent, and they agree exactly when the rate is
-// read as a per player rate rather than a per bay one, which is how the
-// sheet's own later weeks write it: $25 and $50 a man, not $200 a bay.
-//
-// The difference that is not just presentation: dividing always balances,
-// whatever the rosters. Paying each player in full only balances when every
-// team fields the same number, which this card does not.
-const sheetIndividual = teamIds.map((t) => {
-  const b = breakdownByTeam[t];
-  return Math.round((b.main + b.front + b.back + b.eighteen - RAKE * size(t)) / size(t));
-});
-eq("BALANCE INDIVIDUAL, the sheet dividing the team figure by the roster",
-  [-183, 0, 115], sheetIndividual);
-
-const appIndividual = teamIds.map((t) => Math.round(mine(t).dollars));
-console.log("  NOTE    the app pays each player the team's full figure instead");
-console.log(`            sheet, divided   ${JSON.stringify(sheetIndividual)}`);
-console.log(`            app, in full     ${JSON.stringify(appIndividual)}`);
-
-const balance = (rows: number[]) =>
-  Math.round(teamIds.reduce((n, t, i) => n + rows[i] * size(t), 0) * 100) / 100;
-const rakeOut = -RAKE * teamIds.reduce((n, t) => n + size(t), 0);
-console.log(`\n  the rake takes $${-rakeOut} out of the group, so a settled card should`);
-console.log(`  add up to ${rakeOut} across every player`);
-console.log(`            sheet, divided   ${balance(sheetIndividual)}`);
-console.log(`            app, in full     ${balance(appIndividual)}`);
-
+eq("BALANCE TEAM", [-915, 0, 460], teamIds.map((t) =>
+  money.filter(player => player.teamId === t).reduce((sum, player) => sum + player.dollars, 0)));
+eq("BALANCE INDIVIDUAL", [-183, 0, 115], teamIds.map(t => mine(t).dollars));
+eq("settled match and side dollars add to each player's gross", [true, true, true],
+  teamIds.map(t => Object.values(mine(t).breakdown).reduce((sum, value) => sum + value, 0) === mine(t).winnings));
 
 console.log("\n=== do the app's DEFAULT stakes reproduce the sheet? ===");
 // The checks above told the engine what each pot pays. This asks the harder

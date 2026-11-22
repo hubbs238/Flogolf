@@ -1,3 +1,4 @@
+import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireUser } from "@/lib/auth";
@@ -63,15 +64,15 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                     season.points > 0 ? "text-fairway-600 dark:text-fairway-300"
                       : season.points < 0 ? "text-flag-500" : "text-muted"}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {season.points.toFixed(2)}
+                    {season.points.toLocaleString("en-US")}
                     <span className="text-xs font-normal text-muted">Total Points</span>
                   </span>
 
                   <span className="text-xs text-muted">
-                    Match Points <span className="font-semibold tabular-nums text-ink">{season.pointsFromMoney.toFixed(2)}</span>
+                    Match Points <span className="font-semibold tabular-nums text-ink">{season.pointsFromMoney.toLocaleString("en-US")}</span>
                   </span>
                   <span className="text-xs text-muted">
-                    Bonus Points <span className="font-semibold tabular-nums text-ink">{season.pointsBonus.toFixed(2)}</span>
+                    Bonus Points <span className="font-semibold tabular-nums text-ink">{season.pointsBonus.toLocaleString("en-US")}</span>
                   </span>
 
                   {view.showMoney && (
@@ -79,16 +80,14 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
                       <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
                         season.matchMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
                           : season.matchMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                        {season.matchMoney > 0 ? "+" : season.matchMoney < 0 ? "-" : ""}
-                        ${Math.abs(season.matchMoney).toFixed(2)}
+                        {formatDollars(season.matchMoney, true)}
                         <span className="text-xs font-normal text-muted">Match Money</span>
                       </span>
 
                       <span className={`inline-flex items-center gap-1.5 font-semibold tabular-nums ${
                         season.bonusMoney > 0 ? "text-fairway-600 dark:text-fairway-300"
                           : season.bonusMoney < 0 ? "text-flag-500" : "text-muted"}`}>
-                        {season.bonusMoney > 0 ? "+" : season.bonusMoney < 0 ? "-" : ""}
-                        ${Math.abs(season.bonusMoney).toFixed(2)}
+                        {formatDollars(season.bonusMoney, true)}
                         <span className="text-xs font-normal text-muted">Bonus Money</span>
                       </span>
                     </>

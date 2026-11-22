@@ -1,10 +1,11 @@
 "use client";
 
+import { formatDollars } from "@/lib/currency";
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createMatch } from "@/app/(app)/games/actions";
-import { FIVE_TEAM_STAKES, MAX_TEAM_SIZE, MIN_TEAM_SIZE } from "@/lib/game";
+import { FIVE_TEAM_STAKES, MAX_TEAM_SIZE, MIN_TEAM_SIZE, wholeDollars } from "@/lib/game";
 import { RoundCreateImport } from "@/components/round-create-import";
 import type { Match } from "@/lib/types";
 
@@ -130,8 +131,8 @@ export function GamesList({
               </label>
               <label>
                 <span className="mb-1.5 block text-sm font-medium">Dollars per unit</span>
-                <input type="number" min={0} step="0.5" value={dollars}
-                  onChange={(e) => setDollars(Number(e.target.value))}
+                <input type="number" min={0} step="1" value={dollars}
+                  onChange={(e) => setDollars(Math.max(0, wholeDollars(Number(e.target.value))))}
                   className="w-full rounded-xl border border-line bg-surface px-4 py-2.5 outline-none focus:border-fairway-400" />
               </label>
               <label>
@@ -215,7 +216,7 @@ export function GamesList({
                       {new Date(m.match_date).toLocaleDateString()}
                       {m.course ? ` · ${m.course}` : ""} · {m.team_count} teams
                       {showMoney && Number(m.dollars_per_unit) > 0
-                        ? ` · $${m.dollars_per_unit}/unit`
+                        ? ` · ${formatDollars(Number(m.dollars_per_unit))}/unit`
                         : ""}
                       {m.round_type === "major" && (
                         <span className="ml-2 rounded-full bg-amber-300/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600 ring-1 ring-amber-400/40 dark:text-amber-200">
