@@ -251,7 +251,11 @@ export async function updateMatchSettings(
     fb18SecondDollarsPerUnit?: number | null;
     tieDefault?: TieChoice;
     roundType?: RoundType;
-    /** Re-segments the round. Locked once scoring opens, like team count. */
+    /**
+     * Re-segments the round. Allowed at any point, including after the round
+     * is final, because a round entered with the wrong match length has to be
+     * fixable. Changing it on a round past setup clears its match rulings.
+     */
     setHoles?: SetLength;
     teamCount?: number;
   },
@@ -296,16 +300,36 @@ export async function updateMatchSettings(
   if (fields.roundType !== undefined) update.round_type = fields.roundType;
 
   if (fields.setHoles !== undefined) {
-    // Tie decisions are keyed by match number, so re-cutting eighteen holes
-    // into a different number of matches would leave rulings pointing at
-    // matches that no longer exist. Same reason team count locks.
     const { data: m } = await supabase
-      .from("matches").select("status").eq("id", matchId).single();
+      .from("matches").select("status, set_holes").eq("id", matchId).single();
     if (!m) return { ok: false, error: "Round not found." };
-    if (m.status !== "setup") {
-      return { ok: false, error: "Set length locks once rosters open." };
+
+    if (m.status === "setup" || Number(m.set_holes) === fields.setHoles) {
+      update.set_holes = fields.setHoles;
+    } else {
+      // Re-cutting a scored round. The holes do not change, so the matches
+      // simply re-score from them, but tie rulings are keyed by match number
+      // and "match 2" means different holes once the length changes. Those
+      // rulings go, and the round falls back to its default tie rule, which
+      // is how a round with no rulings has always been scored.
+      //
+      // Length first, rulings second: if clearing the rulings fails, the
+      // length goes back, so the round is never left with rulings pointing
+      // at matches that no longer exist.
+      const { error: lengthError } = await supabase
+        .from("matches").update({ set_holes: fields.setHoles }).eq("id", matchId);
+      if (lengthError) return { ok: false, error: lengthError.message };
+
+      const { error: rulingError } = await supabase
+        .from("tie_decisions").delete().eq("match_id", matchId);
+      if (rulingError) {
+        await supabase.from("matches").update({ set_holes: m.set_holes }).eq("id", matchId);
+        return {
+          ok: false,
+          error: `Could not clear the old tie rulings, so the length was left as it was: ${rulingError.message}`,
+        };
+      }
     }
-    update.set_holes = fields.setHoles;
   }
 
   if (fields.teamCount !== undefined) {
@@ -330,8 +354,12 @@ export async function updateMatchSettings(
     }
   }
 
-  const { error } = await supabase.from("matches").update(update).eq("id", matchId);
-  if (error) return { ok: false, error: error.message };
+  // A re-cut of a scored round writes its own length above, so there may be
+  // nothing left to send here.
+  if (Object.keys(update).length > 0) {
+    const { error } = await supabase.from("matches").update(update).eq("id", matchId);
+    if (error) return { ok: false, error: error.message };
+  }
 
   revalidateMatch(matchId);
   return { ok: true };

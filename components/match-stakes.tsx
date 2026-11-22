@@ -110,48 +110,50 @@ export function MatchStakes({
         </label>
 
         {/*
-          Setup only, and the action refuses it after that anyway: tie rulings
-          are keyed by match number, so re-cutting eighteen holes into a
-          different number of matches would leave old rulings pointing at
-          matches that no longer exist.
+          Open at every stage, so a round entered with the wrong match length
+          can be put right after the fact. On a round past setup the matches
+          re-score from the same holes, and any tie rulings are cleared, since
+          they are keyed by match number and "match 2" means different holes
+          once the length changes. That is asked about before it happens.
         */}
-        {match.status === "setup" ? (
-          <label>
-            <span className="mb-1.5 block text-sm font-medium">Match length</span>
-            <select
-              defaultValue={Number(match.set_holes) === 6 ? 6 : 3}
-              onChange={(e) =>
-                run(() => updateMatchSettings(match.id, {
-                  setHoles: Number(e.target.value) === 6 ? 6 : 3,
-                }))
+        <label>
+          <span className="mb-1.5 block text-sm font-medium">Match length</span>
+          <select
+            defaultValue={Number(match.set_holes) === 6 ? 6 : 3}
+            onChange={(e) => {
+              const next = Number(e.target.value) === 6 ? 6 : 3;
+              const was = Number(match.set_holes) === 6 ? 6 : 3;
+              if (match.status !== "setup") {
+                const ok = window.confirm(
+                  "Re-score this round as " +
+                    (next === 6 ? "three six-hole matches" : "six three-hole matches") +
+                    "? The holes stay as entered; the matches, money and points are " +
+                    "worked out again from them. Any tie rulings made on this round's " +
+                    "matches are cleared, and its ties go back to the default rule.",
+                );
+                if (!ok) {
+                  e.target.value = String(was);
+                  return;
+                }
               }
-              className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400"
-            >
-              <option value={3}>Six three-hole matches</option>
-              <option value={6}>Three six-hole matches</option>
-            </select>
-            <span className="mt-1 block text-xs text-muted">
-              The same eighteen holes either way. Locked once rosters open.
+              run(() => updateMatchSettings(match.id, { setHoles: next }));
+            }}
+            className="w-full rounded-xl border border-line bg-surface px-3 py-2 outline-none focus:border-fairway-400"
+          >
+            <option value={3}>Six three-hole matches</option>
+            <option value={6}>Three six-hole matches</option>
+          </select>
+          <span className="mt-1 block text-xs text-muted">
+            {match.status === "setup"
+              ? "The same eighteen holes either way."
+              : "Can be changed after the fact. The round re-scores from the holes already entered."}
+          </span>
+          {match.round_type === "major" && Number(match.set_holes) === 6 && (
+            <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
+              Six-hole sets pay out three matches per round.
             </span>
-            {match.round_type === "major" && Number(match.set_holes) === 6 && (
-              <span className="mt-2 block rounded-lg bg-amber-300/15 px-3 py-2 text-xs text-amber-700 ring-1 ring-amber-400/40 dark:text-amber-200">
-                Six-hole sets pay out three matches per round.
-              </span>
-            )}
-          </label>
-        ) : (
-          <div>
-            <span className="mb-1.5 block text-sm font-medium">Match length</span>
-            <p className="rounded-xl border border-line bg-surface/50 px-3 py-2 text-sm text-muted">
-              {Number(match.set_holes) === 6
-                ? "Three six-hole matches"
-                : "Six three-hole matches"}
-            </p>
-            <span className="mt-1 block text-xs text-muted">
-              Locked: tie rulings are keyed to these matches.
-            </span>
-          </div>
-        )}
+          )}
+        </label>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
