@@ -47,8 +47,8 @@ export function GolferRoundHistory({
     <section>
       <h2 className="mb-1 font-semibold">Rounds played</h2>
       <p className="mb-3 text-sm text-muted">
-        Each dollar won or lost before rake adds or subtracts one point. Match Points come from the
-        matches and Bonus Points from FB18. Majors double both. A negative round reduces the season total.
+        Match Points and FB18 Bonus Points are scored separately for each player each round.
+        Each category earns one point per dollar won before rake, or zero for a loss. Majors double both.
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">

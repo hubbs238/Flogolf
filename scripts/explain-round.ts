@@ -92,7 +92,7 @@ const points = cupPointsForPlayers(money, ROUND.roundType);
 assert.deepEqual(teamIds.map(team => {
   const p = points.find(player => player.teamId === team)!;
   return [p.fromMoney, p.bonus, p.total];
-}), [[75,65,140],[-150,-35,-185],[50,32,82],[0,-35,-35],[10,-28,-18]]);
+}), [[75,65,140],[0,0,0],[50,32,82],[0,0,0],[10,0,10]]);
 
 // ------------------------------------------------------------------- printing
 const money2 = (n: number) => (n < 0 ? `-$${Math.abs(n).toFixed(2)}` : `$${n.toFixed(2)}`);
@@ -103,7 +103,7 @@ console.log(`\n${"=".repeat(78)}`);
 console.log(`  ${ROUND.name}  ${ROUND.date}`);
 console.log(`  ${ROUND.roundType} round, six ${ROUND.setHoles}-hole matches, ` +
   `$${ROUND.rates.main} a unit, $${ROUND.rakePerPlayer} rake`);
-console.log(`  points: signed match and FB18 dollars per player, each at ${multiplier}x before rake`);
+console.log(`  points: positive match and net FB18 dollars each earn ${multiplier}x before rake`);
 console.log("=".repeat(78));
 
 console.log("\n--- the card ---------------------------------------------------");

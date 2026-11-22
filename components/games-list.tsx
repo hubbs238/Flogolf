@@ -150,7 +150,7 @@ export function GamesList({
                   <option value="major">Major &mdash; double points</option>
                 </select>
                 <span className="mt-1 block text-xs text-muted">
-                  On majors, each dollar won or lost before rake adds or subtracts two points, including FB18.
+                  Majors award two points per dollar won before rake in each category. A loss in the matches or FB18 earns zero points for that category.
                 </span>
               </label>
 

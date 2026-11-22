@@ -696,10 +696,24 @@ export type MoneyBreakdown = {
 
 export type CupEligible = "gross" | "main" | "all";
 
+/** The front nine, back nine and both 18-hole money pots, netted together. */
+export function bonusMoneyOf(b: MoneyBreakdown): number {
+  return Math.round((b.front + b.back + b.eighteen) * 100) / 100;
+}
+
+/** Apply the zero floor separately to match money and combined FB18 bonus money. */
+function eligibleCategoryCents(b: MoneyBreakdown) {
+  return {
+    matchCents: Math.max(0, Math.round(b.main * 100)),
+    bonusCents: Math.max(0, Math.round(bonusMoneyOf(b) * 100)),
+  };
+}
+
 export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
   if (eligible === "main") return b.main;
-  const gross = b.main + b.front + b.back + b.eighteen;
-  return eligible === "all" ? Math.ceil(gross) : Math.round(gross * 100) / 100;
+  if (eligible === "all") return Math.ceil(b.main + b.front + b.back + b.eighteen);
+  const { matchCents, bonusCents } = eligibleCategoryCents(b);
+  return (matchCents + bonusCents) / 100;
 }
 
 export type PlayerMoney = {
@@ -1038,17 +1052,11 @@ export function roundPoints(opts: {
   });
 }
 
-/** The front nine, back nine and both 18-hole money pots, netted together. */
-export function bonusMoneyOf(b: MoneyBreakdown): number {
-  return Math.round((b.front + b.back + b.eighteen) * 100) / 100;
-}
-
-/** Each signed money category earns its own points before rake and cash settlement rounding. */
+/** Each category earns points on positive dollars before rake and cash settlement rounding. */
 export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
   const multiplier = POINT_MULTIPLIER[roundType];
   return money.map(({ golferId, teamId, breakdown }) => {
-    const matchCents = Math.round(breakdown.main * 100);
-    const bonusCents = Math.round(bonusMoneyOf(breakdown) * 100);
+    const { matchCents, bonusCents } = eligibleCategoryCents(breakdown);
     return {
       golferId, teamId,
       fromMoney: matchCents * multiplier / 100,
