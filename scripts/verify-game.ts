@@ -1538,6 +1538,51 @@ console.log("\n=== shared finishes pay the same way in every cash pot ===");
   }
 }
 
+console.log("\n=== the order teams are listed in never changes what they win ===");
+{
+  // Teams can be dragged into a new order after the fact, which only rewrites
+  // their slots. That is safe only if nothing in the scoring reads the order,
+  // so this scores the 11/18 card, ties and all, in every one of the 120
+  // orders five teams can be listed in, and requires one answer.
+  const h = (row: number[]) => Object.fromEntries(row.map((v, i) => [i + 1, v]));
+  const card: HoleScores = {
+    t1: h([-1,-1,-1, 0,-1,-1,-1,-1,-1,  -1,-1, 0,-1,-2,-1, 0,-1,-1]),
+    t2: h([-1,-1, 0,-1,-1, 0,-1, 0,-1,   0,-1, 0, 0, 0, 0, 0,-1, 0]),
+    t3: h([-1,-1,-1, 0,-1, 0,-1,-1,-1,  -1,-1,-1, 0,-2,-1,-1,-1,-1]),
+    t4: h([-1, 0,-1,-2,-1,-1,-1, 0, 0,  -1,-2,-1, 0,-1,-1, 0,-1,-1]),
+    t5: h([-1,-1,-1,-1, 0, 0,-2,-1, 0,  -1,-1, 0,-1,-2, 0,-1,-1,-1]),
+  };
+  const ids = ["t1", "t2", "t3", "t4", "t5"];
+  const orders = (a: string[]): string[][] =>
+    a.length <= 1 ? [a]
+      : a.flatMap((x, i) => orders([...a.slice(0, i), ...a.slice(i + 1)]).map((p) => [x, ...p]));
+
+  const outcome = (order: string[]) => {
+    const main = scoreMainGame({
+      teamIds: order, scores: card, payouts: { 1: 2, 2: 1, 3: -1, 4: -1, 5: -1 },
+      decisions: {}, tieDefault: "hole", segments: segmentsFor(3),
+    });
+    const side = scoreFb18({
+      teamIds: order, scores: card,
+      payouts: {
+        front: defaultFb18Payouts(5, "front"), back: defaultFb18Payouts(5, "back"),
+        total: defaultFb18Payouts(5, "total"), second: defaultFb18Payouts(5, "second"),
+      },
+    });
+    const bonus = scoreBonusPoints(order, card, 1);
+    return JSON.stringify([
+      ids.map((t) => main.unitsByTeam[t] ?? 0),
+      ids.map((t) => side.unitsByTeam[t] ?? 0),
+      ids.map((t) => bonus.pointsByTeam[t] ?? 0),
+    ]);
+  };
+
+  const every = orders(ids);
+  check("there are 120 ways to list five teams", every.length, 120);
+  check("and every one of them pays exactly the same",
+    new Set(every.map(outcome)).size, 1);
+}
+
 console.log("\n=== who is shown money ===");
 {
   const player = modeFrom(false, undefined);

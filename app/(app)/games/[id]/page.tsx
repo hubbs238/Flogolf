@@ -8,6 +8,7 @@ import { MatchSetup } from "@/components/match-setup";
 import { RosterFill } from "@/components/roster-fill";
 import { RosterEditor } from "@/components/roster-editor";
 import { RoundExport } from "@/components/round-export";
+import { TeamOrder, type TeamOrderRow } from "@/components/team-order";
 import { LiveScorecard } from "@/components/live-scorecard";
 import { MatchResults } from "@/components/match-results";
 import { MatchAdminBar } from "@/components/match-admin-bar";
@@ -54,6 +55,31 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
     const g = t.captain_golfer_id ? golferById.get(t.captain_golfer_id) : null;
     if (g) captainNames[t.id] = displayName(g);
   }
+
+  // What the team order control shows on each row: who is on it and what its
+  // card says so far, so an admin can see a team's scores travel with it.
+  // Every golfer rather than the pool, because a one-off sub is often out of
+  // the pool by the time a round is being corrected.
+  const nameOf = new Map(allGolfers.map((g) => [g.id, displayName(g)]));
+  const orderRows: TeamOrderRow[] = teams.map((t) => {
+    const holes = Object.values(scores[t.id] ?? {}).filter(
+      (v): v is number => typeof v === "number",
+    );
+    return {
+      id: t.id,
+      slot: t.slot,
+      name: t.name,
+      players: players
+        .filter((p) => p.team_id === t.id)
+        .sort((a, b) => a.slot - b.slot)
+        .map((p) => nameOf.get(p.golfer_id) ?? "Unknown"),
+      played: holes.length,
+      total: holes.length ? holes.reduce((n, v) => n + v, 0) : null,
+    };
+  });
+  // Remounts the control whenever the saved order changes underneath it, so
+  // it never holds on to a list that no longer matches the round.
+  const orderKey = teams.map((t) => `${t.id}:${t.slot}`).join(",");
 
   let drafts: Draft[] = [];
   if (match.status === "setup" && isAdmin) {
@@ -119,6 +145,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
             match={match} teams={teams} players={players} golfers={golfers}
             isAdmin={isAdmin} myUserId={session.userId}
           />
+          {isAdmin && <TeamOrder key={orderKey} matchId={match.id} teams={orderRows} />}
         </div>
       )}
 
@@ -135,6 +162,7 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
               myUserId={session.userId}
             />
           )}
+          {isAdmin && <TeamOrder key={orderKey} matchId={match.id} teams={orderRows} />}
           {view.showMoney && (
             <MatchStakesEditor
               match={match} teams={teams}

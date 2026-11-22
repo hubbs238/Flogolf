@@ -384,6 +384,91 @@ export async function renameMatchTeam(
   return { ok: true };
 }
 
+/**
+ * Puts a round's teams in a new order, each keeping everything it owns.
+ *
+ * Scores, rosters, captains, side game entry and tie rulings all hang off the
+ * team's id, never its slot, so moving a team moves all of that with it.
+ * Fixing "Bay 1's card ended up as Team 2" is therefore just this: Team 2
+ * becomes Team 1 and its scores come along. Money never depends on the order
+ * either; scripts/verify-game.ts scores a card in every possible order and
+ * checks they all pay the same.
+ *
+ * A team still called by its default name, "Team 2", is renamed to follow
+ * its new place, because that name is a position and would otherwise read
+ * wrong. A name somebody chose is left alone.
+ *
+ * match_teams has a plain unique constraint on (match_id, slot), checked row
+ * by row, so two teams cannot simply trade places in one go. Every moving
+ * team is parked on a negative slot first, then given its real one. If the
+ * second step fails part way, the first is undone, so a refusal leaves the
+ * order exactly as it was.
+ */
+export async function reorderMatchTeams(
+  matchId: string,
+  orderedTeamIds: string[],
+): Promise<ActionResult> {
+  await requireAdmin();
+  const supabase = await createClient();
+
+  const { data: rows, error: readError } = await supabase
+    .from("match_teams").select("id, slot, name").eq("match_id", matchId);
+  if (readError) return { ok: false, error: readError.message };
+  const teams = (rows ?? []) as { id: string; slot: number; name: string }[];
+
+  // The new order has to be exactly this round's teams, each once. Anything
+  // else is a stale screen or a forged request, and both are refused.
+  const ids = new Set(teams.map((t) => t.id));
+  if (
+    orderedTeamIds.length !== teams.length ||
+    new Set(orderedTeamIds).size !== orderedTeamIds.length ||
+    !orderedTeamIds.every((id) => ids.has(id))
+  ) {
+    return { ok: false, error: "The team list changed. Reload the page and try again." };
+  }
+
+  const byId = new Map(teams.map((t) => [t.id, t]));
+  const moves = orderedTeamIds
+    .map((id, i) => ({ team: byId.get(id)!, slot: i + 1 }))
+    .filter((m) => m.team.slot !== m.slot);
+  if (moves.length === 0) return { ok: true };
+
+  const followsSlot = (name: string, slot: number) => name.trim() === `Team ${slot}`;
+
+  // Step one: park every moving team where nothing can collide with it.
+  for (const [i, m] of moves.entries()) {
+    const { error } = await supabase
+      .from("match_teams").update({ slot: -(i + 1) }).eq("id", m.team.id);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  // Step two: the real slots, and default names that follow them.
+  for (const m of moves) {
+    const update: { slot: number; name?: string } = { slot: m.slot };
+    if (followsSlot(m.team.name, m.team.slot)) update.name = `Team ${m.slot}`;
+
+    const { error } = await supabase.from("match_teams").update(update).eq("id", m.team.id);
+    if (error) {
+      // Put every team back where it started. Park them all again first:
+      // some already hold their new slot, which may be another team's old
+      // one, so restoring straight away could collide on the same constraint.
+      for (const [i, back] of moves.entries()) {
+        await supabase.from("match_teams").update({ slot: -(i + 1) }).eq("id", back.team.id);
+      }
+      for (const back of moves) {
+        await supabase
+          .from("match_teams")
+          .update({ slot: back.team.slot, name: back.team.name })
+          .eq("id", back.team.id);
+      }
+      return { ok: false, error: `Could not reorder the teams: ${error.message}` };
+    }
+  }
+
+  revalidateMatch(matchId);
+  return { ok: true };
+}
+
 export async function setFb18(
   matchId: string, teamId: string, on: boolean,
 ): Promise<ActionResult> {
