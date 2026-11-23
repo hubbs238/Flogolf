@@ -1,5 +1,6 @@
 "use client";
 
+import { FivePlayerPointsNote, TotalPoints } from "./total-points";
 import { GolferProfileLink } from "@/components/golfer-profile-link";
 import { wholeDollars } from "@/lib/game";
 import { formatDollars } from "@/lib/currency";
@@ -350,6 +351,7 @@ export function MatchResults({
           <p className="mb-3 text-sm text-muted">
             Match Points and FB18 Bonus Points are scored separately. Each category earns
             {major ? " two points" : " one point"} per dollar won before rake, or zero for a loss.
+            {points.some((p) => p.isFivePlayerTeam) && <> <FivePlayerPointsNote /></>}
           </p>
           <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
             <table className="w-full min-w-max text-sm">
@@ -374,7 +376,7 @@ export function MatchResults({
                         p.total > 0 ? "text-fairway-600 dark:text-fairway-300"
                           : p.total < 0 ? "text-flag-500" : "text-muted"}`}>
                         <TrophyIcon className="h-4 w-4 shrink-0" />
-                        {p.total.toLocaleString("en-US")}
+                        <TotalPoints value={p.total} fivePlayer={p.isFivePlayerTeam} />
                       </span>
                     </td>
                   </tr>

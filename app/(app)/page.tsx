@@ -26,6 +26,7 @@ export default async function RankingsPage() {
       {
         rounds: row.rounds,
         points: row.points,
+        hasFivePlayerRound: row.hasFivePlayerRound,
         matchPoints: row.pointsFromMoney,
         bonusPoints: row.pointsBonus,
         ...(view.showMoney && {

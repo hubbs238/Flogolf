@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { computeMatch, getMatchBundle } from "@/lib/match-data";
 import {
   FIVE_TEAM_STAKES,
+  FIVE_PLAYER_POINTS_MULTIPLIER,
   defaultFb18Payouts,
   defaultPayouts,
   FB18_SEGMENTS,
@@ -1929,6 +1930,7 @@ export async function exportRoundJson(
       roundType: computed.roundType,
       setHoles: computed.setHoles,
       pointMultiplier: computed.multiplier,
+      fivePlayerPointsMultiplier: FIVE_PLAYER_POINTS_MULTIPLIER,
       cupEligibleMoney: computed.cupEligible,
       isFirstMajor: bundle.firstMajorId === bundle.match.id,
       teamCount: bundle.match.team_count,
@@ -2002,6 +2004,7 @@ export async function exportRoundJson(
         matchPoints: p.fromMoney,
         bonusPoints: p.bonus,
         totalPoints: p.total,
+        isFivePlayerTeam: p.isFivePlayerTeam,
         fromMoney: p.fromMoney,
         bonus: p.bonus,
         total: p.total,

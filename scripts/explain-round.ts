@@ -18,6 +18,7 @@ import {
   segmentsFor,
   nineTotals,
   formatRelative,
+  FIVE_PLAYER_POINTS_MULTIPLIER,
   POINT_MULTIPLIER,
   type HoleScores,
   type MoneyBreakdown,
@@ -97,7 +98,7 @@ const points = cupPointsForPlayers(money, ROUND.roundType);
 assert.deepEqual(teamIds.map(team => {
   const p = points.find(player => player.teamId === team)!;
   return [p.fromMoney, p.bonus, p.total];
-}), [[75,65,140],[0,0,0],[50,32,82],[0,0,0],[10,0,10]]);
+}), [[75,65,140],[0,0,0],[50,32,102.5],[0,0,0],[10,0,12.5]]);
 
 // ------------------------------------------------------------------- printing
 const formatMoney = (n: number) => n.toLocaleString("en-US", {
@@ -185,6 +186,7 @@ console.log(`  every player's net added up: ${formatMoney(netAll)}`);
 assert.equal(netAll, -rakeAll);
 
 console.log("\n--- FLO Cup points, per player --------------------------------");
+console.log(`* Five-player teams earn ${FIVE_PLAYER_POINTS_MULTIPLIER}× the sum of match and bonus points.`);
 console.log(
   "\n  " + pad("team", 9) + rpad("match points", 13) +
   rpad("bonus", 9) + rpad("total", 9),
@@ -193,7 +195,7 @@ for (const t of teamIds) {
   const p = points.find((x) => x.teamId === t)!;
   console.log(
     "  " + pad(t, 9) + rpad(String(p.fromMoney), 13) +
-    rpad(String(p.bonus), 9) + rpad(String(p.total), 9),
+    rpad(String(p.bonus), 9) + rpad(`${p.total}${p.isFivePlayerTeam ? "*" : ""}`, 9),
   );
 }
 
@@ -203,7 +205,7 @@ for (const p of byTotal) {
   const m = money.find((x) => x.golferId === p.golferId)!;
   console.log(
     "  " + pad(p.golferId, 17) + pad(`(${p.teamId})`, 10) +
-    rpad(formatMoney(m.dollars), 11) + rpad(`${String(p.total)} pts`, 12),
+    rpad(formatMoney(m.dollars), 11) + rpad(`${p.total}${p.isFivePlayerTeam ? "*" : ""} pts`, 12),
   );
 }
 console.log();

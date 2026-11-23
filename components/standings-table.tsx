@@ -1,3 +1,4 @@
+import { TotalPoints } from "./total-points";
 import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
@@ -17,15 +18,13 @@ function tone(n: number) {
       : "text-muted";
 }
 
-function Points({ n, strong }: { n: number; strong: boolean }) {
+function Points({ n, fivePlayer }: { n: number; fivePlayer: boolean }) {
   return (
     <span
-      className={`inline-flex items-center justify-end gap-1.5 tabular-nums ${
-        strong ? "font-semibold" : ""
-      } ${tone(n)}`}
+      className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(n)}`}
     >
       <TrophyIcon className="h-4 w-4 shrink-0" />
-      {n.toLocaleString("en-US")}
+      <TotalPoints value={n} fivePlayer={fivePlayer} />
     </span>
   );
 }
@@ -143,7 +142,7 @@ export function StandingsTable({
                 </td>
 
                 <td className="p-3 text-right">
-                  <Points n={row.points} strong />
+                  <Points n={row.points} fivePlayer={row.hasFivePlayerRound} />
                 </td>
               </tr>
             );

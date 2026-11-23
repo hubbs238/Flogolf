@@ -2,6 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { getAllGolfers, getCupPot, getSeasonStandings } from "@/lib/match-data";
 import { getLiveMajor } from "@/lib/majors";
+import { FivePlayerPointsNote } from "@/components/total-points";
 import { CupPot } from "@/components/cup-pot";
 import { CupPodium } from "@/components/cup-podium";
 import { StandingsTable } from "@/components/standings-table";
@@ -29,6 +30,7 @@ export default async function FloCupPage() {
       <p className="mb-4 text-sm text-muted">
         Match Points and FB18 Bonus Points are scored separately for each player each round.
         Each category earns one point per dollar won before rake, or zero for a loss. Majors double both.
+        {rows.some((row) => row.hasFivePlayerRound) && <> <FivePlayerPointsNote /></>}
       </p>
       <StandingsTable
         rows={rows}

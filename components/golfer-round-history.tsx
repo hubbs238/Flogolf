@@ -1,3 +1,4 @@
+import { FivePlayerPointsNote, TotalPoints } from "./total-points";
 import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { TrophyIcon } from "./trophy-icon";
@@ -29,6 +30,7 @@ export function GolferRoundHistory({
     );
   }
 
+  const hasFivePlayerRound = rounds.some((r) => r.isFivePlayerTeam);
   const totals = rounds.reduce(
     (acc, r) => ({
       matchMoney: acc.matchMoney + r.matchMoney,
@@ -46,6 +48,7 @@ export function GolferRoundHistory({
       <p className="mb-3 text-sm text-muted">
         Match Points and FB18 Bonus Points are scored separately for each player each round.
         Each category earns one point per dollar won before rake, or zero for a loss. Majors double both.
+        {hasFivePlayerRound && <> <FivePlayerPointsNote /></>}
       </p>
 
       <div className="overflow-x-auto rounded-2xl border border-line bg-raised">
@@ -105,7 +108,7 @@ export function GolferRoundHistory({
                 <td className="p-3 text-right">
                   <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(r.points)}`}>
                     <TrophyIcon className="h-4 w-4 shrink-0" />
-                    {r.points.toLocaleString("en-US")}
+                    <TotalPoints value={r.points} fivePlayer={r.isFivePlayerTeam} />
                   </span>
                 </td>
               </tr>
@@ -137,7 +140,7 @@ export function GolferRoundHistory({
               <td className="p-3 text-right">
                 <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(totals.points)}`}>
                   <TrophyIcon className="h-4 w-4 shrink-0" />
-                  {totals.points.toLocaleString("en-US")}
+                  <TotalPoints value={totals.points} fivePlayer={hasFivePlayerRound} />
                 </span>
               </td>
             </tr>
