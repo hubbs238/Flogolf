@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
-import { TotalPoints } from "./total-points";
 import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { photoUrl } from "@/lib/data";
@@ -23,7 +22,6 @@ export function CupPodium({
 }) {
   const byId = new Map(golfers.map((g) => [g.id, g]));
   const places = rankPlaces(rows);
-  const fivePlayerGolfers = new Set(rows.filter((row) => row.hasFivePlayerRound).map((row) => row.golferId));
 
   if (places.size === 0) {
     return (
@@ -65,9 +63,6 @@ export function CupPodium({
           }
 
           const tied = place.golferIds.length > 1;
-          const allFivePlayer = place.golferIds.every((id) => fivePlayerGolfers.has(id));
-          // When tied golfers earned the same score different ways, mark their individual totals.
-          const mixedTeamSizes = !allFivePlayer && place.golferIds.some((id) => fivePlayerGolfers.has(id));
           const golfer = tied ? null : byId.get(place.golferIds[0]);
           const name = tied
             ? `${place.golferIds.length} way tie`
@@ -122,7 +117,6 @@ export function CupPodium({
                           ) : (
                             "Unknown"
                           )}
-                          {mixedTeamSizes && <> (<TotalPoints value={place.points} fivePlayer={fivePlayerGolfers.has(id)} />)</>}
                         </span>
                       );
                     })}
@@ -141,12 +135,10 @@ export function CupPodium({
                 </p>
               )}
 
-              {!mixedTeamSizes && (
-                <span className={`mt-1.5 inline-flex items-center gap-1.5 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300 ${first ? "text-2xl" : "text-lg"}`}>
-                  <TrophyIcon className={first ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
-                  <TotalPoints value={place.points} fivePlayer={allFivePlayer} />
-                </span>
-              )}
+              <span className={`mt-1.5 inline-flex items-center gap-1.5 font-semibold tabular-nums text-fairway-600 dark:text-fairway-300 ${first ? "text-2xl" : "text-lg"}`}>
+                <TrophyIcon className={first ? "h-6 w-6 shrink-0" : "h-5 w-5 shrink-0"} />
+                {place.points.toLocaleString("en-US")}
+              </span>
 
               <div
                 className={`podium-block mt-4 w-full rounded-t-xl bg-gradient-to-b ${block.tint} ${block.height} flex items-start justify-center pt-3`}

@@ -248,7 +248,6 @@ export type SeasonRow = {
   pointsFromMoney: number;
   /** Earned points attributed to bonus money. */
   pointsBonus: number;
-  hasFivePlayerRound: boolean;
   points: number;
 };
 
@@ -350,7 +349,7 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
       const cur = totals.get(row.golferId) ?? {
         golferId: row.golferId, rounds: 0,
         matchMoney: 0, bonusMoney: 0, winnings: 0, rake: 0, dollars: 0,
-        pointsFromMoney: 0, pointsBonus: 0, points: 0, hasFivePlayerRound: false,
+        pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };
       cur.rounds += 1;
       cur.matchMoney += row.matchMoney;
@@ -361,7 +360,6 @@ export async function getSeasonStandings(): Promise<SeasonRow[]> {
       cur.pointsFromMoney += row.pointsFromMoney;
       cur.pointsBonus += row.pointsBonus;
       cur.points += row.points;
-      cur.hasFivePlayerRound ||= row.isFivePlayerTeam;
       totals.set(row.golferId, cur);
     }
   }

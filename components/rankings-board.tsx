@@ -1,6 +1,5 @@
 "use client";
 
-import { FivePlayerPointsNote, TotalPoints } from "./total-points";
 import { formatDollars } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import Link from "next/link";
@@ -15,7 +14,7 @@ type BoardGolfer = ScoredGolfer & { photo: string | null };
 /** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; hasFivePlayerRound: boolean; matchPoints: number; bonusPoints: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
+  { rounds: number; points: number; matchPoints: number; bonusPoints: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
 >;
 
 type SeasonEntry = SeasonByGolfer[string];
@@ -190,10 +189,6 @@ export function RankingsBoard({
         </label>
       </div>
 
-      {shown.some((golfer) => season[golfer.id]?.hasFivePlayerRound) && (
-        <p className="mb-4 text-sm text-muted"><FivePlayerPointsNote /></p>
-      )}
-
       {sorted.length === 0 ? (
         <EmptyState />
       ) : shown.length === 0 ? (
@@ -358,7 +353,7 @@ function GolferCard({
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl bg-surface px-3 py-2.5">
           <div className={`${cellNumber} ${played ? tone(points) : "text-muted"}`}>
-            {played && season ? <TotalPoints value={points} fivePlayer={season.hasFivePlayerRound} /> : "—"}
+            {played ? points.toLocaleString("en-US") : "—"}
           </div>
           {/* The trophy rides the label, not the number: beside a four figure
               total it was the difference between fitting the cell and not. */}

@@ -140,7 +140,7 @@ export function GolferRoundHistory({
               <td className="p-3 text-right">
                 <span className={`inline-flex items-center justify-end gap-1.5 font-semibold tabular-nums ${tone(totals.points)}`}>
                   <TrophyIcon className="h-4 w-4 shrink-0" />
-                  <TotalPoints value={totals.points} fivePlayer={hasFivePlayerRound} />
+                  {totals.points.toLocaleString("en-US")}
                 </span>
               </td>
             </tr>
