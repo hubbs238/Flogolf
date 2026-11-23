@@ -34,11 +34,11 @@ export function DiagnosticsPanel({
 
       <ul className="space-y-2">
         <Row
-          label="ANTHROPIC_API_KEY"
+          label={report.anthropicKeyName}
           ok={report.anthropicKeyPresent}
           detail={
             report.anthropicKeyPresent
-              ? `${report.anthropicKeyLength} chars, starts ${report.anthropicKeyPrefix}`
+              ? `${report.anthropicKeyLength} characters`
               : "not visible to this deployment"
           }
         />
@@ -59,7 +59,7 @@ export function DiagnosticsPanel({
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted">
-            If the name you expect is not exactly ANTHROPIC_API_KEY, that is the problem.
+            This deployment reads {report.anthropicKeyName}.
           </p>
         </div>
       )}

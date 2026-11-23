@@ -726,6 +726,8 @@ export function cupDollarsOf(b: MoneyBreakdown, eligible: CupEligible): number {
 export type PlayerMoney = {
   golferId: string;
   teamId: string;
+  /** Actual number of golfers sharing this bay's settlement for the round. */
+  rosterSize: number;
   /** What this player wins this round, before rake. Not a share of a pot. */
   winnings: number;
   /**
@@ -782,6 +784,7 @@ export function awardMoney(opts: {
       out.push({
         golferId,
         teamId,
+        rosterSize: golferIds.length,
         winnings,
         rake,
         dollars,
@@ -1013,8 +1016,16 @@ export type PlayerRoundPoints = {
   fromMoney: number;
   /** Front nine, back nine and eighteen hole bonuses, otherwise 0. */
   bonus: number;
+  isFivePlayerTeam: boolean;
   total: number;
 };
+
+export const FIVE_PLAYER_POINTS_MULTIPLIER = 1.25;
+
+function adjustedRoundTotal(basePoints: number, rosterSize: number) {
+  const isFivePlayerTeam = rosterSize === 5;
+  return { isFivePlayerTeam, total: isFivePlayerTeam ? basePoints * FIVE_PLAYER_POINTS_MULTIPLIER : basePoints };
+}
 
 /** Per player points for one round, broken into where they came from. */
 export function roundPoints(opts: {
@@ -1050,7 +1061,7 @@ export function roundPoints(opts: {
       bonus,
       // Both parts are already zero or above, so the guard is belt and
       // braces against a future negative bonus sneaking in.
-      total: Math.max(0, round2(fromMoney + bonus)),
+      ...adjustedRoundTotal(Math.max(0, round2(fromMoney + bonus)), m.rosterSize),
     };
   });
 }
@@ -1058,9 +1069,9 @@ export function roundPoints(opts: {
 /** Each category earns points on its positive whole-dollar amount before rake. */
 export function cupPointsForPlayers(money: PlayerMoney[], roundType: RoundType): PlayerRoundPoints[] {
   const multiplier = POINT_MULTIPLIER[roundType];
-  return money.map(({ golferId, teamId, breakdown }) => {
+  return money.map(({ golferId, teamId, rosterSize, breakdown }) => {
     const fromMoney = Math.max(0, breakdown.main) * multiplier;
     const bonus = Math.max(0, bonusMoneyOf(breakdown)) * multiplier;
-    return { golferId, teamId, fromMoney, bonus, total: fromMoney + bonus };
+    return { golferId, teamId, fromMoney, bonus, ...adjustedRoundTotal(fromMoney + bonus, rosterSize) };
   });
 }

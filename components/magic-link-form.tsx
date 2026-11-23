@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const staging = process.env.FLO_APP_ENV === "staging";
+
 export function MagicLinkForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -18,7 +20,7 @@ export function MagicLinkForm() {
     const { error } = await supabase.auth.signInWithOtp({
       email: email.trim().toLowerCase(),
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/confirm`,
+        emailRedirectTo: new URL(staging ? "/auth/callback" : "/auth/confirm", window.location.origin).href,
         shouldCreateUser: true,
       },
     });
@@ -34,8 +36,10 @@ export function MagicLinkForm() {
         <p className="font-medium">Check your email</p>
         <p className="mt-1 text-sm text-muted">
           We sent a sign in link to{" "}
-          <span className="font-medium text-ink">{email}</span>. It works on any
-          device, so opening it on your phone is fine.
+          <span className="font-medium text-ink">{email}</span>.{" "}
+          {staging
+            ? "Open the link in this same browser to finish signing in to staging."
+            : "It works on any device, so opening it on your phone is fine."}
         </p>
         <button
           onClick={() => {

@@ -39,7 +39,7 @@ function pm(golferId: string, teamId: string, main: number, extra = 0, rake = 0)
   const breakdown = bd(main, extra);
   const winnings = main + extra;
   return {
-    golferId, teamId,
+    golferId, teamId, rosterSize: 1,
     winnings,
     rake,
     dollars: winnings - rake,
@@ -856,6 +856,22 @@ console.log("\n=== the double is applied once, not twice ===");
   });
   check("round each five-player share once before rake, including signed half dollars",
     [money[0], money[5]].map(p => [p.winnings, p.dollars]), [[21, -14], [-20, -55]]);
+  for (const roundType of ["season", "major"] as const) {
+    const points = cupPointsForPlayers(money, roundType);
+    const expected = roundType === "major" ? 52.5 : 26.25;
+    check(`${roundType}: all five winners receive the exact adjusted total`,
+      points.filter(p => p.teamId === "win").map(p => p.total), Array(5).fill(expected));
+    check(`${roundType}: losing five-player teams remain marked at zero`,
+      points.filter(p => p.teamId === "loss").map(p => [p.total, p.isFivePlayerTeam]),
+      Array(5).fill([0, true]));
+  }
+  for (const size of [2, 3, 4, 6]) {
+    const roster = Array.from({ length: size }, (_, i) => `p${i}`);
+    const other = awardMoney({ breakdownByTeam: { bay: bd(60) }, rosters: { bay: roster } });
+    check(`${size}-player teams receive their base points without a marker`,
+      cupPointsForPlayers(other, "season").map(p => [p.total, p.isFivePlayerTeam]),
+      Array(size).fill([240 / size, false]));
+  }
 }
 
 {
@@ -924,7 +940,7 @@ console.log("\n=== whole-dollar Cup eligibility ===");
     cupDollarsOf(bd(91.7, 40, 30, 39.98), "main"), 92);
   check("and a losing total is still floored at zero, not rounded into points",
     roundPoints({
-      money: [{ golferId: "p1", teamId: "t1", winnings: -150.3, rake: 0,
+      money: [{ golferId: "p1", teamId: "t1", rosterSize: 1, winnings: -150.3, rake: 0,
                 dollars: -150.3, cupDollars: cupDollarsOf(bd(-100, -20, -20, -10.3), "all"),
                 breakdown: bd(-100, -20, -20, -10.3) }],
       bonusByTeam: {}, rosters: { t1: ["p1"] }, multiplier: POINT_MULTIPLIER.major,
@@ -1809,8 +1825,8 @@ console.log("\n=== who is shown money ===");
   const each = teamIds.map(id => money.find(player => player.teamId === id)!);
   check("November 11 net per player", each.map(p => p.dollars), [150,-145,-28,-103,-95]);
   check("November 11 points from settled whole-dollar categories",
-    cupPointsForPlayers(each, "season").map(p => [p.fromMoney, p.bonus, p.total]),
-    [[133,52,185],[0,0,0],[17,0,17],[0,0,0],[0,0,0]]);
+    cupPointsForPlayers(each, "season").map(p => [p.fromMoney, p.bonus, p.total, p.isFivePlayerTeam]),
+    [[133,52,231.25,true],[0,0,0,false],[17,0,17,false],[0,0,0,false],[0,0,0,false]]);
   check("November 11 team settlements", teamIds.map(id =>
     money.filter(p => p.teamId === id).reduce((sum, p) => sum + p.dollars, 0)), [750,-580,-112,-412,-380]);
   const stale = scoreFb18({ teamIds, scores, payouts, frontMoneyTiers: [["3","5"]] });

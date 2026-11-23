@@ -176,19 +176,7 @@ page independently calls `requireUser()` or `requireAdmin()`.
 
 ## Deploying to Vercel
 
-```bash
-npx vercel
-```
-
-Then:
-
-1. Add both environment variables in the Vercel project settings.
-2. In Supabase, update **Authentication → URL Configuration**: set Site URL to
-   your Vercel URL and add `https://your-app.vercel.app/**` to Redirect URLs.
-3. Redeploy.
-
-Google OAuth needs no change, since it points at Supabase rather than at your
-app.
+Push changes to `staging` to preview them with the staging database. Andrew reviews the tested revision before merging its release pull request into `main`. See the [staging and release guide](docs/staging.md) for the environment settings, release checks, and rollback procedure.
 
 ---
 

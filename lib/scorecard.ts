@@ -1,3 +1,4 @@
+import { anthropicKey, anthropicKeyName } from "@/lib/anthropic-env";
 import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
@@ -69,15 +70,16 @@ export async function extractScorecard(
   base64: string,
   mediaType: "image/jpeg" | "image/png" | "image/webp",
 ): Promise<ExtractionResult> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const apiKey = anthropicKey();
+  if (!apiKey) {
     return {
       ok: false,
       error:
-        "Photo reading is not configured. An admin needs to set ANTHROPIC_API_KEY.",
+        `An admin can enable photo reading by setting ${anthropicKeyName}.`,
     };
   }
 
-  const client = new Anthropic();
+  const client = new Anthropic({ apiKey, authToken: null });
 
   let response;
   try {

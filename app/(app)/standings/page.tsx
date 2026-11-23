@@ -29,6 +29,7 @@ export default async function FloCupPage() {
       <p className="mb-4 text-sm text-muted">
         Match Points and FB18 Bonus Points are scored separately for each player each round.
         Each category earns one point per dollar won before rake, or zero for a loss. Majors double both.
+        Season totals include any five-player adjustments earned in individual rounds.
       </p>
       <StandingsTable
         rows={rows}

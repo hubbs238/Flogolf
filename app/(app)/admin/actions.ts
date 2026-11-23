@@ -1,5 +1,6 @@
 "use server";
 
+import { anthropicKey, anthropicKeyName } from "@/lib/anthropic-env";
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -672,9 +673,9 @@ export async function setMajorLive(id: string, live: boolean): Promise<ActionRes
 // ---------------------------------------------------------------- diagnostics
 
 export type EnvReport = {
+  anthropicKeyName: string;
   anthropicKeyPresent: boolean;
   anthropicKeyLength: number;
-  anthropicKeyPrefix: string;
   /** Names only, never values. Catches typos and stray whitespace. */
   anthropicLikeNames: string[];
   supabaseUrlPresent: boolean;
@@ -692,16 +693,16 @@ export type EnvReport = {
 export async function readEnvReport(): Promise<EnvReport> {
   await requireAdmin();
 
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  const key = anthropicKey() ?? "";
 
   return {
+    anthropicKeyName,
     anthropicKeyPresent: key.length > 0,
     anthropicKeyLength: key.length,
-    anthropicKeyPrefix: key.slice(0, 7),
     anthropicLikeNames: Object.keys(process.env)
       .filter((n) => /anthropic|claude/i.test(n))
       .sort(),
-    supabaseUrlPresent: (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").length > 0,
+    supabaseUrlPresent: (process.env.FLO_PUBLIC_SUPABASE_URL ?? "").length > 0,
     nodeEnv: process.env.NODE_ENV ?? "unknown",
     vercelEnv: process.env.VERCEL_ENV ?? "not on Vercel",
   };
@@ -713,13 +714,14 @@ export type KeyTest = { ok: true; model: string } | { ok: false; error: string }
 export async function testAnthropicKey(): Promise<KeyTest> {
   await requireAdmin();
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return { ok: false, error: "ANTHROPIC_API_KEY is not visible to the server." };
+  const apiKey = anthropicKey();
+  if (!apiKey) {
+    return { ok: false, error: `${anthropicKeyName} is not configured.` };
   }
 
   try {
     const { default: Anthropic } = await import("@anthropic-ai/sdk");
-    const client = new Anthropic();
+    const client = new Anthropic({ apiKey, authToken: null });
     const response = await client.messages.create({
       model: "claude-opus-5",
       max_tokens: 16,

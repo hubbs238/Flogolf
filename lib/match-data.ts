@@ -267,6 +267,7 @@ export type GolferRoundRow = {
   dollars: number;
   pointsFromMoney: number;
   pointsBonus: number;
+  isFivePlayerTeam: boolean;
   points: number;
 };
 
@@ -323,6 +324,7 @@ async function scoreCompletedRounds(): Promise<
           dollars: row.dollars,
           pointsFromMoney: p?.fromMoney ?? 0,
           pointsBonus: p?.bonus ?? 0,
+          isFivePlayerTeam: p?.isFivePlayerTeam ?? false,
           points: p?.total ?? 0,
         };
       }),
