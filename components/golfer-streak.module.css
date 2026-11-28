@@ -1,0 +1,212 @@
+.hot {
+  --streak-text: #812e10;
+  --streak-bg: #fff3e2;
+  --streak-line: #e9b47d;
+}
+
+.cold {
+  --streak-text: #155473;
+  --streak-bg: #eaf8ff;
+  --streak-line: #a0cadc;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hot {
+    --streak-text: #ffce94;
+    --streak-bg: #3e281c;
+    --streak-line: #895735;
+  }
+  .cold {
+    --streak-text: #abe6ff;
+    --streak-bg: #152e3b;
+    --streak-line: #396579;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  border: 1px solid var(--streak-line);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  background: var(--streak-bg);
+  color: var(--streak-text);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.symbol {
+  position: relative;
+  display: inline-block;
+  width: 0.85rem;
+  flex: none;
+  text-align: center;
+  line-height: 1;
+}
+
+.cold .symbol { font-size: 0.95rem; }
+.hot .symbol {
+  width: 0.54rem;
+  height: 0.7rem;
+  margin-inline: 0.12rem;
+  border-radius: 70% 15% 60% 45%;
+  background: linear-gradient(150deg, #de4a1c 35%, #fa983b 80%);
+  transform: rotate(16deg);
+}
+
+.streakCard {
+  isolation: isolate;
+}
+
+.streakCard .identity {
+  color: #fff;
+}
+
+/* The soft backing follows the name, including on narrow cards with a long name. */
+.streakCard .identityCopy {
+  position: relative;
+  isolation: isolate;
+  text-shadow: 0 1px 4px #000;
+}
+
+.streakCard .identityCopy::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -0.6rem -0.35rem -0.6rem -0.85rem;
+  border-radius: 18%;
+  background: linear-gradient(90deg, rgb(5 13 18 / 82%), rgb(5 13 18 / 55%) 75%, transparent);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.streakCard .identityMeta { color: #f0eee9; }
+.streakCard .identity .badge { text-shadow: none; }
+.streakCard .selfTag { background-color: #26352e; color: #fff; }
+
+.streakCard .boardRank {
+  border-radius: 0.45rem;
+  padding: 0.1rem 0.35rem;
+  background: rgb(10 18 21 / 84%);
+  color: #fff;
+}
+
+.streakCard .ratings {
+  --color-ink: #fff;
+  --color-muted: #edf2f2;
+  --color-line: #516369;
+  border-radius: 0.55rem;
+  background: rgb(10 20 25 / 88%);
+  padding-inline: 0.5rem;
+}
+
+.frame {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.frame.hot {
+  --terrain: url("/streaks/hot.webp");
+  --rim: #ffad5c;
+  background: #3a170c;
+}
+
+.frame.cold {
+  --terrain: url("/streaks/cold.webp");
+  --rim: #99e2ff;
+  background: #103047;
+}
+
+.artwork, .atmosphere, .frame::after {
+  position: absolute;
+  inset: 0;
+}
+
+.artwork {
+  background: var(--terrain) center top / cover no-repeat;
+}
+
+.hot .artwork::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 100% 18%, #ff7d285e, transparent 32%),
+              radial-gradient(ellipse at 12% 86%, #ff982e50, transparent 38%);
+  mix-blend-mode: screen;
+  opacity: 0.3;
+}
+
+.frame::after {
+  content: "";
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rim) 78%, transparent),
+              inset 0 0 14px color-mix(in srgb, var(--rim) 25%, transparent);
+}
+
+/* Embers drift up the face of the card in two independent layers. */
+.hot .atmosphere::before, .hot .atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 1.3px 3px at 7% 39%, #ffe1a0 35%, transparent),
+    radial-gradient(ellipse 1px 2px at 24% 32%, #ffb34c 42%, transparent),
+    radial-gradient(ellipse 1.6px 3.3px at 51% 26%, #ffb44f 32%, transparent),
+    radial-gradient(ellipse 1.1px 2.4px at 75% 19%, #ffe5a0 40%, transparent),
+    radial-gradient(ellipse 1.6px 2.6px at 93% 46%, #ffbc66 36%, transparent),
+    radial-gradient(ellipse 1px 2.5px at 17% 87%, #ffc965 40%, transparent),
+    radial-gradient(ellipse 1.6px 3px at 82% 75%, #ffce6a 36%, transparent);
+}
+
+.hot .atmosphere::after { transform: translate(3%, 9%); opacity: 0.65; }
+
+.cold .atmosphere {
+  inset: -30% -70%;
+  background: linear-gradient(114deg, transparent 36%, rgb(161 228 255 / 12%) 41%, rgb(214 247 255 / 35%) 43%, transparent 47%);
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .hot .artwork { animation: heat 3.2s ease-in-out infinite alternate; transform-origin: 70% 76%; }
+  .hot .artwork::after { animation: firelight 2s ease-in-out infinite alternate; }
+  .hot .atmosphere::before { animation: rise 3s linear infinite; }
+  .hot .atmosphere::after { animation: rise 4.3s -2s linear infinite; }
+  .cold .atmosphere { animation: shimmer 6s ease-in-out infinite; }
+}
+
+@keyframes heat {
+  from { transform: scale(1.01); filter: brightness(0.94); }
+  to { transform: scale(1.045) translateY(-0.6%); filter: brightness(1.1); }
+}
+
+@keyframes firelight {
+  0%, 54% { opacity: 0.16; }
+  29%, 80% { opacity: 0.70; }
+  100% { opacity: 0.42; }
+}
+
+@keyframes rise {
+  0% { transform: translate(-1%, 8%); opacity: 0; }
+  20% { opacity: 0.85; }
+  76% { opacity: 0.9; }
+  100% { transform: translate(2%, -12%); opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%, 18% { transform: translateX(-40%); opacity: 0; }
+  33%, 54% { opacity: 0.82; }
+  72%, 100% { transform: translateX(46%); opacity: 0; }
+}
+
+@media (forced-colors: active) {
+  .badge { border-color: currentColor; }
+  .frame, .symbol, .streakCard .identityCopy::before { display: none; }
+  .streakCard .identity { color: CanvasText; text-shadow: none; }
+}

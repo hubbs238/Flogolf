@@ -28,6 +28,7 @@ export default async function RankingsPage() {
         points: row.points,
         matchPoints: row.pointsFromMoney,
         bonusPoints: row.pointsBonus,
+        streak: row.streak,
         ...(view.showMoney && {
           matchMoney: row.matchMoney,
           bonusMoney: row.bonusMoney,

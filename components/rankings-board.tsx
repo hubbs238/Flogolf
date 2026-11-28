@@ -4,9 +4,12 @@ import { formatDollars } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
+import { StreakBadge, StreakTile } from "./golfer-streak";
+import streakStyles from "./golfer-streak.module.css";
 import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { MEDAL, PODIUM_WASH, medalByGolfer } from "@/lib/podium";
+import type { GolferStreak } from "@/lib/golfer-streaks";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
@@ -14,7 +17,16 @@ type BoardGolfer = ScoredGolfer & { photo: string | null };
 /** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; matchPoints: number; bonusPoints: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
+  {
+    rounds: number;
+    points: number;
+    matchPoints: number;
+    bonusPoints: number;
+    streak?: GolferStreak;
+    matchMoney?: number;
+    bonusMoney?: number;
+    winnings?: number;
+  }
 >;
 
 type SeasonEntry = SeasonByGolfer[string];
@@ -290,20 +302,21 @@ function GolferCard({
       // min-w-0: a grid item defaults to min-width:auto, which lets an
       // unbreakable name set the card's width and push it off a phone screen.
       // Without this the truncate below never engages.
-      className={`group relative flex min-w-0 flex-col rounded-2xl border border-line bg-raised p-5 shadow-sm transition motion-reduce:transition-none hover:shadow-md focus-within:shadow-md ${
+      className={`group relative flex min-w-0 flex-col rounded-2xl border border-line bg-raised p-5 shadow-sm transition motion-reduce:transition-none hover:shadow-md focus-within:shadow-md ${season?.streak ? streakStyles.streakCard : ""} ${
         medal ? `bg-gradient-to-b to-raised to-45% ${PODIUM_WASH[medal]}` : ""
       } ${isSelf ? "ring-1 ring-fairway-300 dark:ring-fairway-700" : ""}`}
     >
+      <StreakTile streak={season?.streak} />
       {showRank && (
         <span
-          className="absolute right-4 top-4 text-sm font-semibold tabular-nums text-muted"
+          className={`${streakStyles.boardRank} absolute right-4 top-4 text-sm font-semibold tabular-nums text-muted`}
           title={`${ordinal(rank)} by ${sortLabel}`}
         >
           #{rank}
         </span>
       )}
 
-      <div className="flex items-center gap-4">
+      <div className={`${streakStyles.identity} flex items-center gap-4`}>
         <div className="relative shrink-0">
           <div className={medal ? `rounded-full ring-4 ${MEDAL[medal].ring}` : ""}>
             <Link href={`/golfer/${golfer.id}`} aria-label={name} className="block rounded-full">
@@ -320,7 +333,7 @@ function GolferCard({
           )}
         </div>
 
-        <div className="min-w-0 flex-1 pr-10">
+        <div className={`${streakStyles.identityCopy} min-w-0 flex-1 pr-10`}>
           <div className="flex min-w-0 items-center gap-2">
             <Link
               href={`/golfer/${golfer.id}`}
@@ -329,12 +342,12 @@ function GolferCard({
               {name}
             </Link>
             {isSelf && (
-              <span className="shrink-0 rounded bg-line/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide">
+              <span className={`${streakStyles.selfTag} shrink-0 rounded bg-line/60 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide`}>
                 You
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted">
+          <p className={`${streakStyles.identityMeta} mt-0.5 text-xs text-muted`}>
             {golfer.ratingCount === 0
               ? "No ratings yet"
               : `${golfer.ratingCount} ${golfer.ratingCount === 1 ? "rating" : "ratings"}`}
@@ -342,6 +355,11 @@ function GolferCard({
               ? ` · ${season!.rounds} ${season!.rounds === 1 ? "round" : "rounds"}`
               : " · No rounds yet"}
           </p>
+          {season?.streak && (
+            <div className="mt-1.5">
+              <StreakBadge streak={season.streak} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -402,7 +420,7 @@ function GolferCard({
       </div>
 
       {pinned && (
-        <dl className="mt-3 flex items-center gap-3">
+        <dl className={`${streakStyles.ratings} mt-3 flex items-center gap-3`}>
           <dt className="w-24 shrink-0 truncate text-xs font-semibold text-ink">{pinned.label}</dt>
           <dd className="flex flex-1 items-center gap-2">
             <div className="h-2 flex-1 overflow-hidden rounded-full bg-line">
@@ -419,13 +437,13 @@ function GolferCard({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="touch-only mt-3 h-9 w-full items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted"
+        className={`${streakStyles.ratings} touch-only mt-3 h-9 w-full items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-muted`}
       >
         Ratings
         <ChevronIcon className={`h-3.5 w-3.5 transition-transform motion-reduce:transition-none ${open ? "rotate-180" : ""}`} />
       </button>
 
-      <dl className={`card-details mt-0 space-y-1.5 ${open ? "is-open" : ""}`}>
+      <dl className={`${streakStyles.ratings} card-details mt-0 space-y-1.5 ${open ? "is-open" : ""}`}>
         {folded.map((c) => {
           const score = golfer.scores[c.id];
           return (

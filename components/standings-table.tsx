@@ -1,6 +1,7 @@
 import { formatDollars } from "@/lib/currency";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
+import { StreakBadge } from "./golfer-streak";
 import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { photoUrl } from "@/lib/data";
@@ -114,6 +115,7 @@ export function StandingsTable({
                     ) : (
                       <span className="truncate font-medium">{name}</span>
                     )}
+                    <StreakBadge streak={row.streak} />
                   </div>
                 </td>
 

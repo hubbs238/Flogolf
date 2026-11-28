@@ -18,6 +18,7 @@ import { EditableTitle } from "@/components/editable-title";
 import { ScorecardUpload } from "@/components/scorecard-upload";
 import { RoundImport } from "@/components/round-import";
 import { ViewAsToggle } from "@/components/view-as-toggle";
+import { ScoringViewSelect } from "@/components/scoring-view-select";
 import { displayName } from "@/lib/scoring";
 import type { Draft } from "@/lib/types";
 
@@ -87,9 +88,14 @@ export default async function MatchPage({ params }: PageProps<"/games/[id]">) {
     <div>
       {isAdmin && <ViewAsToggle asPlayer={view.asPlayer} />}
 
-      <Link href="/games" className="mb-6 inline-block text-sm text-muted transition hover:text-ink">
-        ← All rounds
-      </Link>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <Link href="/games" className="text-sm text-muted transition hover:text-ink">
+          ← All rounds
+        </Link>
+        {process.env.FLO_APP_ENV === "staging" && view.showMoney && match.status === "complete" && (
+          <ScoringViewSelect roundId={match.id} />
+        )}
+      </div>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
