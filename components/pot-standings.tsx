@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatDollars } from "@/lib/currency";
 import type { PotStanding } from "@/lib/pot-standings";
 import { GolferProfileLink } from "./golfer-profile-link";
+import { StreakBadge } from "./golfer-streak";
 
 const numericCell = "whitespace-nowrap px-3 py-2.5 text-right tabular-nums";
 const columnHeading = "whitespace-nowrap px-3 py-2.5 text-right font-semibold";
@@ -32,6 +33,9 @@ export function PotStandings({ rows, roundCount, totalRoundCount = roundCount }:
           <p className="mt-1 text-sm text-muted">
             {rows.length} {rows.length === 1 ? "golfer" : "golfers"} across {coverage} completed {totalRoundCount === 1 ? "round" : "rounds"}.
             {" "}Ties in points are ordered by fewer rounds played, then by name.
+          </p>
+          <p className="mt-1 text-sm text-muted">
+            Streak badges show three or more consecutive weeks of pre-rake wins or losses under each model.
           </p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 py-1 text-sm font-medium">
@@ -70,8 +74,14 @@ export function PotStandings({ rows, roundCount, totalRoundCount = roundCount }:
               <td className={`${numericCell} ${changeColor(row.rankChange)}`}>
                 {row.rankChange === 0 ? "Same" : `${row.rankChange > 0 ? "Up" : "Down"} ${Math.abs(row.rankChange)}`}
               </td>
-              <td className={`${numericCell} font-semibold`}>{points.format(row.proposedPoints)}</td>
-              <td className={numericCell}>{points.format(row.currentPoints)}</td>
+              <td className={`${numericCell} font-semibold`}>
+                {points.format(row.proposedPoints)}
+                {row.proposedStreak && <div className="mt-1"><StreakBadge streak={row.proposedStreak} /></div>}
+              </td>
+              <td className={numericCell}>
+                {points.format(row.currentPoints)}
+                {row.currentStreak && <div className="mt-1"><StreakBadge streak={row.currentStreak} /></div>}
+              </td>
               <td className={`${numericCell} font-semibold ${changeColor(row.pointChange)}`}>{signedPoints.format(row.pointChange)}</td>
               <td className={`${numericCell} text-muted`}>{row.rounds}</td>
               {showMoney && <>

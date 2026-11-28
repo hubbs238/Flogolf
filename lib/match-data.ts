@@ -1,4 +1,6 @@
 import { cache } from "react";
+import { getGolferStreaks, type GolferStreak } from "./golfer-streaks";
+import { isLeagueStreakRound } from "./league-rounds";
 import { createClient } from "@/lib/supabase/server";
 import {
   fb18DollarsBySegment,
@@ -253,6 +255,7 @@ export function computeMatch(b: MatchBundle) {
 export type SeasonRow = {
   golferId: string;
   rounds: number;
+  streak?: GolferStreak;
   /** The matches themselves. Earns points on every round. */
   matchMoney: number;
   /** Combined front nine, back nine, and both 18-hole cash pots. */
@@ -361,12 +364,16 @@ async function scoreCompletedRounds(): Promise<
  */
 export async function getSeasonStandings(): Promise<SeasonRow[]> {
   const rounds = await scoreCompletedRounds();
+  const streaks = getGolferStreaks(rounds.filter(round => isLeagueStreakRound(round.matchId)).map(round => ({
+    date: round.matchDate,
+    players: round.rows.map(row => ({ golferId: row.golferId, preRakeMoney: row.winnings })),
+  })));
   const totals = new Map<string, SeasonRow>();
 
   for (const round of rounds) {
     for (const row of round.rows) {
       const cur = totals.get(row.golferId) ?? {
-        golferId: row.golferId, rounds: 0,
+        golferId: row.golferId, rounds: 0, streak: streaks.get(row.golferId),
         matchMoney: 0, bonusMoney: 0, winnings: 0, rake: 0, dollars: 0,
         pointsFromMoney: 0, pointsBonus: 0, points: 0,
       };

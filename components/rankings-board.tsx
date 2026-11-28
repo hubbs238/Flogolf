@@ -4,9 +4,11 @@ import { formatDollars } from "@/lib/currency";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { GolferAvatar } from "./golfer-avatar";
+import { StreakBadge, StreakTile } from "./golfer-streak";
 import { TrophyIcon } from "./trophy-icon";
 import { displayName } from "@/lib/scoring";
 import { MEDAL, PODIUM_WASH, medalByGolfer } from "@/lib/podium";
+import type { GolferStreak } from "@/lib/golfer-streaks";
 import type { Characteristic, ScoredGolfer } from "@/lib/types";
 
 type BoardGolfer = ScoredGolfer & { photo: string | null };
@@ -14,7 +16,16 @@ type BoardGolfer = ScoredGolfer & { photo: string | null };
 /** Money fields are absent, not zero, when the viewer is not shown money. */
 export type SeasonByGolfer = Record<
   string,
-  { rounds: number; points: number; matchPoints: number; bonusPoints: number; matchMoney?: number; bonusMoney?: number; winnings?: number }
+  {
+    rounds: number;
+    points: number;
+    matchPoints: number;
+    bonusPoints: number;
+    streak?: GolferStreak;
+    matchMoney?: number;
+    bonusMoney?: number;
+    winnings?: number;
+  }
 >;
 
 type SeasonEntry = SeasonByGolfer[string];
@@ -294,6 +305,7 @@ function GolferCard({
         medal ? `bg-gradient-to-b to-raised to-45% ${PODIUM_WASH[medal]}` : ""
       } ${isSelf ? "ring-1 ring-fairway-300 dark:ring-fairway-700" : ""}`}
     >
+      <StreakTile streak={season?.streak} />
       {showRank && (
         <span
           className="absolute right-4 top-4 text-sm font-semibold tabular-nums text-muted"
@@ -342,6 +354,11 @@ function GolferCard({
               ? ` · ${season!.rounds} ${season!.rounds === 1 ? "round" : "rounds"}`
               : " · No rounds yet"}
           </p>
+          {season?.streak && (
+            <div className="mt-1.5">
+              <StreakBadge streak={season.streak} />
+            </div>
+          )}
         </div>
       </div>
 

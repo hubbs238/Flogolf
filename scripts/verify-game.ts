@@ -27,6 +27,7 @@ import {
 import { modeFrom } from "../lib/view-mode";
 import { checkMoves, movedDecisionKey, movedScores, type ScoreRow } from "../lib/score-move";
 import { isoFromLooseDate } from "../lib/dates";
+import { getGolferStreaks } from "../lib/golfer-streaks";
 import { convertReading, deriveStakes, type RawReading } from "../lib/round-reading";
 
 /** Shorthand for a money breakdown in fixtures. */
@@ -1832,6 +1833,37 @@ console.log("\n=== who is shown money ===");
   const stale = scoreFb18({ teamIds, scores, payouts, frontMoneyTiers: [["3","5"]] });
   check("a ruling for different tied bays does not override the countback",
     stale.results[0].awards, scoreFb18({ teamIds, scores, payouts }).results[0].awards);
+}
+
+console.log("\n=== weekly pre-rake money streaks ===");
+{
+  const round = (date: string, money: Record<string, number | null>) => ({
+    date, players: Object.entries(money).map(([golferId, preRakeMoney]) => ({ golferId, preRakeMoney })),
+  });
+  const first = round("2026-12-21", { hot: 1, cold: -1, absent: 10, even: -3, reversed: -5 });
+  const second = round("2026-12-28", { hot: -6, cold: 12, even: -2, reversed: -8, absent: 1 });
+  const sunday = round("2027-01-03", { hot: 7, cold: -13, even: 2 });
+  const third = round("2027-01-04", { hot: 1, cold: -1, even: -1, reversed: 8, absent: 1 });
+  const fourth = round("2027-01-11", { hot: 1, cold: -1, even: -1, reversed: 8 });
+  const current = getGolferStreaks([fourth, sunday, first, third, second]);
+  check("a four-week win can survive a losing round in a positive week", current.get("hot"), { kind: "hot", weeks: 4 });
+  check("a four-week loss can survive a winning round in a negative week", current.get("cold"), { kind: "cold", weeks: 4 });
+  check("a zero weekly total, a sign change, and a missed latest week end the run", current.size, 2);
+  const three = getGolferStreaks([first, second, sunday, third]);
+  check("Monday starts the third week, including across New Year", three.get("hot"), { kind: "hot", weeks: 3 });
+  check("multiple rounds in the same two weeks cannot earn a tile", getGolferStreaks([first, second, sunday]).size, 0);
+  check("a league-wide gap breaks consecutive weeks", getGolferStreaks([first, third, fourth]).size, 0);
+  check("missing a middle week breaks an individual's run", getGolferStreaks([
+    first, round("2026-12-29", { other: 20 }), third, fourth,
+  ]).size, 0);
+  const unavailable = round("2027-01-05", { hot: null });
+  for (const inputs of [[unavailable, third], [third, unavailable]]) {
+    const incomplete = getGolferStreaks([first, second, sunday, ...inputs]);
+    check("one unscored settlement makes the golfer's latest week ineligible", incomplete.has("hot"), false);
+    check("other golfers' settled weekly totals still count", incomplete.get("cold"), { kind: "cold", weeks: 3 });
+    check("an unsettled middle week also interrupts the run", getGolferStreaks([first, second, sunday, ...inputs, fourth]).has("hot"), false);
+  }
+  check("no rounds means no streaks", getGolferStreaks([]).size, 0);
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED\n" : `\n${failures} FAILED\n`);

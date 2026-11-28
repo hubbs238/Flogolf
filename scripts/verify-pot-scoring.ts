@@ -10,7 +10,7 @@ function team(slot: number, units: number, size = 4): PotTeam {
   return {
     id, name: id, slot, matchUnits: units, frontUnits: 0, backUnits: 0, total18Units: 0,
     players: Array.from({ length: size }, (_, player) => ({
-      id: `${id}-${player}`, name: `Golfer ${player + 1}`, slot: player + 1, currentPoints: 0, currentNet: 0,
+      id: `${id}-${player}`, name: `Golfer ${player + 1}`, slot: player + 1, currentPoints: 0, currentNet: 0, currentPreRake: 0,
     })),
   };
 }
@@ -83,7 +83,7 @@ for (const weights of [[60, 30, 10], [0, 75, 25], [33.33, 33.33, 33.34]] as cons
 }
 // Two golfers share a display name. Each has a separate profile and plays twice.
 function solo(slot: number, id: string, name: string, currentPoints: number, currentNet: number): PotTeam {
-  return { ...team(slot, -slot, 1), players: [{ id, name, slot: 1, currentPoints, currentNet }] };
+  return { ...team(slot, -slot, 1), players: [{ id, name, slot: 1, currentPoints, currentNet, currentPreRake: currentNet + 35 }] };
 }
 const opener = { ...round([
   solo(1, "a", "Sam", 10.25, 15), solo(2, "b", "Zed", 200, 165),
@@ -108,4 +108,22 @@ assert.deepEqual(tied.map(row => [row.id, row.currentRank, row.proposedRank]), [
 ]);
 assert.ok(tied.every(row => row.proposedPoints === 0));
 assert.deepEqual(getPotStandings([{ round: missing, result: null }]), []);
+
+const closeSplit: PotSettings = { ...defaults, weights: [52, 48, 0] };
+const weeks = ["2026-11-02", "2026-11-11", "2026-11-19"].map(date => ({
+  ...round([solo(1, "a", "Alex", 10, -85), solo(2, "b", "Sam", 2, -33)], "major"), id: date, date,
+}));
+const simulated = weeks.map(week => scored(week, closeSplit));
+// Both players lose cash after rake. Only the first has positive proposed pre-rake money.
+assert.deepEqual(simulated[0].result!.players.map(p => [p.net, p.preRake, p.points]), [[-28, 7, 14], [-42, -7, 0]]);
+const compare = getPotStandings(simulated);
+assert.deepEqual(compare.map(p => [p.id, p.currentStreak, p.proposedStreak]), [
+  ["a", { kind: "cold", weeks: 3 }, { kind: "hot", weeks: 3 }],
+  ["b", { kind: "hot", weeks: 3 }, { kind: "cold", weeks: 3 }],
+]);
+const repriced = getPotStandings(weeks.map(week => scored(week, zero)));
+assert.ok(repriced.every(p => p.currentStreak?.weeks === 3 && !p.proposedStreak));
+// An unavailable fourth match in the same week affects just the proposed weekly total.
+const partial = getPotStandings([...simulated, { round: { ...weeks[2], id: "unavailable" }, result: null }]);
+assert.ok(partial.every(p => p.currentStreak?.weeks === 3 && !p.proposedStreak && p.rounds === 3));
 console.log("Pot scoring and season standings checks passed.");

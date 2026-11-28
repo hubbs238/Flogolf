@@ -18,6 +18,7 @@ export type PotPlayer = {
   slot: number;
   currentPoints: number;
   currentNet: number;
+  currentPreRake: number;
 };
 
 export type PotTeam = {
@@ -53,6 +54,7 @@ export type PotPlayerResult = {
   place: number;
   payout: number;
   net: number;
+  preRake: number;
   points: number;
   isFivePlayerTeam: boolean;
 };
@@ -155,10 +157,12 @@ export function scorePotRound(round: PotRound, settings: PotSettings): PotResult
       const multiplier = POINT_MULTIPLIER[round.roundType] * (isFivePlayerTeam ? FIVE_PLAYER_POINTS_MULTIPLIER : 1);
       roster.forEach((player, index) => {
         const playerPayout = equalShare(payout, roster.length, index);
+        const preRake = playerPayout - playingStake;
         players.push({
           golferId: player.id, teamId: team.id, place, payout: playerPayout,
           net: playerPayout - settings.entryFee,
-          points: Math.max(0, playerPayout - playingStake) * multiplier,
+          preRake,
+          points: Math.max(0, preRake) * multiplier,
           isFivePlayerTeam,
         });
       });

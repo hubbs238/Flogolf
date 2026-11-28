@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { getViewMode } from "@/lib/view-mode";
 import { getMyRating, getScoredGolfers, photoUrl } from "@/lib/data";
 import { GolferAvatar } from "@/components/golfer-avatar";
+import { StreakBadge } from "@/components/golfer-streak";
 import { TrophyIcon } from "@/components/trophy-icon";
 import { RatingForm } from "@/components/rating-form";
 import { MyPhotoUpload } from "@/components/my-photo-upload";
@@ -50,9 +51,10 @@ export default async function GolferPage({ params }: PageProps<"/golfer/[id]">) 
               size="lg"
             />
             <div className="min-w-0">
-              <h1 className="text-2xl font-semibold tracking-tight">
-                {displayName(golfer)}
-              </h1>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <h1 className="text-2xl font-semibold tracking-tight">{displayName(golfer)}</h1>
+                <StreakBadge streak={season?.streak} />
+              </div>
               <p className="mt-1 text-sm text-muted">
                 {golfer.ratingCount === 0
                   ? "No ratings yet"

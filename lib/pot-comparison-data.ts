@@ -14,16 +14,19 @@ export function toPotRound(row: ComparisonRow): PotRound {
   const bundle = matchBundleFromRows(row, null, row);
   const official = computeMatch(bundle);
   const points = new Map(official.points.map((p) => [p.golferId, p.total]));
-  const cash = new Map(official.money.map((p) => [p.golferId, p.dollars]));
+  const cash = new Map(official.money.map((p) => [p.golferId, p]));
   const teams = [...row.teams].sort((a, b) => a.slot - b.slot).map((team) => ({
     id: team.id, name: team.name, slot: team.slot,
     matchUnits: official.main.unitsByTeam[team.id], frontUnits: 0, backUnits: 0, total18Units: 0,
     players: row.players.filter((p) => p.team_id === team.id)
       .sort((a, b) => a.slot - b.slot)
-      .map((p) => ({
-        id: p.golfer_id, name: p.golfer ? displayName(p.golfer) : "Unknown golfer", slot: p.slot,
-        currentPoints: points.get(p.golfer_id)!, currentNet: cash.get(p.golfer_id)!,
-      })),
+      .map((p) => {
+        const settlement = cash.get(p.golfer_id)!;
+        return {
+          id: p.golfer_id, name: p.golfer ? displayName(p.golfer) : "Unknown golfer", slot: p.slot,
+          currentPoints: points.get(p.golfer_id)!, currentNet: settlement.dollars, currentPreRake: settlement.winnings,
+        };
+      }),
   }));
   const round: PotRound = { id: row.id, name: row.name, date: row.match_date, roundType: official.roundType, teams };
   if (teams.length !== row.team_count || teams.some((t) => !t.players.length)) {
