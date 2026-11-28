@@ -57,87 +57,156 @@
   transform: rotate(16deg);
 }
 
+.streakCard {
+  isolation: isolate;
+}
+
+.streakCard .identity {
+  color: #fff;
+}
+
+/* The soft backing follows the name, including on narrow cards with a long name. */
+.streakCard .identityCopy {
+  position: relative;
+  isolation: isolate;
+  text-shadow: 0 1px 4px #000;
+}
+
+.streakCard .identityCopy::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -0.6rem -0.35rem -0.6rem -0.85rem;
+  border-radius: 18%;
+  background: linear-gradient(90deg, rgb(5 13 18 / 82%), rgb(5 13 18 / 55%) 75%, transparent);
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+.streakCard .identityMeta { color: #f0eee9; }
+.streakCard .identity .badge { text-shadow: none; }
+.streakCard .selfTag { background-color: #26352e; color: #fff; }
+
+.streakCard .boardRank {
+  border-radius: 0.45rem;
+  padding: 0.1rem 0.35rem;
+  background: rgb(10 18 21 / 84%);
+  color: #fff;
+}
+
+.streakCard .ratings {
+  --color-ink: #fff;
+  --color-muted: #edf2f2;
+  --color-line: #516369;
+  border-radius: 0.55rem;
+  background: rgb(10 20 25 / 88%);
+  padding-inline: 0.5rem;
+}
+
 .frame {
   position: absolute;
   inset: 0;
+  z-index: -1;
   overflow: hidden;
   border-radius: inherit;
   pointer-events: none;
 }
 
 .frame.hot {
-  box-shadow: inset 0 -2px 0 #e17737, inset 0 -7px 13px -7px #f68c3a;
-  background: radial-gradient(ellipse 58% 1.2rem at 50% 100%, #ef671d48, transparent);
+  --terrain: url("/streaks/hot.webp");
+  --rim: #ffad5c;
+  background: #3a170c;
 }
 
 .frame.cold {
-  box-shadow: inset 0 2px 0 #8bcde4, inset 0 8px 14px -8px #5ba8d1;
-  background: radial-gradient(ellipse 58% 1.2rem at 50% 0%, #91d8ec57, transparent);
+  --terrain: url("/streaks/cold.webp");
+  --rim: #99e2ff;
+  background: #103047;
 }
 
-.edge {
+.artwork, .atmosphere, .frame::after {
   position: absolute;
-  left: 50%;
-  width: 100%;
-  height: 1.1875rem;
-  transform: translateX(-50%);
+  inset: 0;
 }
 
-.hot .edge { bottom: 0; }
-.cold .edge, .cold .spike { top: 0; }
-.spike { position: absolute; }
-
-.flames {
-  display: block;
-  width: 100%;
-  height: 100%;
+.artwork {
+  background: var(--terrain) center top / cover no-repeat;
 }
 
-.outerFlame { fill: #de5526; transform-origin: center bottom; }
-.innerFlame { fill: #ffaf49; transform-origin: center bottom; }
-.coals { fill: #ffdb83; }
-
-.cold .edge::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 5px;
-  background: repeating-linear-gradient(150deg, #afe3f2 0 6px, #d5f3fc 8px 12px, #88c3d8 16px 23px);
-  clip-path: polygon(0 0, 100% 0, 100% 55%, 96% 40%, 89% 75%, 82% 40%, 76% 85%, 70% 40%, 61% 60%, 56% 90%, 48% 55%, 43% 100%, 34% 55%, 28% 85%, 17% 40%, 10% 80%, 0 50%);
-}
-
-.cold .spike {
-  clip-path: polygon(0 0, 96% 0, 83% 41%, 41% 100%, 19% 54%);
-  background: linear-gradient(104deg, #c9f4ff 8%, #e9faff 38%, #7cbcd7 42%, #4b93b8 90%);
-}
-
-.cold .spike::after {
+.hot .artwork::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(125deg, transparent 36%, #fff 50%, transparent 65%);
-  background-size: 230% 100%;
-  opacity: 0.55;
+  background: radial-gradient(ellipse at 100% 18%, #ff7d285e, transparent 32%),
+              radial-gradient(ellipse at 12% 86%, #ff982e50, transparent 38%);
+  mix-blend-mode: screen;
+  opacity: 0.3;
+}
+
+.frame::after {
+  content: "";
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rim) 78%, transparent),
+              inset 0 0 14px color-mix(in srgb, var(--rim) 25%, transparent);
+}
+
+/* Embers drift up the face of the card in two independent layers. */
+.hot .atmosphere::before, .hot .atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 1.3px 3px at 7% 39%, #ffe1a0 35%, transparent),
+    radial-gradient(ellipse 1px 2px at 24% 32%, #ffb34c 42%, transparent),
+    radial-gradient(ellipse 1.6px 3.3px at 51% 26%, #ffb44f 32%, transparent),
+    radial-gradient(ellipse 1.1px 2.4px at 75% 19%, #ffe5a0 40%, transparent),
+    radial-gradient(ellipse 1.6px 2.6px at 93% 46%, #ffbc66 36%, transparent),
+    radial-gradient(ellipse 1px 2.5px at 17% 87%, #ffc965 40%, transparent),
+    radial-gradient(ellipse 1.6px 3px at 82% 75%, #ffce6a 36%, transparent);
+}
+
+.hot .atmosphere::after { transform: translate(3%, 9%); opacity: 0.65; }
+
+.cold .atmosphere {
+  inset: -30% -70%;
+  background: linear-gradient(114deg, transparent 36%, rgb(161 228 255 / 12%) 41%, rgb(214 247 255 / 35%) 43%, transparent 47%);
+  opacity: 0;
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .outerFlame { animation: flicker 1.8s ease-in-out infinite alternate; }
-  .innerFlame { animation: flicker 1.3s ease-in-out -0.5s infinite alternate-reverse; }
-  .cold .spike::after { animation: glint 5.5s ease-in-out var(--delay) infinite; }
+  .hot .artwork { animation: heat 3.2s ease-in-out infinite alternate; transform-origin: 70% 76%; }
+  .hot .artwork::after { animation: firelight 2s ease-in-out infinite alternate; }
+  .hot .atmosphere::before { animation: rise 3s linear infinite; }
+  .hot .atmosphere::after { animation: rise 4.3s -2s linear infinite; }
+  .cold .atmosphere { animation: shimmer 6s ease-in-out infinite; }
 }
 
-@keyframes flicker {
-  0% { transform: skewX(-7deg) scaleY(0.8); }
-  55% { transform: skewX(2deg) scaleY(1); }
-  100% { transform: skewX(-3deg) scaleY(0.9); }
+@keyframes heat {
+  from { transform: scale(1.01); filter: brightness(0.94); }
+  to { transform: scale(1.045) translateY(-0.6%); filter: brightness(1.1); }
 }
 
-@keyframes glint {
-  0%, 30% { background-position: 100% 0; }
-  70%, 100% { background-position: 0 0; }
+@keyframes firelight {
+  0%, 54% { opacity: 0.16; }
+  29%, 80% { opacity: 0.70; }
+  100% { opacity: 0.42; }
+}
+
+@keyframes rise {
+  0% { transform: translate(-1%, 8%); opacity: 0; }
+  20% { opacity: 0.85; }
+  76% { opacity: 0.9; }
+  100% { transform: translate(2%, -12%); opacity: 0; }
+}
+
+@keyframes shimmer {
+  0%, 18% { transform: translateX(-40%); opacity: 0; }
+  33%, 54% { opacity: 0.82; }
+  72%, 100% { transform: translateX(46%); opacity: 0; }
 }
 
 @media (forced-colors: active) {
   .badge { border-color: currentColor; }
-  .frame, .symbol { display: none; }
+  .frame, .symbol, .streakCard .identityCopy::before { display: none; }
+  .streakCard .identity { color: CanvasText; text-shadow: none; }
 }
