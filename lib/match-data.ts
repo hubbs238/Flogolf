@@ -89,21 +89,40 @@ export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
     supabase.from("tie_decisions").select("*").eq("match_id", id),
   ]);
 
-  const fbRows = (fb18.data ?? []) as Fb18Payout[];
+  return matchBundleFromRows(match as Match, firstMajorId, {
+    teams: (teams.data ?? []) as MatchTeam[],
+    players: (players.data ?? []) as MatchPlayer[],
+    payouts: (payouts.data ?? []) as MatchPayout[],
+    fb18: (fb18.data ?? []) as Fb18Payout[],
+    scores: (scores.data ?? []) as HoleScore[],
+    decisions: (decisions.data ?? []) as TieDecision[],
+  });
+}
+
+export type MatchRows = {
+  teams: MatchTeam[];
+  players: MatchPlayer[];
+  payouts: MatchPayout[];
+  fb18: Fb18Payout[];
+  scores: HoleScore[];
+  decisions: TieDecision[];
+};
+
+export function matchBundleFromRows(match: Match, firstMajorId: string | null, rows: MatchRows): MatchBundle {
   const bySegment = (segment: Fb18Segment) =>
-    toPayoutTable(fbRows.filter((r) => r.segment === segment));
+    toPayoutTable(rows.fb18.filter((r) => r.segment === segment));
 
   const decisionMap: TieDecisions = {};
-  for (const d of (decisions.data ?? []) as TieDecision[]) {
+  for (const d of rows.decisions) {
     decisionMap[`${d.segment}:${d.block_key}`] = d.choice;
   }
 
   return {
-    match: match as Match,
+    match,
     firstMajorId,
-    teams: (teams.data ?? []) as MatchTeam[],
-    players: (players.data ?? []) as MatchPlayer[],
-    payouts: toPayoutTable((payouts.data ?? []) as MatchPayout[]),
+    teams: rows.teams,
+    players: rows.players,
+    payouts: toPayoutTable(rows.payouts),
     fb18Payouts: {
       front: bySegment("front"),
       back: bySegment("back"),
@@ -112,7 +131,7 @@ export async function getMatchBundle(id: string): Promise<MatchBundle | null> {
       // keep settling exactly as they always did.
       second: bySegment("second"),
     },
-    scores: toHoleScores((scores.data ?? []) as HoleScore[]),
+    scores: toHoleScores(rows.scores),
     decisions: decisionMap,
   };
 }

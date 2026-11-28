@@ -50,6 +50,7 @@ jobs:
       - run: npm run typecheck
       - run: node --import tsx scripts/verify-deployment.ts
       - run: node --import tsx scripts/verify-game.ts
+      - run: node --import tsx scripts/verify-pot-scoring.ts
       - run: node --import tsx scripts/audit-sheet.ts
       - run: node --import tsx scripts/explain-round.ts
       - run: node --import tsx scripts/verify-draft.ts
