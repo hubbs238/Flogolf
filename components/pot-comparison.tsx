@@ -4,7 +4,9 @@ import Link from "next/link";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { GolferProfileLink } from "./golfer-profile-link";
 import { TotalPoints } from "./total-points";
+import { PotStandings } from "./pot-standings";
 import { formatDollars } from "@/lib/currency";
+import { getPotStandings } from "@/lib/pot-standings";
 import {
   DEFAULT_POT_SETTINGS, potRoundIssue, scorePotRound, validatePotSettings,
   type PotRound, type PotSettings, type PotResult,
@@ -65,7 +67,7 @@ const delta = (n: number) => n.toLocaleString("en-US", { signDisplay: "exceptZer
 const deltaColor = (n: number) => n > 0 ? "text-fairway-600 dark:text-fairway-300" : n < 0 ? "text-flag-500" : "text-muted";
 
 type PlayerLine = {
-  id: string; name: string; team: string; rounds: number; currentPoints: number; proposedPoints: number;
+  id: string; name: string; team: string; currentPoints: number; proposedPoints: number;
   currentNet: number; proposedNet: number; payout: number; five: boolean;
 };
 
@@ -74,7 +76,7 @@ function playerRows(round: PotRound, result: PotResult): PlayerLine[] {
   return round.teams.flatMap(team => team.players.map(player => {
     const proposed = paid.get(player.id)!;
     return {
-      id: player.id, name: player.name, team: team.name, rounds: 1,
+      id: player.id, name: player.name, team: team.name,
       currentPoints: player.currentPoints, proposedPoints: proposed.points,
       currentNet: player.currentNet, proposedNet: proposed.net, payout: proposed.payout,
       five: proposed.isFivePlayerTeam,
@@ -82,37 +84,19 @@ function playerRows(round: PotRound, result: PotResult): PlayerLine[] {
   }));
 }
 
-function seasonRows(rows: PlayerLine[]): PlayerLine[] {
-  const golfers = new Map<string, PlayerLine>();
-  for (const row of rows) {
-    const prior = golfers.get(row.id);
-    if (!prior) {
-      golfers.set(row.id, { ...row, five: false });
-      continue;
-    }
-    prior.rounds++;
-    prior.currentPoints += row.currentPoints;
-    prior.proposedPoints += row.proposedPoints;
-    prior.currentNet += row.currentNet;
-    prior.proposedNet += row.proposedNet;
-    prior.payout += row.payout;
-  }
-  return [...golfers.values()];
-}
-
-function PlayerTable({ rows, season }: { rows: PlayerLine[]; season: boolean }) {
+function PlayerTable({ rows }: { rows: PlayerLine[] }) {
   const sorted = [...rows].sort((a, b) =>
     b.proposedPoints - a.proposedPoints || b.currentPoints - a.currentPoints || a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
   );
   return (
     <section aria-labelledby="pot-player-points">
-      <h2 id="pot-player-points" className="text-lg font-semibold tracking-tight">{season ? "Season player totals" : "Player results"}</h2>
+      <h2 id="pot-player-points" className="text-lg font-semibold tracking-tight">Player results</h2>
       <div className="mt-3 overflow-x-auto rounded-2xl border border-line bg-raised" role="region" aria-label="Player comparison" tabIndex={0}>
         <table className={tableStyle} aria-labelledby="pot-player-points">
           <thead>
             <tr className="border-b border-line">
               <th scope="col" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left text-xs font-semibold text-muted">Golfer</th>
-              {[season ? "Rounds" : "Team", "Current points", "Proposed points", "Point change", "Current net", "Proposed net", "Pot payout"].map(label =>
+              {["Team", "Current points", "Proposed points", "Point change", "Current net", "Proposed net", "Pot payout"].map(label =>
                 <th key={label} scope="col" className={header}>{label}</th>
               )}
             </tr>
@@ -122,7 +106,7 @@ function PlayerTable({ rows, season }: { rows: PlayerLine[]; season: boolean }) 
               <th scope="row" className="sticky left-0 z-10 bg-raised px-3 py-2.5 text-left font-medium">
                 <GolferProfileLink golferId={row.id}>{row.name}</GolferProfileLink>
               </th>
-              <td className={cell + " text-muted"}>{season ? row.rounds : row.team}</td>
+              <td className={cell + " text-muted"}>{row.team}</td>
               <td className={cell}><TotalPoints value={row.currentPoints} fivePlayer={row.five} /></td>
               <td className={cell + " font-semibold"}><TotalPoints value={row.proposedPoints} fivePlayer={row.five} /></td>
               <td className={cell + " font-semibold " + deltaColor(row.proposedPoints - row.currentPoints)}>{delta(row.proposedPoints - row.currentPoints)}</td>
@@ -173,17 +157,16 @@ function UnitTable({ round, result }: { round: PotRound; result: PotResult }) {
 export function PotComparison({ rounds, initialRoundId }: { rounds: PotRound[]; initialRoundId?: string }) {
   const saved = useSyncExternalStore(subscribeToSettings, readSavedFields, () => null);
   const [edits, setEdits] = useState<Fields | null>(null);
-  const [selection, setSelection] = useState(() => initialRoundId === "season" || rounds.some(r => r.id === initialRoundId) ? initialRoundId! : rounds[0]?.id ?? "season");
+  const [selection, setSelection] = useState(() => initialRoundId && rounds.some(r => r.id === initialRoundId) ? initialRoundId : "season");
   const values = useMemo(() => edits ?? initialFields(saved), [edits, saved]);
   const settings = useMemo(() => parseFields(values), [values]);
   const issue = validatePotSettings(settings);
   const selectedRound = rounds.find(round => round.id === selection);
-  const season = !selectedRound;
   const scored = useMemo(() => {
     if (issue) return [];
-    const visibleRounds = selectedRound ? [selectedRound] : rounds;
-    return visibleRounds.map(round => ({ round, result: scorePotRound(round, settings) }));
-  }, [rounds, selectedRound, settings, issue]);
+    return rounds.map(round => ({ round, result: scorePotRound(round, settings) }));
+  }, [rounds, settings, issue]);
+  const standings = useMemo(() => getPotStandings(scored), [scored]);
 
   function change(next: Fields) {
     setEdits(next);
@@ -195,8 +178,9 @@ export function PotComparison({ rounds, initialRoundId }: { rounds: PotRound[]; 
   if (rounds.length === 0) return <p className="rounded-2xl border border-dashed border-line p-8 text-sm text-muted">Complete a round to compare its scoring.</p>;
   const included = scored.filter((item): item is { round: PotRound; result: PotResult } => item.result !== null);
   const skipped = scored.filter(item => item.result === null);
-  const combined = included.flatMap(({ round, result }) => playerRows(round, result));
-  const totals = included.reduce((sum, { result }) => ({
+  const visible = selectedRound ? included.filter(({ round }) => round.id === selectedRound.id) : included;
+  const selected = selectedRound ? visible[0] : undefined;
+  const totals = visible.reduce((sum, { result }) => ({
     entries: sum.entries + result.playerCount,
     gross: sum.gross + result.grossPot,
     rake: sum.rake + result.totalRake,
@@ -226,7 +210,7 @@ export function PotComparison({ rounds, initialRoundId }: { rounds: PotRound[]; 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <label className="w-full max-w-sm text-sm font-medium">Compare results for
           <select value={selection} onChange={event => setSelection(event.target.value)} className={inputStyle + " mt-1.5"}>
-            <option value="season">Season · all completed rounds</option>
+            <option value="season">Season standings · all completed rounds</option>
             <optgroup label="Completed rounds">
               {rounds.map(round => <option key={round.id} value={round.id}>{round.name}</option>)}
             </optgroup>
@@ -235,24 +219,30 @@ export function PotComparison({ rounds, initialRoundId }: { rounds: PotRound[]; 
         {selectedRound && (
           <div className="flex flex-wrap items-center gap-3 text-sm">
             {selectedRound.roundType === "major" && <span className="font-medium text-muted">Major · double points</span>}
+            {standings.length > 0 && <a href="#pot-season-standings" className="rounded-md py-2 font-medium text-fairway-700 underline underline-offset-2 dark:text-fairway-300">Season standings</a>}
             <Link href={`/games/${selectedRound.id}`} className="rounded-md py-2 font-medium text-fairway-700 underline underline-offset-2 dark:text-fairway-300">Open official round</Link>
           </div>
         )}
       </div>
 
       {skipped.length > 0 && <div className="rounded-xl border border-line bg-raised p-4 text-sm">
-        <p className="font-medium">{season ? `Comparing ${included.length} of ${rounds.length} completed rounds` : "Comparison unavailable"}</p>
+        <p className="font-medium">Excluded from both standings</p>
         <ul className="mt-1 list-inside list-disc text-muted">{skipped.map(({ round }) => <li key={round.id}>{round.name} — {potRoundIssue(round, settings)}</li>)}</ul>
       </div>}
 
-      {included.length > 0 && <>
+      {visible.length > 0 && <>
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-line bg-line lg:grid-cols-4">
-          {[[season ? "Player entries" : "Players", totals.entries], ["Entry fees", formatDollars(totals.gross)], ["Total rake", formatDollars(totals.rake)], ["Prize pot", formatDollars(totals.prize)]].map(([label, value]) => (
+          {[[selectedRound ? "Players" : "Player entries", totals.entries], ["Entry fees", formatDollars(totals.gross)], ["Total rake", formatDollars(totals.rake)], ["Prize pot", formatDollars(totals.prize)]].map(([label, value]) => (
             <div key={label} className="bg-raised p-4"><dt className="text-sm text-muted">{label}</dt><dd className="mt-1 text-xl font-semibold tabular-nums">{value}</dd></div>
           ))}
         </dl>
-        {selectedRound && <UnitTable round={selectedRound} result={included[0].result} />}
-        <PlayerTable rows={season ? seasonRows(combined) : combined} season={season} />
+        {selected && <>
+          <UnitTable round={selected.round} result={selected.result} />
+          <PlayerTable rows={playerRows(selected.round, selected.result)} />
+        </>}
+      </>}
+      {standings.length > 0 && <>
+        <PotStandings rows={standings} roundCount={included.length} totalRoundCount={rounds.length} />
         <details className="rounded-xl border border-line bg-raised p-4 text-sm text-muted">
           <summary className="cursor-pointer font-medium text-ink">How proposed payouts and points work</summary>
           <ul className="mt-2 list-disc space-y-1 pl-5">

@@ -16,7 +16,7 @@ export default async function PotComparisonPage({ searchParams }: PageProps<"/st
     <section>
       <h2 className="text-xl font-semibold tracking-tight">Pot scoring comparison</h2>
       <p className="mt-1 mb-5 text-sm text-muted">
-        Try a payout split on completed rounds and compare each golfer’s earnings and points with the official results.
+        Change the pot settings to see how each golfer’s season points and rank compare with the official standings. Select a round to see its payouts.
       </p>
       <PotComparison key={initialRoundId ?? "season"} rounds={rounds} initialRoundId={initialRoundId} />
     </section>

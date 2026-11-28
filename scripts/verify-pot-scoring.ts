@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getPotStandings } from "../lib/pot-standings";
 import {
   DEFAULT_POT_SETTINGS as defaults, potRoundIssue, scorePotRound, validatePotSettings,
   type PotRound, type PotSettings, type PotTeam,
@@ -80,4 +81,31 @@ for (const weights of [[60, 30, 10], [0, 75, 25], [33.33, 33.33, 33.34]] as cons
     assert.ok(scored.players.every(p => Number.isInteger(p.payout) && p.points >= 0));
   }
 }
-console.log("Pot scoring checks passed.");
+// Two golfers share a display name. Each has a separate profile and plays twice.
+function solo(slot: number, id: string, name: string, currentPoints: number, currentNet: number): PotTeam {
+  return { ...team(slot, -slot, 1), players: [{ id, name, slot: 1, currentPoints, currentNet }] };
+}
+const opener = { ...round([
+  solo(1, "a", "Sam", 10.25, 15), solo(2, "b", "Zed", 200, 165),
+  solo(3, "c", "Casey", 10.25, -15), solo(4, "d", "Sam", 0, -100),
+]), id: "opener" };
+const finale = { ...round([solo(1, "a", "Sam", 0, -5), solo(2, "d", "Sam", 10.25, 12)]), id: "finale" };
+const missing = { ...round([solo(1, "x", "Other", 1000, 0)]), id: "incomplete" };
+const scored = (r: PotRound, settings = defaults) => ({ round: r, result: scorePotRound(r, settings) });
+const standings = getPotStandings([scored(opener), scored(finale), scored(opener), { round: missing, result: null }]);
+assert.deepEqual(standings.map(p => [
+  p.id, p.rounds, p.currentPoints, p.proposedPoints, p.currentRank, p.proposedRank, p.rankChange, p.pointChange,
+]), [
+  ["a", 2, 10.25, 286, 3, 1, 2, 275.75], ["b", 1, 200, 33, 1, 2, -1, -167],
+  ["c", 1, 10.25, 0, 2, 3, -1, -10.25], ["d", 2, 10.25, 0, 4, 4, 0, -10.25],
+]);
+assert.deepEqual([standings[0].currentNet, standings[0].proposedNet, standings[0].payout], [10, 216, 616]);
+// Changing the pot can move every proposed position while leaving official positions intact.
+const zero = { ...defaults, entryFee: defaults.rake };
+const tied = getPotStandings([scored(finale, zero), scored(opener, zero)]);
+assert.deepEqual(tied.map(row => [row.id, row.currentRank, row.proposedRank]), [
+  ["c", 2, 1], ["b", 1, 2], ["a", 3, 3], ["d", 4, 4],
+]);
+assert.ok(tied.every(row => row.proposedPoints === 0));
+assert.deepEqual(getPotStandings([{ round: missing, result: null }]), []);
+console.log("Pot scoring and season standings checks passed.");
